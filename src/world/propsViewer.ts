@@ -9,7 +9,7 @@ import { computeFlowField, INF } from '../sim/flowfield';
 import * as LAYOUT from './layout';
 import { BUILDINGS, GATES, GLOBE_POS, NPC_SPAWNS, ORR, orrPoint, PLAYER_SPAWN, ROADS, SPAWN_ZONES, STATIONS, WALLS, WORLD_BOUNDS, type V2 } from './layout';
 import { loadWorldTextures, worldUniforms } from './materials';
-import { buildProps } from './Props';
+import { buildProps, buildShowroom } from './Props';
 import { Sky } from './Sky';
 import { TreeSystem } from './trees';
 import { StaticCollision } from '../sim/Collision';
@@ -18,6 +18,8 @@ import { polylineToStrip, samplePolyline } from './geom';
 /**
  * Props viewer: builds the world like the game does, then adds buildProps().
  * URL: props-viewer.html?x=&y=&z=&yaw=&pitch= | look=fx,fy,fz,tx,ty,tz  &t=&q=(low|medium|high|ultra)
+ *      &showroom=1 (every prop model in a row on a plain ground: front row full model, back row `_lod`; list in
+ *      window.showroom, e.g. look=20,3,9,20,0.6,0)
  *      &props=0 (world only) &nav=1 (nav-grid diff before/after props, logged) &markers=0 (hide station markers)
  *      &proxy=1 (force the stand-in world; used automatically if Campus.ts fails to load mid-edit)
  *      &debugmat=normal|basic|std (swap prop materials) &nopost=1 (render without the post chain)
@@ -57,7 +59,9 @@ async function boot() {
   let campus: WorldLike;
   let medianPts: V2[] = [];
   let builder: unknown = null;
+  const showroom = params.get('showroom') === '1';
   try {
+    if (showroom) throw new Error('showroom');
     if (params.get('proxy') === '1') throw new Error('proxy requested');
     const mod = await import('./Campus');
     const b = new mod.CampusBuilder(tex, trees, q);
@@ -66,11 +70,15 @@ async function boot() {
     builder = b;
     console.log(`[campus] built in ${(performance.now() - t0).toFixed(0)} ms, trees=${trees.count()}, prisms=${campus.collision.prisms.length}, cyls=${campus.collision.cyls.length}`);
   } catch (err) {
-    console.warn('[props-viewer] campus unavailable, using proxy world', err);
-    const px = proxyWorld();
-    campus = px.world;
-    medianPts = px.medianPts;
-    document.getElementById('hud')!.dataset.proxy = '1';
+    if (showroom) {
+      campus = showroomWorld();
+    } else {
+      console.warn('[props-viewer] campus unavailable, using proxy world', err);
+      const px = proxyWorld();
+      campus = px.world;
+      medianPts = px.medianPts;
+      document.getElementById('hud')!.dataset.proxy = '1';
+    }
   }
   engine.scene.add(campus.group);
 
@@ -79,7 +87,13 @@ async function boot() {
 
   let propsGroup: THREE.Group | null = null;
   let anchors = new Map<string, THREE.Object3D>();
-  if (params.get('props') !== '0') {
+  if (showroom) {
+    const sr = await buildShowroom(assets);
+    propsGroup = sr.group;
+    engine.scene.add(sr.group);
+    console.log('[showroom] front row = full model, back row = _lod', JSON.stringify(sr.items));
+    (window as unknown as Record<string, unknown>).showroom = sr.items;
+  } else if (params.get('props') !== '0') {
     const pb = await buildProps(assets, campus.collision, { quality: q, medianPts });
     propsGroup = pb.group;
     anchors = pb.stationAnchors;
@@ -87,7 +101,7 @@ async function boot() {
     const dm = params.get('debugmat');
     if (dm) {
       const mat = dm === 'normal' ? new THREE.MeshNormalMaterial() : dm === 'basic' ? new THREE.MeshBasicMaterial({ vertexColors: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
-      pb.group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && (m.name.includes(':flat:') || m.name === 'prop:static')) m.material = mat; });
+      pb.group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && (m.name.includes(':L') || m.name === 'prop:static')) m.material = mat; });
     }
     if (params.get('markers') !== '0') {
       const mGeo = new THREE.OctahedronGeometry(0.18);
@@ -136,15 +150,8 @@ async function boot() {
   };
   /** World positions of all instances of a prop type. */
   W.where = (name: string) => {
-    const out: number[][] = [];
-    const m = new THREE.Matrix4();
-    propsGroup?.updateMatrixWorld(true);
-    propsGroup?.traverse((c) => {
-      const im = c as THREE.InstancedMesh;
-      if (!im.isInstancedMesh || !c.name.startsWith(`prop:${name}:`) || c.name.split(':')[2] !== 'flat' || c.name.endsWith(':noshadow') || c.name.endsWith(':far')) return;
-      for (let i = 0; i < im.count; i++) { im.getMatrixAt(i, m); m.premultiply(im.matrixWorld); out.push([+m.elements[12].toFixed(1), +m.elements[13].toFixed(2), +m.elements[14].toFixed(1)]); }
-    });
-    return out;
+    const ip = propsGroup?.getObjectByName(`prop:${name}`) as (THREE.Object3D & { positions?: () => number[][] }) | undefined;
+    return ip?.positions?.() ?? [];
   };
   W.goto = (name: string) => { const v = VIEWS[name]; if (v) view(...v); return Object.keys(VIEWS); };
   W.dbg = { engine, sky, campus, post, THREE, builder, props: propsGroup, anchors };
@@ -209,6 +216,16 @@ async function boot() {
 }
 
 interface WorldLike { group: THREE.Group; collision: StaticCollision; updatables: ((dt: number, t: number) => void)[] }
+
+/** Plain paved ground for the model showroom (?showroom=1). */
+function showroomWorld(): WorldLike {
+  const group = new THREE.Group();
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x8d8a84, roughness: 0.92 }));
+  ground.position.set(40, 0, 0);
+  ground.receiveShadow = true;
+  group.add(ground);
+  return { group, collision: new StaticCollision(), updatables: [] };
+}
 
 /** Minimal stand-in world built straight from layout.ts (buildings, walls, gates, roads, ORR piers + collision). */
 function proxyWorld(): { world: WorldLike; medianPts: V2[] } {

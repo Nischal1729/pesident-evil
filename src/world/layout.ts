@@ -90,19 +90,93 @@ export function pesRdZ(x: number): number {
 /** GJBC east facade line (OSM): x at a given z. */
 export function gjbcEastX(z: number): number { return 82 + (12 * (z + 123)) / 161; }
 
-/** The Quad (open granite courtyard) — colonnade column lines at x=20.45 / 54.55. */
-export const QUAD = { minX: 20, maxX: 55, minZ: -95, maxZ: -15, arcade: 4, colSpacing: 4.5, colSize: 0.9, colHeight: 9 };
-/** Covered plaza at the Quad's north end: roofed (slab at 13 m) south part + open steel pergola strip on the north. */
-export const COVERED_PLAZA = { minX: 20, maxX: 55, southZ: -95, roofY: 13, pergolaDepth: 5, verge: 1.5 };
-/** z of the covered-plaza north parapet (planter + hedge above PES Univ Rd) at x. */
+/**
+ * GJBC 1st floor ("L1") height. The front ramp lands on L1, and the Quad, the covered plaza, the inner court and the
+ * Quad colonnades all sit on a solid podium at this height (reference/GJB_NOTES.md §1). PES University Rd, the
+ * drive-through, the east promenade/forecourt and the enterable lobbies are on the ground floor (y = 0).
+ */
+export const GJB_L1 = 6.0;
+/** The Quad (granite courtyard on the L1 podium) — colonnade column lines at x=20.45 / 54.55; columns stand on L1. */
+export const QUAD = { minX: 20, maxX: 55, minZ: -95, maxZ: -15, arcade: 4, colSpacing: 4.5, colSize: 0.9, colHeight: 8.5, floorY: GJB_L1 };
+/** Covered plaza at the Quad's north end (floor on L1): roofed (slab at L1 + 9 m) south part + open steel pergola strip on the north. */
+export const COVERED_PLAZA = { minX: 20, maxX: 55, southZ: -95, roofY: GJB_L1 + 9, pergolaDepth: 5, verge: 1.5 };
+/** z of the covered-plaza north parapet (planter + hedge on the L1 edge, above PES Univ Rd) at x. */
 export function plazaParapetZ(x: number): number { return pesRdZ(x) + 4 + COVERED_PLAZA.verge; }
-/** Drive-through: PES Univ Rd runs under the GJBC north-east block between these x (clear height 5.5 m). */
+/** Drive-through: PES Univ Rd runs under the GJBC north-east L1 porch between these x (clear height 5.5 m, deck top = L1). */
 export const DRIVE_THROUGH = { x0: 55, x1: 84, clear: 5.5, footpath: 2.5 };
+/** z of the drive-through footpath's south edge (= the building line) and of the porch's north edge at x. */
+export function driveFootpathZ(x: number): number { return pesRdZ(x) + 4 + DRIVE_THROUGH.footpath; }
+export function driveNorthZ(x: number): number { return pesRdZ(x) - 5.4; }
+/** Arcade soffit on L1 (the Quad colonnade strips start here). */
+export const GJB_ARCADE_TOP = GJB_L1 + 8.5;
 
-const R = pesRdZ;
-const FS = (x: number) => R(x) + 4 + DRIVE_THROUGH.footpath; // south edge of the drive-through footpath
-const NO = (x: number) => R(x) - 5.4; // north edge of the drive-through overhang
+const FS = driveFootpathZ; // south edge of the drive-through footpath
 const E = gjbcEastX;
+const L1 = GJB_L1;
+const ARC = GJB_ARCADE_TOP;
+
+/**
+ * The solid L1 podium under the Quad + its colonnades, the covered plaza and the inner court (collision prism 0 → L1,
+ * top = the L1 granite floor). The wings around it are regular BUILDINGS; only its north face (PES Univ Rd), its south
+ * face (Pie R Cube) and the east-lobby end wall are exposed at ground level.
+ */
+export const GJB_PODIUM: V2[] = [
+  [20, plazaParapetZ(20)], [38, plazaParapetZ(38)], [55, plazaParapetZ(55)], [59, FS(59)], [59, -15], [20, -15], [20, -10],
+  [19, -10], [18.5, 16], [18.6, 17.25], [-8, 17.6], [-8, -24], [16, -24], [16, -95], [20, -95],
+];
+/** L1 granite floors (drawn at GJB_L1 by gjbc.ts). */
+export const GJB_L1_FLOORS: { id: string; poly: V2[] }[] = [
+  { id: 'quad', poly: [[16, -95], [59, -95], [59, -15], [16, -15]] },
+  { id: 'covered_plaza', poly: [[20, plazaParapetZ(20)], [38, plazaParapetZ(38)], [55, plazaParapetZ(55)], [59, FS(59)], [59, -95], [20, -95]] },
+  { id: 'inner_court', poly: [[-8, -24], [16, -24], [16, -15], [20, -15], [20, -10], [19, -10], [18.5, 16], [18.6, 17.25], [-8, 17.6]] },
+];
+/**
+ * Enterable ground-floor interiors (playable now; y = 0). Rect bounds; `front` = x of the glazed east front.
+ * lobby: GJBC east entrance lobby (reception, walnut slat wall, stair to L1). cafe: GJBC cafeteria under the Law terrace.
+ */
+export const GJB_INTERIORS = {
+  lobby: { x0: 59, x1: gjbcEastX(-80) - 2.5, z0: -84, z1: -76, ceil: GJB_L1 - 0.05 },
+  cafe: { x0: 72, z0: -10, z1: 22, ceil: 4.45 },
+};
+/**
+ * 2-wheeler parking (reference/GJB_NOTES.md §4; user's Google Maps + reference/sat_east_grid.jpg): a long 2-level
+ * N–S structure right opposite GJBC's east wing, with the east lawn between it and GJBC. Its lawn-facing (west) side is
+ * the corten + green-mesh screen; its back (east) wall is the campus boundary. Ground floor at y = 0 (walkable now),
+ * open upper deck at `deck` (slab prism with base > 1.5 → walk under it). Vehicle ramp at the north end off the entry
+ * walkway, pedestrian stair at the south end by the food court, white-roofed covered bay on the deck at the north end.
+ */
+export const PARKING = {
+  x0: 120, x1: 137.5, z0: -111, z1: -30,
+  deck: 3.2, deckT: 0.35,
+  /** vehicle ramp along the back wall at the north end: ground at z0 → deck at rampZ (x rampX … x1) */
+  rampX: 134, rampZ: -93,
+  /** pedestrian stair along the corten face at the south end: ground at z1 → deck at stairZ (x x0 … stairX) */
+  stairX: 122.8, stairZ: -41,
+  /** walk-in door gaps in the ground floor: north face (x range) and the lawn-side corten face (z ranges) */
+  northDoor: [124, 131] as V2,
+  westDoors: [[-92, -88], [-66, -62]] as V2[],
+  /** white-roofed covered bay on the deck at the north end, open to the walkway */
+  bay: { x0: 120, x1: 133.8, z0: -111, z1: -99, roof: 6.0 },
+  /** reflecting pool at the north end of the east lawn, under the entry walkway's tall grey retaining wall */
+  pool: { x0: 105, x1: 117.5, z0: -108.4, z1: -105.4 },
+  retainingWall: { x0: 104, x1: 119.6, z: -110.4, h: 2.4 },
+  /** campus east boundary line (the parking's back wall), z range */
+  backX: 137.72, backZ0: -110.8, backZ1: -30.3,
+};
+export const PARKING_FOOTPRINT: V2[] = [[PARKING.x0, PARKING.z0], [PARKING.x1, PARKING.z0], [PARKING.x1, PARKING.z1], [PARKING.x0, PARKING.z1]];
+/**
+ * The front ramp (reference/GJB_NOTES.md §2): rises west from the east plaza (foot at xFoot, y = 0) along the north side
+ * of the entry road to an L1 landing beside the porte-cochère, under the PES signboard; the landing joins the L1 porch
+ * over the drive-through (→ covered plaza → Quad) and a glazed L1 bridge crosses the MRD loop road into MRD.
+ */
+export const FRONT_RAMP = { xFoot: 110, xTop: 86, z0: -136.3, z1: -131.9, landing: { x0: 78.9, x1: 86, zN: -137.8 } };
+/** Areas where the campus tree scatter must not put trees (the parking floor is walkable, so collision alone won't stop it). */
+export const NO_TREE_ZONES: V2[][] = [
+  // the parking (and the paved strip along its corten face) + its north entry strip
+  [[PARKING.x0 - 1.7, PARKING.z0 - 4.5], [PARKING.backX + 0.5, PARKING.z0 - 4.5], [PARKING.backX + 0.5, PARKING.z1 + 1.2], [PARKING.x0 - 1.7, PARKING.z1 + 1.2]],
+  // reflecting pool + its paved court and the retaining wall
+  [[PARKING.retainingWall.x0, PARKING.retainingWall.z - 0.6], [PARKING.x0, PARKING.retainingWall.z - 0.6], [PARKING.x0, PARKING.pool.z1 + 1], [PARKING.retainingWall.x0, PARKING.pool.z1 + 1]],
+];
 
 // ---------------------------------------------------------------------------------------------
 // Buildings
@@ -125,31 +199,32 @@ export const BUILDINGS: BuildingDef[] = [
     id: 'gjb_west', name: 'GJBC West Wing', style: 'gjbcQuad', floors: 6, floorH: 4.4,
     poly: [[-8, -95], [16, -95], [16, -24], [-8, -24]],
   },
-  { id: 'gjb_west_arc', name: 'GJBC Quad West Arcade', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'red', poly: [[16, -95], [20, -95], [20, -15], [16, -15]] },
-  { id: 'gjb_west_s', name: 'GJBC West Wing (over inner court)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'red', poly: [[-8, -24], [16, -24], [16, -15], [-8, -15]] },
-  { id: 'gjb_plaza_roof', name: 'GJBC Covered Plaza (upper floors)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: 13, top: GJ_H, soffit: 'wood', poly: [[20, -104.3], [38, -106.7], [55, -109.4], [55, -95], [20, -95]] },
-  // north-east block straddling PES Univ Rd (drive-through + porte-cochère)
-  { id: 'gjb_ne', name: 'GJBC North-East Block (drive-through)', style: 'gjbc', floors: 6, floorH: 4.4, base: DRIVE_THROUGH.clear, top: 11.6, soffit: 'wood', poly: [[55, NO(55)], [84, NO(84)], [84, FS(84)], [55, FS(55)]], roof: { tanks: 2, solar: true } },
+  { id: 'gjb_west_arc', name: 'GJBC Quad West Arcade (upper floors over the L1 colonnade)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[16, -95], [20, -95], [20, -15], [16, -15]] },
+  { id: 'gjb_west_s', name: 'GJBC West Wing (over the L1 inner court)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[-8, -24], [16, -24], [16, -15], [-8, -15]] },
+  { id: 'gjb_plaza_roof', name: 'GJBC Covered Plaza (upper floors)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: COVERED_PLAZA.roofY, top: GJ_H, soffit: 'wood', poly: [[20, -104.3], [38, -106.7], [55, -109.4], [55, -95], [20, -95]] },
+  // (the north-east porch over the drive-through — L1 deck, roof and porte-cochère — is custom geometry in gjbc.ts)
   // east wing (inset ground blocks + arcade / colonnade strips at +9 m)
   { id: 'gjb_e1', name: 'GJBC East Wing (north)', style: 'gjbc', floors: 6, floorH: 4.4, poly: [[59, FS(59)], [80, FS(80)], [E(-84) - 2.5, -84], [59, -84]], roof: { tanks: 2 } },
   { id: 'gjb_e1_col', name: 'GJBC East Colonnade (north)', style: 'gjbc', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'wood', poly: [[80, FS(80)], [E(FS(80)) + 0.5, FS(80)], [E(-84), -84], [E(-84) - 2.5, -84]] },
-  { id: 'gjb_e1_arc', name: 'GJBC Quad East Arcade (north)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'red', poly: [[55, FS(55)], [59, FS(59)], [59, -84], [55, -84]] },
-  { id: 'gjb_breezeway', name: 'GJBC East Entrance Hall', style: 'gjbc', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'wood', poly: [[55, -84], [E(-84), -84], [E(-76), -76], [55, -76]] },
+  { id: 'gjb_e1_arc', name: 'GJBC Quad East Arcade (north)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[55, FS(55)], [59, FS(59)], [59, -84], [55, -84]] },
+  { id: 'gjb_breezeway', name: 'GJBC East Entrance Hall (upper floors; the enterable G lobby below is in gjb/interiors.ts)', style: 'gjbc', floors: 6, floorH: 4.4, base: L1, top: GJ_H, soffit: 'grey', poly: [[55, -84], [E(-84), -84], [E(-76), -76], [55, -76]] },
   { id: 'gjb_e2', name: 'GJBC East Wing (middle)', style: 'gjbc', floors: 6, floorH: 4.4, poly: [[59, -76], [E(-76) - 2.5, -76], [E(-60) - 2.5, -60], [59, -60]] },
   { id: 'gjb_e2_col', name: 'GJBC East Colonnade (middle)', style: 'gjbc', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'wood', poly: [[E(-76) - 2.5, -76], [E(-76), -76], [E(-60), -60], [E(-60) - 2.5, -60]] },
   {
     id: 'gjb_e3', name: 'GJBC East Wing (south, curtain wall)', style: 'gjbcCurtain', floors: 6, floorH: 4.4,
     poly: [[59, -60], [E(-60), -60], [E(-10), -10], [59, -10]],
-    sign: { text: 'CAFETERIA', edge: 1, offset: 0.4, color: '#1f2b45' },
   },
-  { id: 'gjb_e_arc', name: 'GJBC Quad East Arcade (south)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'red', poly: [[55, -76], [59, -76], [59, -15], [55, -15]] },
-  { id: 'gjb_quad_s', name: 'GJBC Quad South Gallery', style: 'gjbcCurtain', floors: 2, floorH: 4.5, poly: [[20, -15], [59, -15], [59, -10], [20, -10]] },
+  { id: 'gjb_e_arc', name: 'GJBC Quad East Arcade (south)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[55, -76], [59, -76], [59, -15], [55, -15]] },
+  { id: 'gjb_quad_s', name: 'GJBC Quad South Gallery', style: 'gjbcCurtain', floors: 2, floorH: 4.5, top: L1 + 9, poly: [[20, -15], [59, -15], [59, -10], [20, -10]] },
   {
     id: 'gjb_south', name: 'GJBC Electrical Block (south hall)', style: 'gjbc', floors: 4, floorH: 4.0,
-    poly: [[19, -10], [86.5, -10], [88, 38], [86, 47], [78, 52], [58, 40], [20, 39], [18.5, 16]],
+    poly: [[19, -10], [72, -10], [72, 22], [87.5, 22], [88, 38], [86, 47], [78, 52], [58, 40], [20, 39], [18.5, 16]],
     roof: { skylights: [[24, 8, 8, 28], [36, 8, 8, 28], [48, 8, 8, 28], [60, 8, 8, 28]], tanks: 2 },
   },
-  { id: 'gjb_law_base', name: 'Faculty of Law terrace (cafeteria below)', style: 'gjbcCurtain', floors: 2, floorH: 4.0, poly: [[86.5, -10], [E(-10), -10], [E(38), 38], [88, 38]], roof: { parapet: 1.1 } },
+  // the enterable G-floor cafeteria (gjb/interiors.ts, GJB_INTERIORS.cafe) sits under these two (base = its ceiling)
+  { id: 'gjb_cafe_top', name: 'GJBC Electrical Block (over the cafeteria)', style: 'gjbc', floors: 4, floorH: 4.0, base: 4.5, top: 16, soffit: 'grey', poly: [[72, -10], [86.5, -10], [87.5, 22], [72, 22]] },
+  { id: 'gjb_law_cafe', name: 'Faculty of Law terrace (over the cafeteria)', style: 'gjbcCurtain', floors: 2, floorH: 4.0, base: 4.5, top: 8, soffit: 'grey', poly: [[86.5, -10], [E(-10), -10], [E(22), 22], [87.5, 22]], roof: { parapet: 1.1 }, sign: { text: 'CAFETERIA', edge: 1, offset: 0.4, color: '#1f2b45' } },
+  { id: 'gjb_law_base', name: 'Faculty of Law terrace (south part)', style: 'gjbcCurtain', floors: 2, floorH: 4.0, poly: [[87.5, 22], [E(22), 22], [E(38), 38], [88, 38]], roof: { parapet: 1.1 } },
   { id: 'gjb_law_roof', name: 'Faculty of Law terrace canopy', style: 'gjbc', floors: 1, floorH: 4.0, base: 15.2, top: 16.4, soffit: 'grey', poly: [[86.5, -10], [E(-10), -10], [E(38), 38], [88, 38]], roof: { parapet: 0.4 } },
   {
     id: 'gjb_techpark', name: 'GJBC Tech Park', style: 'gjbc', floors: 4, floorH: 4.4,
@@ -157,17 +232,46 @@ export const BUILDINGS: BuildingDef[] = [
     roof: { tanks: 2 },
   },
   // --- North of PES University Rd ---
+  // Prof. MRD Block (Dr. M.R. Doreswamy Silver Jubilee Complex, OSM way 199316438, 6 levels), split into its wings
+  // (satellite + 2021/2026 tours, reference/MRD_NOTES.md). Refurbished 2025-26 parts use 'mrd' (buff stone, frosted
+  // glass, navy cornices), the old wings facing the Open Air Theatre stay cream. Detail: src/world/mrd.ts.
+  // id 'mrd' is kept on the NW auditorium hall (Props looks it up); its metal hip roof is built in mrd.ts.
   {
-    id: 'mrd', name: 'Prof. MRD Block (Dr. M.R. Doreswamy Silver Jubilee Complex)', style: 'mrd', floors: 6, floorH: 3.8,
-    poly: [[2.0, -179.8], [9.2, -182.4], [21.2, -187.0], [25.8, -185.8], [30.2, -187.9], [31.1, -183.2], [34.8, -180.9], [59.3, -169.6], [62.8, -176.0], [74.4, -180.3], [79.4, -167.0], [80.8, -163.9], [73.5, -161.8], [66.7, -150.5], [59.9, -139.3], [59.3, -136.4], [62.9, -136.1], [68.4, -135.7], [66.8, -131.8], [45.0, -126.0], [40.9, -137.6], [43.6, -141.0], [37.7, -143.7], [15.0, -154.0], [9.5, -152.0], [9.2, -156.9], [2.8, -168.5]],
-    roof: { tanks: 4, solar: true },
+    id: 'mrd', name: 'Prof. MRD Block — auditorium', style: 'admin', floors: 4, floorH: 4.0,
+    poly: [[2.0, -179.8], [9.2, -182.4], [21.2, -187.0], [25.8, -185.8], [30.2, -187.9], [31.1, -183.2], [33.0, -172.0], [28.0, -158.0], [15.0, -154.0], [9.2, -156.9], [2.8, -168.5]],
+    roof: { parapet: 0.3 },
   },
   {
-    id: 'bblock', name: 'B-Block', style: 'bblock', floors: 14, floorH: 3.5,
-    poly: [[-54.8, -177.2], [-41.0, -178.0], [-42.1, -195.0], [-12.8, -196.8], [-11.2, -171.4], [-7.6, -113.9], [-50.6, -111.2]],
+    id: 'mrd_fan', name: 'Prof. MRD Block — central wings', style: 'oldCream', floors: 6, floorH: 3.6,
+    poly: [[31.1, -183.2], [34.8, -180.9], [59.3, -169.6], [43.6, -141.0], [37.7, -143.7], [15.0, -154.0], [28.0, -158.0], [33.0, -172.0]],
+    roof: { tanks: 3 },
+  },
+  {
+    id: 'mrd_east', name: 'Prof. MRD Block — east entrance block (Silver Jubilee Complex)', style: 'glass', floors: 5, floorH: 4.0,
+    poly: [[59.3, -169.6], [73.5, -161.8], [66.7, -150.5], [59.9, -139.3], [43.6, -141.0]],
+    roof: { tanks: 2 },
+  },
+  {
+    id: 'mrd_ne', name: 'Prof. MRD Block — north-east wing', style: 'mrd', floors: 5, floorH: 4.0,
+    poly: [[59.3, -169.6], [62.8, -176.0], [74.4, -180.3], [79.4, -167.0], [80.8, -163.9], [73.5, -161.8]],
+    roof: { tanks: 2, solar: true },
+  },
+  {
+    id: 'mrd_se', name: 'Prof. MRD Block — south-east wing', style: 'mrd', floors: 5, floorH: 4.0,
+    poly: [[59.9, -139.3], [59.3, -136.4], [62.9, -136.1], [68.4, -135.7], [66.8, -131.8], [45.0, -126.0], [40.9, -137.6], [43.6, -141.0]],
+    roof: { solar: true },
+  },
+  // B-Block = "BE block" (reference/BE_NOTES.md). The main entrance lobby on the east face (z −165.5…−153.5) is carved
+  // out of the footprint: bblock_lobby_over covers it from 7 m up, bblock_portico bridges the link road from 14 m up
+  // on four columns (src/world/bblock.ts builds the plinth, steps, glass wall, columns and the lobby interior).
+  {
+    id: 'bblock', name: 'B-Block (BE block)', style: 'bblock', floors: 14, floorH: 3.5,
+    poly: [[-54.8, -177.2], [-41.0, -178.0], [-42.1, -195.0], [-12.8, -196.8], [-11.2, -171.4], [-10.83, -165.5], [-19.81, -164.93], [-19.06, -152.95], [-10.08, -153.5], [-7.6, -113.9], [-50.6, -111.2]],
     roof: { solar: true, tanks: 4 },
-    sign: { text: 'B BLOCK', sub: 'COMPUTER SCIENCE & ENGG', edge: 6, offset: 0.5, color: '#2f3a40' },
+    sign: { text: 'BE BLOCK', sub: 'COMPUTER SCIENCE & ENGG', edge: 10, offset: 0.5, color: '#2f3a40' },
   },
+  { id: 'bblock_lobby_over', name: 'BE block (over the entrance lobby)', style: 'bblock', floors: 14, floorH: 3.5, base: 7.0, top: 49, soffit: 'grey', roof: { parapet: 1.1 }, poly: [[-10.83, -165.5], [-19.81, -164.93], [-19.06, -152.95], [-10.08, -153.5]] },
+  { id: 'bblock_portico', name: 'BE block portico over the link road', style: 'bblock', floors: 14, floorH: 3.5, base: 14.0, top: 49, soffit: 'grey', roof: { parapet: 1.1 }, poly: [[-11.4, -169.5], [2.6, -169.5], [2.6, -156.5], [-10.6, -156.5]] },
   { id: 'bblock_tower', name: 'B-Block crest tower', style: 'bblockTower', floors: 16, floorH: 3.5, top: 57, poly: [[-20, -124], [-7.95, -124], [-8.9, -139], [-20, -139]] },
   {
     id: 'admission', name: 'Admission Enquiry (gate mural building)', style: 'admin', floors: 4, floorH: 3.5,
@@ -215,8 +319,11 @@ export const BUILDINGS: BuildingDef[] = [
   },
 ];
 
-/** Octagonal auditorium drum on the MRD block */
-export const MRD_DRUM = { center: [22, -168] as V2, radius: 16, height: 27, sides: 8 };
+/**
+ * Octagonal glass skylight lantern over the MRD atrium (4-storey atrium, octagonal skylight — tour frame 0449). Campus
+ * extrudes it from the ground inside the mrd_east block, so only the top ~1.7 m shows above that roof (20 m + parapet).
+ */
+export const MRD_DRUM = { center: [59.5, -153.5] as V2, radius: 4.2, height: 22.8, sides: 8 };
 
 // ---------------------------------------------------------------------------------------------
 // Gates (breakable). Zombies must break them; players can repair.
@@ -255,14 +362,16 @@ export const WALLS: WallDef[] = [
   { kind: 'hoarding', height: 3.2, pts: [[-72, -96.5], [-72, 142]] },
   // south boundary behind the hostels
   { kind: 'stone', height: 2.5, pts: [[-72, 142], [80, 142], [80, 86]] },
-  // east: F-block → HPC/food point (granite), then corten + green mesh panels along the east lawn
-  { kind: 'stone', height: 2.5, pts: [[127.8, 62], [154, 12], [154, -24]] },
-  { kind: 'corten', height: 3.2, pts: [[154, -24], [154, -106.6], [156.2, -106.6]] },
+  // east: F-block → around the HPC lab / food point (granite), then the 2-wheeler parking's back wall (the parking's
+  // lawn-facing corten + green-mesh screen is built with the parking, src/world/gjb/parking.ts), then to the gate building
+  { kind: 'stone', height: 2.5, pts: [[127.8, 62], [154, 12], [154, PARKING.backZ1], [PARKING.backX, PARKING.backZ1]] },
+  { kind: 'plaster', height: PARKING.deck + 1.2, pts: [[PARKING.backX, PARKING.backZ1], [PARKING.backX, PARKING.backZ0]] },
+  { kind: 'plaster', height: 2.6, pts: [[PARKING.backX, PARKING.backZ0], [156.2, PARKING.backZ0]] },
 ];
-/** White free-standing low walls in front of the corten boundary (not part of the boundary). */
+/** White free-standing low walls on the east lawn, in front of the parking's corten face (not part of the boundary). */
 export const LOW_WALLS: { a: V2; b: V2; height: number }[] = [
-  { a: [150.6, -96], b: [150.6, -80], height: 1.3 },
-  { a: [150.6, -62], b: [150.6, -44], height: 1.3 },
+  { a: [116.6, -84], b: [116.6, -70], height: 1.3 },
+  { a: [116.6, -58], b: [116.6, -42], height: 1.3 },
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -297,7 +406,8 @@ export const PATHS: PathDef[] = [
   // GJBC east promenade (grey two-tone pavers), forecourt → Law terrace stair → F-Block
   { id: 'east_promenade', surface: 'greypaver', width: 9, pts: [[90.5, -113], [92, -95], [95, -60], [98.5, -10], [101, 20], [102.5, 44]] },
   // diagonal path across the east lawn
-  { id: 'lawn_diagonal', surface: 'greypaver', width: 3, pts: [[100, -40], [125, -55], [149, -60]] },
+  // diagonal path across the east lawn to the parking's middle door
+  { id: 'lawn_diagonal', surface: 'greypaver', width: 3, pts: [[100.6, -50], [118.4, -64]] },
   // footway round the Open Air Theatre
   { id: 'oat_footway', surface: 'paver', width: 2.5, pts: [[38, -117.5], [37, -123], [34.5, -131], [34, -138], [36, -143]] },
 ];
@@ -309,22 +419,22 @@ export const AREAS: AreaDef[] = [
   { id: 'pes_lawn', kind: 'lawn', poly: [[91, -150.5], [114, -150.5], [114, -142.5], [130, -145], [150, -148], [165, -150.2], [150, -158.4], [107.2, -179.6], [96, -173.5]] },
   // frangipani garden between the MRD loop road and the east plaza (the gold globe stands at its east end)
   { id: 'frangipani_garden', kind: 'lawn', poly: [[80.6, -141], [88, -141], [88, -150.5], [91, -150.5], [96, -163], [90.5, -166], [82, -150.8]] },
-  // east lawn (Student Lounge + garden): young trees, white low walls, corten boundary
-  { id: 'east_lawn', kind: 'lawn', poly: [[100.8, -106.5], [133, -108], [133, -95.5], [152.8, -95.5], [152.8, -24], [122, -24], [122, -4], [104.2, -3]] },
-  // bike parking yard under the white canopy (motorcycle rows)
-  { id: 'bike_yard', kind: 'concrete', poly: [[133, -108.6], [152.8, -108.6], [152.8, -95.5], [133, -95.5]] },
-  // lawn strip south of the entry walkway (tiered trees)
-  { id: 'walkway_lawn', kind: 'lawn', poly: [[104.5, -113.7], [120, -115.2], [140, -117.4], [144.5, -117.8], [144.5, -110.5], [133, -109.5], [104, -108.5]] },
+  // east lawn (Student Lounge + garden) between GJBC's east promenade and the 2-wheeler parking: young trees, white low
+  // walls; the reflecting pool at its north end, the parking's corten face on its east side (reference/GJB_NOTES.md §4)
+  { id: 'east_lawn', kind: 'lawn', poly: [[100.9, -104.2], [118.4, -104.2], [118.4, -30.5], [121.2, -30.5], [121.2, -4], [104.2, -3]] },
+  // 2-wheeler parking: concrete ground floor under the deck; paved pool court + strip along the corten face; north entry strip
+  { id: 'parking_floor', kind: 'concrete', poly: PARKING_FOOTPRINT },
+  { id: 'parking_apron', kind: 'greypaver', poly: [[101, -110.6], [PARKING.x0, -110.6], [PARKING.x0, -30.5], [118.4, -30.5], [118.4, -104.2], [100.9, -104.2]] },
+  { id: 'parking_entry', kind: 'greypaver', poly: [[119.6, -115.3], [PARKING.backX, -117.2], [PARKING.backX, PARKING.z0], [119.6, PARKING.z0]] },
   // Open Air Theatre lawn
-  { id: 'oat_lawn', kind: 'lawn', poly: [[4.0, -120.5], [3.7, -149.7], [12.5, -150.2], [21.4, -146.4], [27.6, -138.6], [31.5, -123.6], [10.4, -121.3]] },
+  // Open Air Theatre ground (paved; tiers, stage, terrace are geometry in src/world/oat.ts). Kind is not lawn any more.
+  { id: 'oat_lawn', kind: 'concrete', poly: [[4.0, -120.5], [3.7, -149.7], [12.5, -150.2], [21.4, -146.4], [27.6, -138.6], [31.5, -123.6], [10.4, -121.3]] },
   // lawn around B-block front
   { id: 'bblock_lawn', kind: 'lawn', poly: [[-58, -150], [-54, -176], [-51, -113.5], [-58, -114]] },
   // lawn east of B-Block along the link road
-  { id: 'bblock_east_lawn', kind: 'lawn', poly: [[-6.5, -118], [-5.5, -155], [-6.8, -195], [-10.4, -195], [-9.3, -171], [-7.4, -118]] },
-  // the Quad (polished granite with charcoal bands) + arcades, the covered plaza, the inner court
-  { id: 'quad', kind: 'granite', poly: [[16, -95], [59, -95], [59, -15], [16, -15]] },
-  { id: 'covered_plaza', kind: 'granite', poly: [[20, plazaParapetZ(20)], [38, plazaParapetZ(38)], [55, plazaParapetZ(55)], [59, plazaParapetZ(55) + 0.6], [59, -95], [20, -95]] },
-  { id: 'inner_court', kind: 'granite', poly: [[-8, -24], [18.8, -24], [18.8, 17.2], [-8, 17.6]] },
+  { id: 'bblock_east_lawn', kind: 'lawn', poly: [[-6.5, -118], [-5.8, -148], [-8.5, -148], [-7.4, -118]] },
+  { id: 'bblock_east_lawn_n', kind: 'lawn', poly: [[-5.9, -172], [-6.8, -195], [-10.4, -195], [-9.35, -172]] },
+  // (the Quad, the covered plaza and the inner court are granite floors on the L1 podium, drawn by gjbc.ts — see GJB_L1_FLOORS)
   // GJBC east forecourt (bus drop-off)
   { id: 'gjbc_east_forecourt', kind: 'greypaver', poly: [[86.2, -117.2], [104, -115.3], [104, -94], [86.8, -94]] },
   // east plaza (striped pavers) — the ramp rises west from here
@@ -359,14 +469,16 @@ export const SPAWN_ZONES: { gate: string; pts: V2[] }[] = [
 
 /** Interactable stations (COD-style). */
 export type StationKind = 'ammo' | 'health' | 'weapon' | 'repair';
-export interface StationDef { id: string; kind: StationKind; pos: V2; cost: number; item?: string; label: string }
+export interface StationDef { id: string; kind: StationKind; pos: V2; cost: number; item?: string; label: string; /** floor height (multi-level), default 0 */ y?: number }
 export const STATIONS: StationDef[] = [
   { id: 'ammo_gate', kind: 'ammo', pos: [150, -121], cost: 250, label: 'Ammo crate' },
-  { id: 'ammo_court', kind: 'ammo', pos: [22.5, -33], cost: 250, label: 'Ammo crate' },
+  // moved from the Quad (22.5, −33) into the enterable G-floor east lobby; belongs back in the Quad's SW arcade on L1 once levels land
+  { id: 'ammo_court', kind: 'ammo', pos: [64, -81], cost: 250, label: 'Ammo crate' },
   { id: 'ammo_food', kind: 'ammo', pos: [127, -27.5], cost: 250, label: 'Ammo crate' },
   { id: 'ammo_bblock', kind: 'ammo', pos: [-30, -108.6], cost: 250, label: 'Ammo crate' },
   { id: 'med_admission', kind: 'health', pos: [160, -122.3], cost: 400, label: 'First-aid kit' },
-  { id: 'med_court', kind: 'health', pos: [45.5, -78], cost: 400, label: 'First-aid kit' },
+  // moved from the Quad (45.5, −78) into the enterable G-floor cafeteria; belongs back in the Quad's east arcade on L1 once levels land
+  { id: 'med_court', kind: 'health', pos: [74.8, 4], cost: 400, label: 'First-aid kit' },
   { id: 'buy_shotgun', kind: 'weapon', item: 'shotgun', pos: [171.5, -140.2], cost: 1200, label: 'Security locker — Shotgun' },
   { id: 'buy_smg', kind: 'weapon', item: 'smg', pos: [133, -24.5], cost: 1500, label: 'Canteen stash — SMG' },
   { id: 'buy_rifle', kind: 'weapon', item: 'rifle', pos: [50, -124.2], cost: 2500, label: 'NCC armoury — Rifle' },

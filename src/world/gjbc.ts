@@ -1,19 +1,24 @@
 import * as THREE from 'three';
 import { addLedgesAt } from './buildings';
 import { hash2, normalizeWinding } from './geom';
+import { buildGjbInteriors } from './gjb/interiors';
+import { buildParking } from './gjb/parking';
+import { segPoly } from './gjb/util';
 import { col, type WorldKit } from './kit';
 import { hedgeBox, planterCube, sapling } from './landscape';
 import {
-  BUILDINGS, COVERED_PLAZA, DRIVE_THROUGH, gjbcEastX, pesRdZ, plazaParapetZ, QUAD, type V2,
+  BUILDINGS, COVERED_PLAZA, DRIVE_THROUGH, driveFootpathZ, driveNorthZ, GJB_L1, GJB_L1_FLOORS, GJB_PODIUM, gjbcEastX, pesRdZ,
+  plazaParapetZ, QUAD, type V2,
 } from './layout';
 import type { SignUVs } from './signs';
 import { worldUniforms } from './materials';
 
 /**
- * Golden Jubilee Block (GJBC) detail: the Quad colonnades + granite pattern, the covered plaza (yellow columns,
- * steel beams, pergola, hedge parapet, cone lamps), the drive-through columns + porte-cochère, the east
- * colonnade / fins / entrance portal, the north arcade, charcoal fascia bands and the Faculty of Law terrace.
- * The wing prisms themselves are regular BUILDINGS entries (arcade strips have base 9 m → walkable).
+ * Golden Jubilee Block (GJBC) detail. Level structure (reference/GJB_NOTES.md §1): PES University Rd, the drive-through,
+ * the east forecourt/promenade and the enterable lobbies are on the ground floor (y = 0); the Quad, its colonnades, the
+ * covered plaza, the inner court and the north-east porch over the drive-through are on the 1st floor (GJB_L1), on a
+ * solid podium. The front ramp from the east plaza lands on L1 (landmarks.ts buildPesBridge).
+ * The wing prisms themselves are regular BUILDINGS entries (arcade strips start at the L1 colonnade soffit → walkable).
  */
 const WHITE_GRANITE = col('#d9d9d5');
 const DARK_GRANITE = col('#3a3c3e');
@@ -24,24 +29,89 @@ const CHARCOAL = col('#44484e');
 const TERRACOTTA = col('#7f4432');
 const PLANTER_GREY = col('#55595e');
 const BAND = col('#3e4143');
+const L1 = GJB_L1;
 
 export function buildGJBC(kit: WorldKit, signs: SignUVs): void {
+  podium(kit);
   quad(kit, signs);
   coveredPlaza(kit, signs);
-  driveThrough(kit, signs);
+  nePorch(kit, signs);
+  driveThrough(kit);
   eastFacade(kit, signs);
   northArcade(kit);
   lawTerrace(kit, signs);
   fascia(kit);
   libraryDetails(kit);
+  buildGjbInteriors(kit);
+  buildParking(kit);
 }
 
-// ------------------------------------------------------------------------------------------------ the Quad
+// ------------------------------------------------------------------------------------------------ L1 podium
+/** The solid podium under everything on L1: collision prism, L1 granite floors, and its exposed ground-floor faces. */
+function podium(kit: WorldKit): void {
+  kit.collision.addPolygon(GJB_PODIUM, L1, 'concrete', 'podium');
+  for (const f of GJB_L1_FLOORS) {
+    const c = f.poly.reduce((s, p) => [s[0] + p[0] / f.poly.length, s[1] + p[1] / f.poly.length], [0, 0]);
+    kit.buf('polished', c[0], c[1]).flatPoly(f.poly, L1 + 0.045, col('#aeafab'), 2);
+  }
+  // north face along PES Univ Rd (under the covered plaza's L1 edge): white wall, dark slot windows, granite skirting,
+  // red fire cabinets — the same treatment as the drive-through wall it continues (old tour 0540)
+  const north: V2[] = [[20, plazaParapetZ(20)], [38, plazaParapetZ(38)], [55, plazaParapetZ(55)]];
+  groundFace(kit, north, 'north');
+  // south face of the L1 inner court, towards Pie R Cube: glazed ground floor + glass balustrade on L1
+  const south: V2[] = [[18.6, 17.25], [-8, 17.6]];
+  groundFace(kit, south, 'south');
+}
+
+/** Ground-floor face of the podium along a polyline (podium on the left-hand side = +offset), plus the L1 edge on top. */
+function groundFace(kit: WorldKit, line: V2[], kind: 'north' | 'south'): void {
+  const wall = col('#ebe7de');
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1], b = line[i];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    kit.segBox('polished', a, b, 0, 0.6, 0.36, col('#2f3133'), 0.15, 0, 0.5);
+    kit.segBox('stone', a, b, L1 - 0.65, L1 + 0.08, 0.5, CHARCOAL, 0.22);
+    if (kind === 'north') {
+      kit.segBox('plaster', a, b, 0.6, L1 - 0.65, 0.3, wall, 0.15, 0, 0.5);
+      kit.segBox('glass', a, b, 1.0, 2.3, 0.06, col('#2c3740'), -0.02);
+      const n = Math.floor(len / 1.5);
+      for (let k = 1; k < n; k++) {
+        const f = k / n, p: V2 = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+        kit.segBox('metal', [p[0] - 0.04, p[1]], [p[0] + 0.04, p[1]], 1.0, 2.3, 0.1, col('#2b2f33'), -0.03);
+        if (k % 6 === 3) kit.box('stone', p[0], 1.0, p[1] + 0.05, 0.55, 0.9, 0.12, 0, col('#c1261c'));
+      }
+      // L1 planter parapet + dense hedge (Heliconia / peace lily) on the covered-plaza edge
+      kit.segBox('stone', a, b, L1, L1 + 0.95, 1.3, PLANTER_GREY, 0.65, 0.02);
+      kit.segBox('stone', a, b, L1 + 0.95, L1 + 1.05, 1.45, col('#2c2e30'), 0.65, 0.02);
+      const segN = Math.max(1, Math.round(len / 2));
+      for (let k = 0; k < segN; k++) {
+        const f0 = k / segN, f1 = (k + 1) / segN;
+        const pa: V2 = [a[0] + (b[0] - a[0]) * f0, a[1] + (b[1] - a[1]) * f0 + 0.65], pb: V2 = [a[0] + (b[0] - a[0]) * f1, a[1] + (b[1] - a[1]) * f1 + 0.65];
+        hedgeBox(kit, 'hedge', pa, pb, L1 + 1.0, L1 + 1.85, 1.1);
+      }
+      kit.collision.addPolygon(segPoly(a, b, 1.3, 0.65), 1.1, 'concrete', 'parapet', L1);
+    } else {
+      kit.segBox('plaster', a, b, 0.6, L1 - 0.65, 0.3, wall, 0.3, 0, 0.5);
+      kit.segBox('glass', a, b, 0.6, L1 - 1.3, 0.06, col('#33414c'), 0.12);
+      const n = Math.floor(len / 2);
+      for (let k = 0; k <= n; k++) {
+        const f = k / n, p: V2 = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+        kit.box('polished', p[0], (L1 - 0.65) / 2, p[1] - 0.25, 0.7, L1 - 0.65, 0.7, 0, col('#b9b7b1'), 0.5);
+      }
+      kit.segBox('glass', a, b, L1 + 0.1, L1 + 1.1, 0.04, col('#6f8290'), 0.4);
+      kit.segBox('metal', a, b, L1 + 1.1, L1 + 1.16, 0.08, col('#9aa0a6'), 0.4);
+      kit.collision.addPolygon(segPoly(a, b, 0.3, 0.4), 1.1, 'concrete', 'parapet', L1);
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ the Quad (on L1)
 function quad(kit: WorldKit, signs: SignUVs): void {
   const Q = QUAD;
+  const y0 = Q.floorY;
   const polished = (x: number, z: number) => kit.buf('polished', x, z);
   // floor pattern: two longitudinal charcoal bands, transverse bands every 15 m with diamonds on the axis
-  const y = 0.052;
+  const y = y0 + 0.052;
   const midX = (Q.minX + Q.maxX) / 2;
   for (const bx of [midX - 6.5, midX + 6.5]) polished(bx, -55).flatPoly([[bx - 0.7, Q.minZ], [bx + 0.7, Q.minZ], [bx + 0.7, Q.maxZ], [bx - 0.7, Q.maxZ]], y, BAND, 2);
   for (let z = Q.minZ + 7.5; z < Q.maxZ; z += 15) {
@@ -51,52 +121,57 @@ function quad(kit: WorldKit, signs: SignUVs): void {
     polished(midX, z).flatPoly([[midX, z - d + 1], [midX + d - 1, z], [midX, z + d - 1], [midX - d + 1, z]], y + 0.004, col('#aeafab'), 2);
   }
   // arcade step lip along both column lines
-  for (const x of [Q.minX + 0.45, Q.maxX - 0.45]) kit.box('polished', x, 0.08, (Q.minZ + Q.maxZ) / 2, 1.6, 0.16, Q.maxZ - Q.minZ, 0, col('#b9bab6'), 0.5);
-  // double-height colonnades: white granite shafts on dark granite bases, blue banners on every 2nd column
+  for (const x of [Q.minX + 0.45, Q.maxX - 0.45]) kit.box('polished', x, y0 + 0.08, (Q.minZ + Q.maxZ) / 2, 1.6, 0.16, Q.maxZ - Q.minZ, 0, col('#b9bab6'), 0.5);
+  // double-height colonnades on L1: white granite shafts on dark granite bases, blue banners on every 2nd column
   const n = Math.round((Q.maxZ - Q.minZ) / Q.colSpacing);
+  const shaftH = Q.colHeight - 1.2 - 0.4;
   for (const [x, face] of [[Q.minX + 0.45, 1], [Q.maxX - 0.45, -1]] as [number, number][]) {
     for (let k = 0; k < n; k++) {
       const z = Q.minZ + Q.colSpacing / 2 + k * Q.colSpacing;
-      kit.box('polished', x, 0.6, z, 1.02, 1.2, 1.02, 0, DARK_GRANITE, 0.5);
-      kit.box('polished', x, 5.1, z, Q.colSize, 7.8, Q.colSize, 0, WHITE_GRANITE, 0.5);
-      kit.box('stone', x, 8.8, z, 1.0, 0.4, 1.0, 0, col('#e2e0da'));
-      kit.collision.addCircle(x, z, 0.62, Q.colHeight, 'concrete', 'column');
-      if (k % 2 === 0) kit.signQuad(signs.quadBanner[k % 3], x + face * (Q.colSize / 2 + 0.03), 5.0, z, 0.78, 2.6, face, 0, false);
+      kit.box('polished', x, y0 + 0.6, z, 1.02, 1.2, 1.02, 0, DARK_GRANITE, 0.5);
+      kit.box('polished', x, y0 + 1.2 + shaftH / 2, z, Q.colSize, shaftH, Q.colSize, 0, WHITE_GRANITE, 0.5);
+      kit.box('stone', x, y0 + Q.colHeight - 0.2, z, 1.0, 0.4, 1.0, 0, col('#e2e0da'));
+      kit.collision.addCircle(x, z, 0.62, y0 + Q.colHeight, 'concrete', 'column');
+      if (k % 2 === 0) kit.signQuad(signs.quadBanner[k % 3], x + face * (Q.colSize / 2 + 0.03), y0 + 4.6, z, 0.78, 2.6, face, 0, false);
       else {
         // small wall-mounted light on the Quad face of the column
-        kit.box('emissive', x + face * (Q.colSize / 2 + 0.06), 3.4, z, 0.12, 0.3, 0.18, 0, col('#ffffff'));
-        if (k % 4 === 1) kit.lampPoints.push(new THREE.Vector3(x + face * 1.2, 3.4, z));
+        kit.box('emissive', x + face * (Q.colSize / 2 + 0.06), y0 + 3.4, z, 0.12, 0.3, 0.18, 0, col('#ffffff'));
+        if (k % 4 === 1) kit.lampPoints.push(new THREE.Vector3(x + face * 1.2, y0 + 3.4, z));
       }
     }
   }
-  // arcade beam line on top of the columns + continuous balcony (slab + glass railing) at +13.2 m
+  // arcade beam line on top of the columns + continuous balcony (slab + glass railing) higher up
   for (const [x, face] of [[Q.minX, 1], [Q.maxX, -1]] as [number, number][]) {
-    kit.box('stone', x + face * 0.1, 9.45, (Q.minZ + Q.maxZ) / 2, 0.5, 0.9, Q.maxZ - Q.minZ, 0, col('#e6e0d2'));
-    kit.box('stone', x + face * 0.6, 13.1, (Q.minZ + Q.maxZ) / 2, 1.2, 0.22, Q.maxZ - Q.minZ, 0, col('#e8e2d4'));
-    kit.box('glass', x + face * 1.15, 13.75, (Q.minZ + Q.maxZ) / 2, 0.04, 1.05, Q.maxZ - Q.minZ, 0, col('#6f8290'));
-    kit.box('metal', x + face * 1.15, 14.3, (Q.minZ + Q.maxZ) / 2, 0.08, 0.06, Q.maxZ - Q.minZ, 0, col('#9aa0a6'));
+    kit.box('stone', x + face * 0.1, y0 + Q.colHeight + 0.45, (Q.minZ + Q.maxZ) / 2, 0.5, 0.9, Q.maxZ - Q.minZ, 0, col('#e6e0d2'));
+    kit.box('stone', x + face * 0.6, y0 + 13.1, (Q.minZ + Q.maxZ) / 2, 1.2, 0.22, Q.maxZ - Q.minZ, 0, col('#e8e2d4'));
+    kit.box('glass', x + face * 1.15, y0 + 13.75, (Q.minZ + Q.maxZ) / 2, 0.04, 1.05, Q.maxZ - Q.minZ, 0, col('#6f8290'));
+    kit.box('metal', x + face * 1.15, y0 + 14.3, (Q.minZ + Q.maxZ) / 2, 0.08, 0.06, Q.maxZ - Q.minZ, 0, col('#9aa0a6'));
   }
-  // black cube planters with cycads, 5 m apart along each colonnade edge (kept clear of the station spots)
+  // black cube planters with cycads, 5 m apart along each colonnade edge
   for (const x of [Q.minX + 3.2, Q.maxX - 3.2]) {
-    for (let z = Q.minZ + 5; z <= Q.maxZ - 5; z += 5) planterCube(kit, x, z, 0.85);
+    for (let z = Q.minZ + 5; z <= Q.maxZ - 5; z += 5) planterCube(kit, x, z, 0.85, y0);
   }
   // south end: glass gallery bridge above the 2-storey dark base
-  kit.box('glass', (Q.minX + Q.maxX) / 2, 10.8, -12.6, Q.maxX - Q.minX + 4, 3.4, 3.8, 0, col('#50626f'));
-  kit.box('stone', (Q.minX + Q.maxX) / 2, 12.65, -12.6, Q.maxX - Q.minX + 4.4, 0.3, 4.2, 0, col('#e6e0d2'));
-  kit.box('stone', (Q.minX + Q.maxX) / 2, 9.0, -12.6, Q.maxX - Q.minX + 4.4, 0.35, 4.2, 0, col('#e6e0d2'));
+  kit.box('glass', (Q.minX + Q.maxX) / 2, y0 + 10.8, -12.6, Q.maxX - Q.minX + 4, 3.4, 3.8, 0, col('#50626f'));
+  kit.box('stone', (Q.minX + Q.maxX) / 2, y0 + 12.65, -12.6, Q.maxX - Q.minX + 4.4, 0.3, 4.2, 0, col('#e6e0d2'));
+  kit.box('stone', (Q.minX + Q.maxX) / 2, y0 + 9.0, -12.6, Q.maxX - Q.minX + 4.4, 0.35, 4.2, 0, col('#e6e0d2'));
+  // the inner court (L1, south-west of the Quad): a few planters + a granite bench block
+  for (const [x, z] of [[-2, -8], [8, -8], [-2, 6], [8, 6]] as V2[]) planterCube(kit, x, z, 0.85, y0);
+  kit.box('polished', 3, y0 + 0.23, -1, 2.4, 0.45, 0.5, 0, col('#8e8e8b'), 0.5);
 }
 
-// ------------------------------------------------------------------------------------------------ covered plaza
+// ------------------------------------------------------------------------------------------------ covered plaza (on L1)
 function coveredPlaza(kit: WorldKit, signs: SignUVs): void {
   const P = COVERED_PLAZA;
+  const y0 = L1;
   const roofY = P.roofY;
   // yellow-wood clad columns with dark grey bases
   const colsX = [26.5, 34, 41.5, 49];
   const colsZ = [-97.5, -103.8];
   for (const x of colsX) for (const z of colsZ) {
     if (z < plazaParapetZ(x) + P.pergolaDepth + 0.8) continue;
-    kit.box('stone', x, 0.55, z, 1.34, 1.1, 1.34, 0, col('#4a4f55'));
-    kit.box('wood', x, 0.55 + (roofY - 1.1) / 2 + 0.55, z, 1.2, roofY - 1.1, 1.2, 0, YELLOW_WOOD, 0.4);
+    kit.box('stone', x, y0 + 0.55, z, 1.34, 1.1, 1.34, 0, col('#4a4f55'));
+    kit.box('wood', x, (y0 + 1.1 + roofY) / 2, z, 1.2, roofY - y0 - 1.1, 1.2, 0, YELLOW_WOOD, 0.4);
     kit.collision.addCircle(x, z, 0.8, roofY, 'wood', 'column');
   }
   // slate-grey steel beams under the roof slab
@@ -104,38 +179,23 @@ function coveredPlaza(kit: WorldKit, signs: SignUVs): void {
   for (const x of [P.minX + 0.4, ...colsX, P.maxX - 0.4]) kit.buf('metal', x, -100).beam([x, roofY - 0.45, zN(x)], [x, roofY - 0.45, zS], 0.5, 0.9, SLATE);
   for (const z of colsZ) kit.box('metal', (P.minX + P.maxX) / 2, roofY - 0.45, z, P.maxX - P.minX, 0.9, 0.5, 0, SLATE);
   kit.buf('metal', 37, -95).beam([P.minX, roofY - 0.6, zS], [P.maxX, roofY - 0.6, zS], 0.6, 1.2, col('#3f454c'));
-  // open-sky steel pergola: portal frames with knee braces over the north strip
-  const pergY = 7.2;
+  // open-sky steel pergola over the north strip: portal frames with knee braces standing on L1
+  const pergY = y0 + 7.2;
   const frameXs: number[] = [];
   for (let x = P.minX + 3; x <= P.maxX - 2; x += 6.5) frameXs.push(x);
   const pb = kit.buf('metal', 37, -108);
   for (const x of frameXs) {
-    const zp = plazaParapetZ(x) + 0.9, zr = zN(x);
-    pb.beam([x, 0, zp], [x, pergY, zp], 0.5, 0.5, SLATE);
+    const zp = plazaParapetZ(x) + 1.7, zr = zN(x);
+    pb.beam([x, y0, zp], [x, pergY, zp], 0.5, 0.5, SLATE);
     pb.beam([x, pergY, zp - 0.4], [x, pergY, zr + 0.5], 0.5, 0.7, SLATE);
     pb.beam([x, pergY - 1.6, zp], [x, pergY - 0.2, zp + 1.5], 0.25, 0.25, SLATE);
     kit.collision.addCircle(x, zp, 0.36, pergY, 'metal', 'pergola');
   }
   for (const f of [0, 0.5, 1]) {
-    const pts: [number, number, number][] = frameXs.map((x) => [x, pergY + 0.35, plazaParapetZ(x) + 0.9 + f * (zN(x) - plazaParapetZ(x) - 1.4)]);
+    const pts: [number, number, number][] = frameXs.map((x) => [x, pergY + 0.35, plazaParapetZ(x) + 1.7 + f * (zN(x) - plazaParapetZ(x) - 2.2)]);
     for (let i = 1; i < pts.length; i++) pb.beam(pts[i - 1], pts[i], 0.35, 0.45, SLATE);
   }
-  // planter parapet with dense hedge along the pergola edge (two gaps = routes down to PES Univ Rd)
-  const gaps: [number, number][] = [[27.2, 31.2], [42.8, 46.8]];
-  const runs: [number, number][] = [];
-  let x0 = P.minX;
-  for (const [g0, g1] of gaps) { runs.push([x0, g0]); x0 = g1; }
-  runs.push([x0, P.maxX]);
-  for (const [a, b] of runs) {
-    for (let x = a; x < b - 0.01; x += 2) {
-      const xb = Math.min(b, x + 2);
-      const pa: V2 = [x, plazaParapetZ(x)], pbb: V2 = [xb, plazaParapetZ(xb)];
-      kit.segBox('stone', pa, pbb, 0, 0.95, 1.3, PLANTER_GREY, 0, 0.02);
-      kit.segBox('stone', pa, pbb, 0.95, 1.05, 1.45, col('#2c2e30'), 0, 0.02);
-      hedgeBox(kit, 'hedge', pa, pbb, 1.0, 1.85, 1.1);
-    }
-    kit.collision.addSegment([a, plazaParapetZ(a)], [b, plazaParapetZ(b)], 1.3, 1.0, 'concrete', 'parapet');
-  }
+  // (the planter parapet + hedge along the pergola edge is part of the podium's north face, see podium())
   // paper cone-lamp clusters hanging under the roof
   const lamps = kit.instSet('coneLamp', () => {
     const g = new THREE.ConeGeometry(0.26, 0.5, 9, 1, true).translate(0, -0.25, 0);
@@ -145,35 +205,95 @@ function coveredPlaza(kit: WorldKit, signs: SignUVs): void {
   });
   const white = col('#f2eee6'), tan = col('#b07a45');
   for (const [cx, cz] of [[30, -99.5], [38, -101.5], [46, -99.5]] as V2[]) {
-    kit.lampPoints.push(new THREE.Vector3(cx, 6.5, cz));
+    kit.lampPoints.push(new THREE.Vector3(cx, y0 + 6.5, cz));
     for (let i = 0; i < 36; i++) {
       const h1 = hash2(cx * 13 + i * 7.1, cz * 3 + i * 1.3), h2 = hash2(i * 3.7 + cx, cz * 1.9 - i);
       const a = h1 * Math.PI * 2, rr = Math.sqrt(h2) * 3.2;
-      const y = 8.6 - h2 * 2.6 - (1 - rr / 3.2) * 0.8;
+      const y = y0 + 8.6 - h2 * 2.6 - (1 - rr / 3.2) * 0.8;
       kit.addInst(lamps, new THREE.Vector3(cx + Math.cos(a) * rr, y, cz + Math.sin(a) * rr), a, 0.8 + h1 * 0.5, h2 > 0.62 ? tan : white);
       kit.buf('metal', cx, cz).beam([cx + Math.cos(a) * rr, roofY - 0.9, cz + Math.sin(a) * rr], [cx + Math.cos(a) * rr, y, cz + Math.sin(a) * rr], 0.012, 0.012, col('#222'));
     }
   }
   // "PEOPLES EDUCATION SOCIETY" glass entrance on the west wall (north wing east face, x = 20)
-  kit.box('glass', P.minX + 0.08, 2.6, -100.5, 0.12, 5.2, 9, 0, col('#34424e'));
-  kit.box('stone', P.minX + 0.2, 6.0, -100.5, 0.3, 1.4, 11, 0, col('#f2f1ec'));
-  kit.signQuad(signs.pesSociety, P.minX + 0.37, 6.0, -100.5, 10.4, 0.98, 1, 0, true);
-  for (let z = -104.5; z <= -96.5; z += 2) kit.box('metal', P.minX + 0.15, 2.6, z, 0.08, 5.2, 0.08, 0, col('#2b2f33'));
+  kit.box('glass', P.minX + 0.08, y0 + 2.6, -100.5, 0.12, 5.2, 9, 0, col('#34424e'));
+  kit.box('stone', P.minX + 0.2, y0 + 6.0, -100.5, 0.3, 1.4, 11, 0, col('#f2f1ec'));
+  kit.signQuad(signs.pesSociety, P.minX + 0.37, y0 + 6.0, -100.5, 10.4, 0.98, 1, 0, true);
+  for (let z = -104.5; z <= -96.5; z += 2) kit.box('metal', P.minX + 0.15, y0 + 2.6, z, 0.08, 5.2, 0.08, 0, col('#2b2f33'));
+  // white granite reception desks with a maroon top (1000) and black steel waiting benches
+  for (const [x, z] of [[31, -97.2], [44, -97.2]] as V2[]) {
+    kit.box('polished', x, y0 + 0.5, z, 3.2, 1.0, 0.8, 0, col('#e3e1dc'), 0.5);
+    kit.box('wood', x, y0 + 1.04, z, 3.3, 0.08, 0.9, 0, col('#6b2a26'));
+    kit.collision.addPolygon([[x - 1.6, z - 0.4], [x + 1.6, z - 0.4], [x + 1.6, z + 0.4], [x - 1.6, z + 0.4]], y0 + 1.1, 'concrete', 'desk');
+  }
   // granite cladding panels + dark wall zone on the east side of the plaza
-  kit.box('polished', P.maxX + 3.9, 4.5, -104, 0.2, 9, 14, 0, col('#9b9a96'), 0.5);
+  kit.box('polished', P.maxX + 3.9, y0 + 4.5, -104, 0.2, 9, 14, 0, col('#9b9a96'), 0.5);
 }
 
-// ------------------------------------------------------------------------------------------------ drive-through + porte-cochère
-function driveThrough(kit: WorldKit, signs: SignUVs): void {
+// ------------------------------------------------------------------------------------------------ north-east porch (L1) over the drive-through
+/**
+ * The L1 porch over the drive-through: deck (top = L1, soffit = the drive-through ceiling), roof at L1 + 5.2, the
+ * terracotta porte-cochère frame on the east face and planter parapets. The ramp landing joins it on the north
+ * (x 79…84); from here you walk west into the covered plaza and south into the Quad. (GJB_NOTES §2)
+ */
+function nePorch(kit: WorldKit, signs: SignUVs): void {
   const D = DRIVE_THROUGH;
-  const no = (x: number) => pesRdZ(x) - 5.4;
-  // square granite-clad columns along the north kerb (skipping the MRD loop-road mouth)
+  const NO = driveNorthZ, FS = driveFootpathZ;
+  const x0 = D.x0, x1 = D.x1;
+  const deck: V2[] = [[x0, NO(x0)], [x1, NO(x1)], [x1, FS(x1)], [59, FS(59)], [x0, plazaParapetZ(x0)]];
+  const cx = (x0 + x1) / 2, cz = NO(cx) + 6;
+  // deck: granite top on L1 (continuing the covered plaza floor), wood-look soffit over the road, charcoal edge fascia
+  kit.buf('polished', cx, cz).flatPoly(deck, L1 + 0.045, col('#aeafab'), 2);
+  kit.buf('wood', cx, cz).flatPoly(deck, D.clear, col('#6b4a36'), 2, true);
+  kit.segBox('stone', [x0, NO(x0)], [x1, NO(x1)], D.clear, L1 + 0.05, 0.35, CHARCOAL, -0.17);
+  kit.segBox('stone', [x0, NO(x0)], [x0, plazaParapetZ(x0)], D.clear, L1 + 0.05, 0.35, CHARCOAL, 0.17);
+  kit.collision.addPolygon(deck, L1 - D.clear, 'concrete', 'deck', D.clear);
+  // porch roof slab at L1 + 5.2 (wood soffit, cream fascia)
+  const rY = L1 + 5.2, rT = 0.7;
+  const roof: V2[] = [[x0, NO(x0) - 0.3], [x1 + 0.6, NO(x1) - 0.3], [x1 + 0.6, FS(x1)], [59, FS(59)], [x0, plazaParapetZ(x0)]];
+  kit.buf('stone', cx, cz).flatPoly(roof, rY + rT, col('#d9d4c8'), 4);
+  kit.buf('wood', cx, cz).flatPoly(roof, rY, col('#6b4a36'), 2, true);
+  kit.segBox('stone', roof[0], roof[1], rY, rY + rT, 0.3, col('#e8e2d5'), -0.15, 0.3);
+  kit.segBox('stone', roof[0], roof[4], rY, rY + rT, 0.3, col('#e8e2d5'), 0.15, 0.3);
+  kit.collision.addPolygon(roof, rT, 'concrete', 'porch_roof', rY);
+  // granite-clad columns along the north kerb: ground (drive-through) + porch level, skipping the MRD loop-road mouth
   for (const x of [56.5, 63.5, 78.6, 83.2]) {
-    const z = no(x) + 0.65;
+    const z = NO(x) + 0.65;
     kit.box('polished', x, D.clear / 2, z, 1.05, D.clear, 1.05, 0, col('#b9b7b1'), 0.5);
-    kit.collision.addCircle(x, z, 0.65, D.clear, 'concrete', 'column');
+    kit.box('polished', x, (L1 + rY) / 2, z, 0.8, rY - L1, 0.8, 0, col('#b9b7b1'), 0.5);
+    kit.collision.addCircle(x, z, 0.65, rY, 'concrete', 'column');
   }
-  // ceiling light strips under the soffit
+  // planter parapet + lime shrubs along the north edge (open where the ramp landing joins, x ≥ 78.9) and the west edge
+  const pa: V2 = [x0, NO(x0) + 0.6], pbN: V2 = [78.9, NO(78.9) + 0.6];
+  kit.segBox('stone', pa, pbN, D.clear - 0.6, L1 + 1.1, 1.2, PLANTER_GREY);
+  hedgeBox(kit, 'lime', pa, pbN, L1 + 1.1, L1 + 1.8, 1.0);
+  kit.collision.addPolygon(segPoly(pa, pbN, 1.2), L1 + 1.1 - (D.clear - 0.6), 'concrete', 'parapet', D.clear - 0.6);
+  const wa: V2 = [x0 + 0.6, NO(x0) + 1.2], wb: V2 = [x0 + 0.6, plazaParapetZ(x0) - 0.4];
+  kit.segBox('stone', wa, wb, L1, L1 + 1.1, 1.0, PLANTER_GREY);
+  hedgeBox(kit, 'lime', wa, wb, L1 + 1.1, L1 + 1.8, 0.8);
+  kit.collision.addPolygon(segPoly(wa, wb, 1.0), 1.1, 'concrete', 'parapet', L1);
+  // porte-cochère on the east face: terracotta picture frame around the L1 porch opening + grey planter band (the
+  // L1 parapet, with the lime shrubs and the PES banner) spanning the drive-through mouth
+  const x = x1;
+  const zNo = NO(x) - 0.4, zSo = FS(x) + 1.0;
+  const zc = (zNo + zSo) / 2, span = zSo - zNo;
+  const fTop = rY + 1.6;
+  kit.box('stone', x + 0.6, (rY + fTop) / 2, zc, 1.3, fTop - rY, span + 2.4, 0, TERRACOTTA);
+  kit.box('stone', x + 0.6, (D.clear - 0.6 + fTop) / 2, zNo - 0.6, 1.3, fTop - D.clear + 0.6, 1.2, 0, TERRACOTTA);
+  kit.box('stone', x + 0.6, (D.clear - 0.6 + fTop) / 2, zSo + 0.6, 1.3, fTop - D.clear + 0.6, 1.2, 0, TERRACOTTA);
+  kit.box('stone', x + 0.8, (D.clear - 0.6 + L1 + 1.1) / 2, zc, 1.6, L1 + 1.1 - D.clear + 0.6, span, 0, PLANTER_GREY);
+  kit.box('stone', x + 0.8, D.clear - 0.62, zc, 1.62, 0.06, span, 0, col('#3a3d40'));
+  hedgeBox(kit, 'lime', [x + 0.8, zNo + 0.3], [x + 0.8, zSo - 0.3], L1 + 1.1, L1 + 1.9, 1.3);
+  kit.signQuad(signs.porteBanner, x + 1.62, L1 - 0.1, zSo - 3.5, 5.6, 1.4, 1, 0, false);
+  kit.collision.addPolygon([[x, zNo], [x + 1.6, zNo], [x + 1.6, zSo], [x, zSo]], L1 + 1.1 - (D.clear - 0.6), 'concrete', 'parapet', D.clear - 0.6);
+  kit.collision.addPolygon([[x - 0.05, zNo - 1.2], [x + 1.25, zNo - 1.2], [x + 1.25, zNo], [x - 0.05, zNo]], fTop - D.clear + 0.6, 'concrete', 'frame', D.clear - 0.6);
+  // a couple of black steel benches and planters on the porch
+  for (const px of [62, 70]) planterCube(kit, px, FS(px) - 1.6, 0.85, L1);
+}
+
+// ------------------------------------------------------------------------------------------------ drive-through (ground floor)
+function driveThrough(kit: WorldKit): void {
+  const D = DRIVE_THROUGH;
+  // ceiling light strips under the porch deck
   for (let x = D.x0 + 3; x < D.x1 - 1; x += 5) {
     const z = pesRdZ(x);
     kit.box('emissive', x, D.clear - 0.04, z, 2.2, 0.06, 0.25, 0, col('#ffffff'));
@@ -181,30 +301,14 @@ function driveThrough(kit: WorldKit, signs: SignUVs): void {
   }
   // red fire-extinguisher cabinets along the building wall
   for (let x = D.x0 + 6; x < D.x1 - 2; x += 9) {
-    const z = pesRdZ(x) + 4 + D.footpath - 0.15;
+    const z = driveFootpathZ(x) - 0.15;
     kit.box('stone', x, 1.0, z, 0.55, 0.9, 0.3, 0, col('#c1261c'));
   }
-  // porte-cochère on the east face: terracotta picture frame (5–10.5 m) + dark recess + planter band
-  const x = D.x1;
-  const zNo = no(x) - 0.4, zSo = pesRdZ(x) + 4 + D.footpath + 1.0;
-  const zc = (zNo + zSo) / 2, span = zSo - zNo;
-  kit.box('stone', x + 0.6, 10.0, zc, 1.3, 1.4, span + 2.4, 0, TERRACOTTA);
-  kit.box('stone', x + 0.6, 7.6, zNo - 0.6, 1.3, 5.2, 1.2, 0, TERRACOTTA);
-  kit.box('stone', x + 0.6, 7.6, zSo + 0.6, 1.3, 5.2, 1.2, 0, TERRACOTTA);
-  kit.box('dark', x + 0.06, 8.0, zc, 0.12, 3.6, span, 0, col('#26282b'));
-  kit.box('stone', x + 0.8, 5.8, zc, 1.6, 1.6, span, 0, PLANTER_GREY);
-  kit.box('stone', x + 0.8, 5.0, zc, 1.62, 0.06, span, 0, col('#3a3d40'));
-  hedgeBox(kit, 'lime', [x + 0.8, zNo + 0.3], [x + 0.8, zSo - 0.3], 6.6, 7.4, 1.3);
-  kit.signQuad(signs.porteBanner, x + 1.62, 5.8, zSo - 3.5, 5.6, 1.4, 1, 0, false);
-  // the planter band continues along the north face of the overhang
-  const n0: V2 = [D.x0 + 1, no(D.x0 + 1) - 0.1], n1: V2 = [x, no(x) - 0.1];
-  kit.segBox('stone', n0, n1, 5.0, 6.6, 1.2, PLANTER_GREY, -0.5);
-  hedgeBox(kit, 'lime', [n0[0], n0[1] - 0.5], [n1[0], n1[1] - 0.5], 6.6, 7.3, 1.0);
   // footpath kerb (building side)
-  kit.segBox('stone', [D.x0, pesRdZ(D.x0) + 4.1], [x, pesRdZ(x) + 4.1], 0, 0.16, 0.3, col('#9c9c9a'));
+  kit.segBox('stone', [D.x0, pesRdZ(D.x0) + 4.1], [D.x1, pesRdZ(D.x1) + 4.1], 0, 0.16, 0.3, col('#9c9c9a'));
 }
 
-// ------------------------------------------------------------------------------------------------ east facade
+// ------------------------------------------------------------------------------------------------ east facade (ground floor)
 function eastFacade(kit: WorldKit, signs: SignUVs): void {
   const E = gjbcEastX;
   // slender 2-storey cream columns in front of the recessed dark glazing (z −116 … −60, not at the entrance)
@@ -235,7 +339,8 @@ function eastFacade(kit: WorldKit, signs: SignUVs): void {
     kit.collision.addSegment(a, b, 1.2, 0.62, 'concrete', 'planter');
     sapling(kit, x + 0.05, z, 'sapling', 0.85, false);
   }
-  // east entrance: two-storey cream portal box projecting from the colonnade + speckled granite steps
+  // east entrance: two-storey cream portal box projecting from the colonnade + speckled granite steps; the lobby
+  // behind it is an enterable ground-floor interior (gjb/interiors.ts)
   const zA = -86, zB = -74;
   const xa = E(zA), xb = E(zB);
   for (const z of [zA, zB]) {
@@ -244,10 +349,7 @@ function eastFacade(kit: WorldKit, signs: SignUVs): void {
     kit.collision.addPolygon([[xx - 0.6, z - 0.4], [xx + 3.0, z - 0.4], [xx + 3.0, z + 0.4], [xx - 0.6, z + 0.4]], 10.5, 'concrete', 'portal');
   }
   kit.box('stone', (xa + xb) / 2 + 1.3, 9.75, (zA + zB) / 2, 3.4, 1.5, zB - zA + 0.8, Math.atan2(-12, 161), CREAM);
-  for (let k = 0; k < 4; k++) kit.box('polished', (xa + xb) / 2 + 3.4 + k * 0.4, 0.07 + k * 0.0, (zA + zB) / 2, 0.4, 0.14 - k * 0.03, 11, Math.atan2(-12, 161), col('#9c9c9a'), 0.5);
-  // walnut-slat wall panel on the north side of the entrance hall (the hall itself stays open to the Quad)
-  kit.box('wood', 70, 4.5, -83.9, 9, 8.6, 0.2, 0, col('#5a3a26'), 0.5);
-  for (let x = 65.6; x <= 74.4; x += 0.4) kit.box('wood', x, 4.5, -83.75, 0.12, 8.4, 0.1, 0, col('#6e4a30'), 0.5);
+  for (let k = 0; k < 4; k++) kit.box('polished', (xa + xb) / 2 + 3.4 + k * 0.4, 0.07, (zA + zB) / 2, 0.4, 0.14 - k * 0.03, 11, Math.atan2(-12, 161), col('#9c9c9a'), 0.5);
   // hanging creeper at the entrance cheek walls
   hedgeBox(kit, 'hedge', [xa + 2.6, zA + 0.5], [xa + 2.6, zA + 1.2], 6, 9.5, 0.4);
   void signs;
@@ -295,7 +397,7 @@ function lawTerrace(kit: WorldKit, signs: SignUVs): void {
     kit.segBox('stone', [xs, zBot], [xs, zTop], 0, 1.2, 0.4, CREAM);
     kit.buf('stone', xs, -13).beam([xs, 9.2, zTop], [xs, 1.2, zBot], 0.4, 0.4, CREAM);
   }
-  kit.collision.addPolygon([[x0 - 0.4, zBot], [x0 + w + 0.4, zBot], [x0 + w + 0.4, zTop], [x0 - 0.4, zTop]], 8, 'concrete', 'stair');
+  kit.collision.addRamp([[x0 - 0.4, zBot], [x0 + w + 0.4, zBot], [x0 + w + 0.4, zTop], [x0 - 0.4, zTop]], [x0 + w / 2, zBot], [x0 + w / 2, zTop], 0, 8, 'concrete', 'stair');
   kit.signQuad(signs.lawSign, E(-10) - 1.2, 10.6, -10.05, 2.4, 0.68, 0, -1, true);
 }
 

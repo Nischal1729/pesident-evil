@@ -139,6 +139,9 @@ export class Zombie extends Actor {
   alerted = false;
   stuckT = 0;
   lastProgressCost = Infinity;
+  /** multi-level vertical state */
+  vy = 0;
+  grounded = true;
   constructor() {
     super('zombie');
   }

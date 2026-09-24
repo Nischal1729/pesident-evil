@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { QualityProfile } from './Settings';
+import { setMaterialDetail } from '../world/materials';
 
 /** Renderer + scene + camera + resize handling. */
 export class Engine {
@@ -11,6 +12,7 @@ export class Engine {
   onResize: ((w: number, h: number) => void) | null = null;
 
   constructor(public container: HTMLElement, q: QualityProfile, fov: number) {
+    setMaterialDetail(q.materialDetail ?? 2); // before any world material is created
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false, depth: true });
     this.renderer.setPixelRatio(q.pixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;

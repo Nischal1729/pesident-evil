@@ -5,8 +5,9 @@ import { GATES, NPC_SPAWNS, PLAYER_SPAWN, PLAYER_SPAWN_YAW, SPAWN_ZONES, STATION
 import { distToSegment, rng } from '../world/geom';
 import { cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
 import { Survivor, Zombie, type Look, type ZombieType } from './actors';
-import type { StaticCollision } from './Collision';
-import { NavGrid } from './NavGrid';
+import { STEP_UP, type StaticCollision } from './Collision';
+import { LayeredNav } from './LayeredNav';
+import { NavGrid, type Nav } from './NavGrid';
 import { newSlot, WEAPONS, type WeaponDef, type WeaponId } from './weapons';
 
 export interface GateState {
@@ -21,6 +22,20 @@ export interface GateState {
   activeFromWave: number;
   lastHitT: number;
   repairAcc?: number;
+  /** Unit normal of the gate line pointing into the campus. */
+  inward: V2;
+}
+
+/** HP fraction at which a broken gate stands back up (it closes as soon as the gateway is clear). */
+export const GATE_CLOSE_FRAC = 0.35;
+
+/** Unit normal of a gate line pointing into the campus (toward the player spawn). */
+export function gateInward(a: V2, b: V2): V2 {
+  const dx = b[0] - a[0], dz = b[1] - a[1];
+  const l = Math.hypot(dx, dz) || 1;
+  let nx = -dz / l, nz = dx / l;
+  if ((PLAYER_SPAWN[0] - a[0]) * nx + (PLAYER_SPAWN[1] - a[1]) * nz < 0) { nx = -nx; nz = -nz; }
+  return [nx, nz];
 }
 
 export interface Pickup { id: number; kind: 'ammo' | 'health'; pos: THREE.Vector3; ttl: number }
@@ -55,7 +70,19 @@ const _hitRes = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'grou
 /** AI allies deal reduced damage so the player stays the main damage dealer. */
 const NPC_DAMAGE = 0.65;
 
-export interface WorldOptions { maxZombies: number; difficulty: number }
+export interface WorldOptions {
+  maxZombies: number;
+  difficulty: number;
+  /** Multi-level movement + layered navigation (walk up ramps, stairs, podiums, decks). */
+  multiLevel?: boolean;
+}
+
+/** Anything that walks: survivors and zombies share the vertical state used in multi-level mode. */
+type Walker = { pos: THREE.Vector3; prev: THREE.Vector3; radius: number; height: number; vy: number; grounded: boolean };
+
+const GRAVITY = 16;
+/** Falls higher than this hurt survivors. */
+const SAFE_FALL = 4;
 
 /**
  * Authoritative game simulation. Rendering reads its state; audio/fx/UI listen to events.
@@ -63,7 +90,9 @@ export interface WorldOptions { maxZombies: number; difficulty: number }
  */
 export class World {
   events = new EventBus<GameEvents>();
-  nav: NavGrid;
+  nav: Nav;
+  /** multi-level mode (see WorldOptions.multiLevel) */
+  readonly levels: boolean;
   survivors: Survivor[] = [];
   zombies: Zombie[] = [];
   gates: GateState[] = [];
@@ -91,7 +120,8 @@ export class World {
 
   constructor(public collision: StaticCollision, public opts: WorldOptions) {
     const b = WORLD_BOUNDS;
-    this.nav = new NavGrid(b.minX, b.minZ, b.maxX, b.maxZ);
+    this.levels = !!opts.multiLevel;
+    this.nav = this.levels ? new LayeredNav(b.minX, b.minZ, b.maxX, b.maxZ) : new NavGrid(b.minX, b.minZ, b.maxX, b.maxZ);
     this.spW = Math.ceil((b.maxX - b.minX) / 2);
     this.spH = Math.ceil((b.maxZ - b.minZ) / 2);
     this.zSpatial = new Int32Array(this.spW * this.spH);
@@ -101,7 +131,7 @@ export class World {
   init(gatePrisms: Map<string, number[]>): void {
     this.nav.build(this.collision, GATES);
     GATES.forEach((g, i) => {
-      this.gates.push({ id: g.id, index: i, a: g.a, b: g.b, hp: g.hp, maxHp: g.hp, broken: false, prismIds: gatePrisms.get(g.id) ?? [], activeFromWave: g.activeFromWave, lastHitT: -99 });
+      this.gates.push({ id: g.id, index: i, a: g.a, b: g.b, hp: g.hp, maxHp: g.hp, broken: false, prismIds: gatePrisms.get(g.id) ?? [], activeFromWave: g.activeFromWave, lastHitT: -99, inward: gateInward(g.a, g.b) });
     });
   }
 
@@ -162,6 +192,7 @@ export class World {
     }
     for (let i = 0; i < this.zombies.length; i++) this.updateZombie(this.zombies[i], i, dt);
     this.separate();
+    this.updateGateStates();
     this.updatePickups(dt);
     this.cleanupCorpses(dt);
     this.updateTimeOfDay(dt);
@@ -293,10 +324,10 @@ export class World {
     this.fieldT -= dt;
     if (this.fieldT > 0) return;
     this.fieldT = 0.3;
-    const targets = this.survivors.filter((s) => s.alive).map((s) => ({ x: s.pos.x, z: s.pos.z }));
+    const targets = this.survivors.filter((s) => s.alive).map((s) => ({ x: s.pos.x, y: s.pos.y, z: s.pos.z }));
     if (targets.length) this.nav.request('zombie', targets);
     const p = this.player;
-    if (p && p.alive) this.nav.request('player', [{ x: p.pos.x, z: p.pos.z }], 12000);
+    if (p && p.alive) this.nav.request('player', [{ x: p.pos.x, y: p.pos.y, z: p.pos.z }], 12000);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -337,7 +368,7 @@ export class World {
       const a = this.zombies[i];
       if (!a.alive) continue;
       this.forZombiesNear(a.pos.x, a.pos.z, 1.2, (b, j) => {
-        if (j <= i || !b.alive) return;
+        if (j <= i || !b.alive || Math.abs(b.pos.y - a.pos.y) > 1.2) return;
         const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
         const min = a.radius + b.radius;
         const d2 = dx * dx + dz * dz;
@@ -353,7 +384,7 @@ export class World {
     for (const s of this.survivors) {
       if (!s.alive) continue;
       this.forZombiesNear(s.pos.x, s.pos.z, 1.2, (z) => {
-        if (!z.alive) return;
+        if (!z.alive || Math.abs(z.pos.y - s.pos.y) > 1.2) return;
         const dx = s.pos.x - z.pos.x, dz = s.pos.z - z.pos.z;
         const min = s.radius + z.radius;
         const d2 = dx * dx + dz * dz;
@@ -366,7 +397,7 @@ export class World {
         }
       });
       for (const o of this.survivors) {
-        if (o === s || !o.alive || o.id < s.id) continue;
+        if (o === s || !o.alive || o.id < s.id || Math.abs(o.pos.y - s.pos.y) > 1.2) continue;
         const dx = o.pos.x - s.pos.x, dz = o.pos.z - s.pos.z;
         const min = s.radius + o.radius;
         const d2 = dx * dx + dz * dz;
@@ -377,8 +408,49 @@ export class World {
           o.pos.x += (dx / d) * push; o.pos.z += (dz / d) * push;
         }
       }
-      this.collision.resolveCircle(s.pos, s.radius, s.pos.y + 0.3);
+      if (this.levels) this.collision.resolveBody(s.pos, s.radius, s.pos.y, s.height);
+      else this.collision.resolveCircle(s.pos, s.radius, s.pos.y + 0.3);
     }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Multi-level movement
+  // ---------------------------------------------------------------------------------------------
+  /**
+   * Collide a walker at its body height, then follow the ground: snap onto steps/ramps (up to STEP_UP up, a bit
+   * more down), fall off ledges under gravity, bump heads on ceilings. Returns the fall height on landing (else 0).
+   */
+  private moveBody(a: Walker, dt: number): number {
+    const c = this.collision;
+    c.resolveBody(a.pos, a.radius, a.pos.y, a.height);
+    if (a.grounded) {
+      const g = c.groundAt(a.pos.x, a.pos.z, a.pos.y + STEP_UP);
+      if (a.pos.y - g <= 0.65) { a.pos.y = g; a.vy = 0; return 0; }
+      a.grounded = false;
+      a.vy = 0;
+    }
+    const y0 = a.pos.y;
+    a.vy -= GRAVITY * dt;
+    a.pos.y += a.vy * dt;
+    if (a.vy > 0) {
+      const ceil = c.ceilingAt(a.pos.x, a.pos.z, y0 + a.height - 0.05);
+      if (a.pos.y + a.height > ceil) { a.pos.y = ceil - a.height; a.vy = 0; }
+    }
+    const g = c.groundAt(a.pos.x, a.pos.z, Math.max(y0, a.pos.y) + 0.05);
+    if (a.pos.y <= g) {
+      const v = -a.vy;
+      a.pos.y = g;
+      a.vy = 0;
+      a.grounded = true;
+      return v > 0 ? (v * v) / (2 * GRAVITY) : 0;
+    }
+    return 0;
+  }
+
+  /** Horizontal collision for AI bodies (flat: legacy 2D push-out; levels: body collision + ground following). */
+  private collideWalker(a: Walker, dt: number): void {
+    if (this.levels) this.moveBody(a, dt);
+    else this.collision.resolveCircle(a.pos, a.radius, 0.3);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -528,18 +600,29 @@ export class World {
       p.grounded = false;
       this.events.emit('jump', { actorId: p.id, position: p.pos });
     }
-    if (!p.grounded) {
-      p.vy -= 16 * dt;
-      p.pos.y += p.vy * dt;
-      if (p.pos.y <= 0) {
-        p.pos.y = 0;
-        p.grounded = true;
+    if (this.levels) {
+      p.pos.x += p.vel.x * dt;
+      p.pos.z += p.vel.z * dt;
+      const wasAir = !p.grounded;
+      const fell = this.moveBody(p, dt);
+      if (wasAir && p.grounded) {
         this.events.emit('land', { actorId: p.id, position: p.pos });
+        if (fell > SAFE_FALL) this.damageSurvivor(p, Math.round((fell - SAFE_FALL) * 14), null);
       }
+    } else {
+      if (!p.grounded) {
+        p.vy -= GRAVITY * dt;
+        p.pos.y += p.vy * dt;
+        if (p.pos.y <= 0) {
+          p.pos.y = 0;
+          p.grounded = true;
+          this.events.emit('land', { actorId: p.id, position: p.pos });
+        }
+      }
+      p.pos.x += p.vel.x * dt;
+      p.pos.z += p.vel.z * dt;
+      this.collision.resolveCircle(p.pos, p.radius, p.pos.y + 0.3);
     }
-    p.pos.x += p.vel.x * dt;
-    p.pos.z += p.vel.z * dt;
-    this.collision.resolveCircle(p.pos, p.radius, p.pos.y + 0.3);
 
     // facing: face the camera when aiming/shooting, otherwise the direction of travel
     const facingCam = p.anim.aiming || p.meleeT >= 0;
@@ -666,7 +749,7 @@ export class World {
     const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
     let hits = 0;
     this.forZombiesNear(s.pos.x, s.pos.z, d.meleeRange! + 1, (z) => {
-      if (!z.alive || hits >= 3) return;
+      if (!z.alive || hits >= 3 || Math.abs(z.pos.y - s.pos.y) > 1.2) return;
       const dx = z.pos.x - s.pos.x, dz = z.pos.z - s.pos.z;
       const dist = Math.hypot(dx, dz);
       if (dist > d.meleeRange! + z.radius) return;
@@ -674,7 +757,7 @@ export class World {
       if (cos < Math.cos(d.meleeArc! / 2)) return;
       hits++;
       const head = this.rand() < 0.3;
-      const point = _v.set(z.pos.x, 1.3 * z.scale, z.pos.z);
+      const point = _v.set(z.pos.x, z.pos.y + 1.3 * z.scale, z.pos.z);
       this.damageZombie(z, d.damage * (head ? d.headMult : 1), s, point, _v3.set(dx / (dist || 1), 0, dz / (dist || 1)), head, d);
     });
     if (hits === 0) {
@@ -780,13 +863,13 @@ export class World {
     if (!p.active) return { kind: null, prompt: null };
     for (const o of this.survivors) {
       if (o === p || !o.alive || !o.downed) continue;
-      if (Math.hypot(o.pos.x - p.pos.x, o.pos.z - p.pos.z) < 2.0) {
+      if (Math.hypot(o.pos.x - p.pos.x, o.pos.z - p.pos.z) < 2.0 && Math.abs(o.pos.y - p.pos.y) < 1.5) {
         return { kind: 'revive', target: o, prompt: { text: `Hold E to revive ${o.name}`, progress: o.reviveProgress, cost: 0, canAfford: true } };
       }
     }
     const pts = this.points.get(p.id) ?? 0;
     for (const st of STATIONS) {
-      if (Math.hypot(st.pos[0] - p.pos.x, st.pos[1] - p.pos.z) > 2.0) continue;
+      if (Math.hypot(st.pos[0] - p.pos.x, st.pos[1] - p.pos.z) > 2.0 || Math.abs((st.y ?? 0) - p.pos.y) > 1.6) continue;
       let text = '';
       let cost = st.cost;
       if (st.kind === 'ammo') text = `E — Refill ammo (${cost})`;
@@ -799,10 +882,17 @@ export class World {
       return { kind: 'station', station: st, prompt: { text, progress: 0, cost, canAfford: pts >= cost } };
     }
     for (const g of this.gates) {
-      if (distToSegment(p.pos.x, p.pos.z, g.a[0], g.a[1], g.b[0], g.b[1]) > 3.2) continue;
-      if (g.hp >= g.maxHp) continue;
+      if (distToSegment(p.pos.x, p.pos.z, g.a[0], g.a[1], g.b[0], g.b[1]) > 3.2 || p.pos.y > 1.5) continue;
+      if (!g.broken && g.hp >= g.maxHp) continue;
+      // gates are rebuilt from the campus side only (so nobody locks themselves out)
+      if ((p.pos.x - g.a[0]) * g.inward[0] + (p.pos.z - g.a[1]) * g.inward[1] < 0) {
+        return { kind: null, prompt: { text: `Get back inside to repair the ${g.id} gate`, progress: g.hp / g.maxHp, cost: 0, canAfford: false } };
+      }
       const pct = Math.round((g.hp / g.maxHp) * 100);
-      return { kind: 'repair', gate: g, prompt: { text: g.broken ? `Hold E to rebuild the ${g.id} gate (${pct}%)` : `Hold E to repair the ${g.id} gate (${pct}%)`, progress: g.hp / g.maxHp, cost: 0, canAfford: true } };
+      const text = !g.broken ? `Hold E to repair the ${g.id} gate (${pct}%)`
+        : g.hp >= g.maxHp * GATE_CLOSE_FRAC && this.gateBlocked(g) ? `Clear the gateway! Zombies are blocking the ${g.id} gate (${pct}%)`
+          : `Hold E to rebuild the ${g.id} gate (${pct}%)`;
+      return { kind: 'repair', gate: g, prompt: { text, progress: g.hp / g.maxHp, cost: 0, canAfford: true } };
     }
     return { kind: null, prompt: null };
   }
@@ -829,7 +919,6 @@ export class World {
       const gained = g.hp - before;
       g.repairAcc = (g.repairAcc ?? 0) + gained;
       if (g.repairAcc > 60) { g.repairAcc -= 60; this.addPoints(p, 10, 'Repair'); this.events.emit('gateRepaired', { hp: g.hp, maxHp: g.maxHp, position: p.pos.clone() }); }
-      if (g.broken && g.hp >= g.maxHp * 0.35) this.closeGate(g);
     }
   }
 
@@ -894,15 +983,39 @@ export class World {
     }
   }
 
-  private closeGate(g: GateState): void {
-    // push zombies standing in the gate line out to the far side
+  /** A living zombie standing in the gateway stops a rebuilt gate from standing back up. */
+  private gateBlocked(g: GateState): boolean {
     for (const z of this.zombies) {
       if (!z.alive) continue;
-      if (distToSegment(z.pos.x, z.pos.z, g.a[0], g.a[1], g.b[0], g.b[1]) < 1.0) return; // blocked
+      if (distToSegment(z.pos.x, z.pos.z, g.a[0], g.a[1], g.b[0], g.b[1]) < z.radius + 0.6) return true;
     }
+    return false;
+  }
+
+  /**
+   * Gate state machine (kept in one place so visuals, collision and nav always agree):
+   * intact (hp > 0) = leaves shut, collision on, nobody passes (bullets still pass the bars) →
+   * broken (hp hits 0) = leaves knocked flat, collision off, everyone passes →
+   * rebuilt to GATE_CLOSE_FRAC from the campus side = leaves stand up as soon as no zombie is in the gateway.
+   */
+  private updateGateStates(): void {
+    for (const g of this.gates) if (g.broken && g.hp >= g.maxHp * GATE_CLOSE_FRAC && !this.gateBlocked(g)) this.closeGate(g);
+  }
+
+  private closeGate(g: GateState): void {
     g.broken = false;
     for (const id of g.prismIds) this.collision.setPrismEnabled(id, true);
     this.nav.setGateClosed(g.index, true);
+    // survivors standing in the gateway are moved to the campus side of the leaves
+    for (const s of this.survivors) {
+      if (!s.alive) continue;
+      const d = (s.pos.x - g.a[0]) * g.inward[0] + (s.pos.z - g.a[1]) * g.inward[1];
+      if (d < s.radius + 0.35 && distToSegment(s.pos.x, s.pos.z, g.a[0], g.a[1], g.b[0], g.b[1]) < s.radius + 0.6) {
+        const push = s.radius + 0.4 - d;
+        s.pos.x += g.inward[0] * push; s.pos.z += g.inward[1] * push;
+        s.prev.copy(s.pos);
+      }
+    }
     this.events.emit('gateRepaired', { hp: g.hp, maxHp: g.maxHp, position: new THREE.Vector3((g.a[0] + g.b[0]) / 2, 0, (g.a[1] + g.b[1]) / 2) });
     this.events.emit('message', { text: `The ${g.id} gate is back up.`, kind: 'good' });
   }
@@ -911,7 +1024,7 @@ export class World {
   // Pickups
   // ---------------------------------------------------------------------------------------------
   private spawnPickup(kind: 'ammo' | 'health', at: THREE.Vector3): void {
-    this.pickups.push({ id: this.pickupId++, kind, pos: new THREE.Vector3(at.x, 0, at.z), ttl: 30 });
+    this.pickups.push({ id: this.pickupId++, kind, pos: new THREE.Vector3(at.x, this.levels ? at.y : 0, at.z), ttl: 30 });
   }
 
   private updatePickups(dt: number): void {
@@ -921,7 +1034,7 @@ export class World {
       let taken = false;
       for (const s of this.survivors) {
         if (s.kind !== 'player' || !s.active) continue;
-        if (Math.hypot(s.pos.x - pk.pos.x, s.pos.z - pk.pos.z) < 1.3) {
+        if (Math.hypot(s.pos.x - pk.pos.x, s.pos.z - pk.pos.z) < 1.3 && Math.abs(s.pos.y - pk.pos.y) < 1.5) {
           if (pk.kind === 'health') {
             if (s.health >= s.maxHealth) continue;
             s.health = Math.min(s.maxHealth, s.health + 45);
@@ -993,7 +1106,7 @@ export class World {
     if (z.stunT > 0) {
       z.stunT -= dt;
       z.vel.multiplyScalar(Math.max(0, 1 - dt * 10));
-      this.collision.resolveCircle(z.pos, z.radius, 0.3);
+      this.collideWalker(z, dt);
       a.speed = Math.hypot(z.vel.x, z.vel.z);
       return;
     }
@@ -1002,7 +1115,9 @@ export class World {
     let wantSpeed = z.speed;
     if (target) {
       const dx = target.pos.x - z.pos.x, dz = target.pos.z - z.pos.z;
-      const dist = Math.hypot(dx, dz);
+      const sameLevel = Math.abs(target.pos.y - z.pos.y) < 1.3;
+      // a target on another floor is never "in reach"
+      const dist = sameLevel ? Math.hypot(dx, dz) : Math.hypot(dx, dz) + 50;
       const reach = 0.95 + z.radius + (z.type === 'brute' ? 0.4 : 0);
       // attacking
       if (z.attackT >= 0) {
@@ -1019,7 +1134,7 @@ export class World {
           }
         }
         if (z.attackT >= 1) { z.attackT = -1; a.attackP = -1; z.attackCd = 0.25 + this.rand() * 0.35; }
-        this.collision.resolveCircle(z.pos, z.radius, 0.3);
+        this.collideWalker(z, dt);
         a.speed = Math.hypot(z.vel.x, z.vel.z);
         return;
       }
@@ -1037,13 +1152,13 @@ export class World {
       z.losT -= dt;
       if (z.losT <= 0) {
         z.losT = 0.35 + this.rand() * 0.2;
-        z.hasLos = dist < 14 && this.collision.los(z.pos.x, 1.2, z.pos.z, target.pos.x, 1.2, target.pos.z);
+        z.hasLos = dist < 14 && this.collision.los(z.pos.x, z.pos.y + 1.2, z.pos.z, target.pos.x, target.pos.y + 1.2, target.pos.z);
       }
       if (z.hasLos && dist > 0.1) {
         desiredX = dx / dist; desiredZ = dz / dist;
         z.state = 'chase';
       } else {
-        const gi = this.nav.descend('zombie', z.pos.x, z.pos.z, _dir2);
+        const gi = this.nav.descend('zombie', z.pos.x, z.pos.z, _dir2, z.pos.y);
         if (gi === -2) { desiredX = dx / (dist || 1); desiredZ = dz / (dist || 1); }
         else { desiredX = _dir2.x; desiredZ = _dir2.z; }
         // at a closed gate?
@@ -1071,7 +1186,7 @@ export class World {
     z.vel.z += (desiredZ * wantSpeed - z.vel.z) * k;
     z.pos.x += z.vel.x * dt;
     z.pos.z += z.vel.z * dt;
-    this.collision.resolveCircle(z.pos, z.radius, 0.3);
+    this.collideWalker(z, dt);
     const sp = Math.hypot(z.vel.x, z.vel.z);
     if (sp > 0.15) z.yaw = turnToward(z.yaw, Math.atan2(-z.vel.x, -z.vel.z), (z.type === 'runner' ? 8 : 4) * dt);
     else if (z.state === 'gate' && z.gateIdx >= 0) {
@@ -1138,7 +1253,7 @@ export class World {
       cands.sort((x, y) => x.d - y.d);
       for (const c of cands) {
         if (checks++ > 5) break;
-        if (this.collision.los(n.pos.x, 1.5, n.pos.z, c.z.pos.x, 1.3, c.z.pos.z)) { found = c.z; best = c.d; break; }
+        if (this.collision.los(n.pos.x, n.pos.y + 1.5, n.pos.z, c.z.pos.x, c.z.pos.y + 1.3, c.z.pos.z)) { found = c.z; best = c.d; break; }
       }
       if (found && found.id !== b.targetId && !target) this.bark(n, 'spotted', 12);
       target = found;
@@ -1167,8 +1282,8 @@ export class World {
     } else if (b.mode === 'follow' && p && p.alive) {
       const c = Math.cos(p.yaw), s = Math.sin(p.yaw);
       // formation offset rotated by player facing (x right, y back)
-      goal.set(p.pos.x + c * b.formation.x + s * b.formation.y, 0, p.pos.z - s * b.formation.x + c * b.formation.y);
-      if (this.nav.isBlocked(goal.x, goal.z)) goal.copy(p.pos);
+      goal.set(p.pos.x + c * b.formation.x + s * b.formation.y, p.pos.y, p.pos.z - s * b.formation.x + c * b.formation.y);
+      if (this.nav.isBlocked(goal.x, goal.z, goal.y)) goal.copy(p.pos);
     } else {
       goal.copy(b.holdPos);
     }
@@ -1179,12 +1294,12 @@ export class World {
       const td = Math.hypot(tdx, tdz);
       if (td > eff) {
         const anchor = b.mode === 'follow' && p && p.alive ? p.pos : b.holdPos;
-        const want = _v2.set(n.pos.x + (tdx / td) * (td - eff + 2), 0, n.pos.z + (tdz / td) * (td - eff + 2));
+        const want = _v2.set(n.pos.x + (tdx / td) * (td - eff + 2), n.pos.y, n.pos.z + (tdz / td) * (td - eff + 2));
         const ax = want.x - anchor.x, az = want.z - anchor.z;
         const al = Math.hypot(ax, az);
         const leash = 16;
         if (al > leash) { want.x = anchor.x + (ax / al) * leash; want.z = anchor.z + (az / al) * leash; }
-        if (!this.nav.isBlocked(want.x, want.z)) goal.copy(want);
+        if (!this.nav.isBlocked(want.x, want.z, want.y)) goal.copy(want);
       }
     }
     let mx = 0, mz = 0, speed = 0;
@@ -1194,9 +1309,9 @@ export class World {
     const stopDist = urgent ? 1.1 : followingPlayer ? 1.4 : 0.8;
     if (gdist > stopDist) {
       speed = gdist > 9 || urgent ? 4.6 : gdist > 4 ? 3.4 : 2.2;
-      const direct = gdist < 10 && this.collision.los(n.pos.x, 1.0, n.pos.z, goal.x, 1.0, goal.z);
+      const direct = gdist < 10 && Math.abs(goal.y - n.pos.y) < 0.6 && this.collision.los(n.pos.x, n.pos.y + 1.0, n.pos.z, goal.x, goal.y + 1.0, goal.z);
       if (direct) { mx = gdx / gdist; mz = gdz / gdist; }
-      else if (followingPlayer && this.nav.descend('player', n.pos.x, n.pos.z, _dir2) >= -1 && (_dir2.x || _dir2.z)) { mx = _dir2.x; mz = _dir2.z; }
+      else if (followingPlayer && this.nav.descend('player', n.pos.x, n.pos.z, _dir2, n.pos.y) >= -1 && (_dir2.x || _dir2.z)) { mx = _dir2.x; mz = _dir2.z; }
       else { mx = gdx / gdist; mz = gdz / gdist; }
     }
     // kite away from close zombies
@@ -1229,7 +1344,7 @@ export class World {
     n.vel.z += (mz * speed - n.vel.z) * k;
     n.pos.x += n.vel.x * dt;
     n.pos.z += n.vel.z * dt;
-    this.collision.resolveCircle(n.pos, n.radius, 0.3);
+    this.collideWalker(n, dt);
 
     // revive
     if (reviveT && reviveT.downed && Math.hypot(reviveT.pos.x - n.pos.x, reviveT.pos.z - n.pos.z) < 1.6) {
@@ -1251,7 +1366,7 @@ export class World {
       faceYaw = Math.atan2(-tx, -tz);
       n.yaw = turnToward(n.yaw, faceYaw, 9 * dt);
       n.anim.aiming = true;
-      n.anim.aimPitch = Math.atan2(aimY - 1.45, Math.hypot(tx, tz));
+      n.anim.aimPitch = Math.atan2(target.pos.y + aimY - (n.pos.y + 1.45), Math.hypot(tx, tz));
       const aligned = Math.abs(angleDiff(n.yaw, faceYaw)) < 0.2;
       const d = n.def;
       const inRange = Math.hypot(target.pos.x - n.pos.x, target.pos.z - n.pos.z) <= effectiveRange(d) + 4;
@@ -1261,7 +1376,7 @@ export class World {
           // NPCs fire in short bursts with a reaction delay
           if (b.burst <= 0) b.burst = d.auto ? 3 + Math.floor(this.rand() * 4) : 1;
           const muzzle = this.muzzlePos(n, _v2);
-          const lead = _v3.set(target.pos.x + target.vel.x * 0.1, aimY, target.pos.z + target.vel.z * 0.1);
+          const lead = _v3.set(target.pos.x + target.vel.x * 0.1, target.pos.y + aimY, target.pos.z + target.vel.z * 0.1);
           this.fire(n, muzzle, lead, true);
           b.burst--;
           if (b.burst <= 0) n.fireCd = Math.max(n.fireCd, b.reaction + this.rand() * 0.25 + (d.auto ? 0.15 : 0.2));
@@ -1341,7 +1456,7 @@ export function rayZombie(z: Zombie, o: THREE.Vector3, d: THREE.Vector3, maxT: n
   if (tAxis < -1 || tAxis > maxT + 1) return null;
   // head
   const fx = -Math.sin(z.yaw), fz = -Math.cos(z.yaw);
-  const hx = z.pos.x + fx * 0.12 * s, hy = (crawl ? 0.45 : 1.58) * s, hz = z.pos.z + fz * 0.12 * s;
+  const hx = z.pos.x + fx * 0.12 * s, hy = z.pos.y + (crawl ? 0.45 : 1.58) * s, hz = z.pos.z + fz * 0.12 * s;
   const hr = 0.16 * s;
   let best: { t: number; head: boolean } | null = null;
   const th = raySphere(o, d, hx, hy, hz, hr);
@@ -1351,7 +1466,7 @@ export function rayZombie(z: Zombie, o: THREE.Vector3, d: THREE.Vector3, maxT: n
   const ys = crawl ? [0.25, 0.3, 0.3] : [0.5, 0.9, 1.25];
   for (let i = 0; i < 3; i++) {
     const lean = crawl ? (i - 1) * 0.35 : (i * 0.05);
-    const t = raySphere(o, d, z.pos.x + fx * lean * s, ys[i] * s, z.pos.z + fz * lean * s, crawl ? 0.28 * s : bodyR * (i === 0 ? 0.9 : 1));
+    const t = raySphere(o, d, z.pos.x + fx * lean * s, z.pos.y + ys[i] * s, z.pos.z + fz * lean * s, crawl ? 0.28 * s : bodyR * (i === 0 ? 0.9 : 1));
     if (t !== null && t < maxT && (!best || t < best.t - 0.02)) best = { t, head: false };
   }
   return best;

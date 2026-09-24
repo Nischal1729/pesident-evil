@@ -50,6 +50,8 @@ interface Template {
   upper: Map<string, THREE.AnimationClip>;
   lower: Map<string, THREE.AnimationClip>;
   height: number;
+  /** natural (planted-foot) speed of each locomotion clip in template units (m/s), measured at load */
+  natural: Map<string, number>;
 }
 
 export class GlbCharacterLibrary {
@@ -62,6 +64,9 @@ export class GlbCharacterLibrary {
     const files: [string, string][] = [['male', 'male.glb'], ['female', 'female.glb'], ['male_lod', 'male_lod.glb'], ['female_lod', 'female_lod.glb']];
     const results = await Promise.all(files.map(async ([k, f]) => [k, await assets.gltf(base + f)] as const));
     for (const [k, g] of results) if (g) this.templates.set(k, this.prepare(g));
+    for (const k of this.templates.keys()) this.measureNatural(k);
+    // LOD bodies share the full bodies' animation: inherit their measured clip speeds
+    for (const [k, t] of this.templates) if (k.endsWith('_lod') && !t.natural.size) t.natural = this.templates.get(k.replace('_lod', ''))?.natural ?? t.natural;
     this.ready = this.templates.has('male') && this.templates.has('female');
     if (this.ready) {
       const t = this.templates.get('male')!;
@@ -197,7 +202,7 @@ export class GlbCharacterLibrary {
       upper.set(c.name, new THREE.AnimationClip(c.name + '_upper', c.duration, up));
       lower.set(c.name, new THREE.AnimationClip(c.name + '_lower', c.duration, lo));
     }
-    return { gltf, material, textured, texAvg, baseGeometry: merged, regionIndex: Uint8Array.from(regions), defaultColors: defaults, clips, upper, lower, height };
+    return { gltf, material, textured, texAvg, baseGeometry: merged, regionIndex: Uint8Array.from(regions), defaultColors: defaults, clips, upper, lower, height, natural: new Map() };
   }
 
   has(key: string): boolean { return this.templates.has(key); }
@@ -248,6 +253,45 @@ export class GlbCharacterLibrary {
     return g;
   }
 
+  /**
+   * Measure how fast each locomotion clip's planted foot slides backwards (= the body speed at which the clip
+   * plays without foot sliding). Samples the toe bones through one cycle; frames within 3 cm of the lowest point
+   * count as planted. Done at load so re-exported clips stay in sync automatically.
+   */
+  private measureNatural(key: string): void {
+    const t = this.templates.get(key)!;
+    const inst = this.instantiate(key, t.baseGeometry);
+    const lf = inst.bones.get('LeftToeBase') ?? inst.bones.get('LeftFoot');
+    const rf = inst.bones.get('RightToeBase') ?? inst.bones.get('RightFoot');
+    if (!lf || !rf) return;
+    const mixer = new THREE.AnimationMixer(inst.root);
+    const a = new THREE.Vector3(), b = new THREE.Vector3();
+    for (const name of ['Walk', 'Run', 'RifleWalk', 'RifleRun', 'RifleWalkBack', 'RifleStrafeLeft', 'RifleStrafeRight', 'PistolWalk', 'ZombieWalk', 'ZombieRun']) {
+      const clip = t.clips.get(name);
+      if (!clip) continue;
+      mixer.stopAllAction();
+      mixer.clipAction(clip).reset().play();
+      const N = 90, dt = clip.duration / N;
+      const sm: number[][] = [];
+      for (let i = 0; i <= N; i++) {
+        mixer.setTime(dt * i);
+        inst.root.updateMatrixWorld(true);
+        lf.getWorldPosition(a); rf.getWorldPosition(b);
+        sm.push([a.x, a.y, a.z, b.x, b.y, b.z]);
+      }
+      const sp: number[] = [];
+      for (const o of [0, 3]) {
+        let minY = Infinity;
+        for (const v of sm) minY = Math.min(minY, v[o + 1]);
+        for (let i = 1; i < sm.length; i++) {
+          if (sm[i - 1][o + 1] < minY + 0.03 && sm[i][o + 1] < minY + 0.03) sp.push(Math.hypot(sm[i][o] - sm[i - 1][o], sm[i][o + 2] - sm[i - 1][o + 2]) / dt);
+        }
+      }
+      if (sp.length >= 4) { sp.sort((x, y) => x - y); t.natural.set(name, sp[sp.length >> 1]); }
+    }
+    mixer.stopAllAction();
+  }
+
   instantiate(key: string, geometry: THREE.BufferGeometry): { root: THREE.Object3D; mesh: THREE.SkinnedMesh; bones: Map<string, THREE.Bone>; template: Template } {
     const t = this.templates.get(key)!;
     const root = SkeletonUtils.clone(t.gltf.scene) as THREE.Object3D;
@@ -294,6 +338,7 @@ export class GlbCharacterView {
   private lastFireT = 99;
   private lastAttackP = -1;
   private deathPlayed = false;
+  private natural: Map<string, number>;
   private speedS = 0;
   private aimS = 0;
   private spine: THREE.Bone[] = [];
@@ -306,6 +351,7 @@ export class GlbCharacterView {
     const h = inst.template.height || 1.75;
     this.model.scale.setScalar((scaleToHeight / h) * actor.scale);
     this.root.add(this.model);
+    this.natural = inst.template.natural;
     this.mixer = new THREE.AnimationMixer(this.model);
     for (const [name, clip] of inst.template.clips) this.full.set(name, this.mixer.clipAction(clip));
     for (const [name, clip] of inst.template.upper) this.up.set(name, this.mixer.clipAction(clip));
@@ -314,6 +360,12 @@ export class GlbCharacterView {
     this.socket = findBone('RightHandWeapon', 'RightHand', 'hand_r', 'Hand_R') ?? null;
     for (const n of ['Spine1', 'Spine2', 'spine_02', 'spine_03']) { const b = this.bones.get(n); if (b) this.spine.push(b); }
     this.mesh.castShadow = true;
+  }
+
+  /** Natural clip speed in world m/s (measured foot speed × this model's scale). */
+  private nat(name: string, fallback: number): number {
+    const v = this.natural.get(name) ?? this.natural.get(fallbackLoco(name as Loco));
+    return v ? v * this.model.scale.x : fallback;
   }
 
   private setWeight(a: THREE.AnimationAction | undefined, w: number, dt: number, rate = 10): void {
@@ -401,9 +453,9 @@ export class GlbCharacterView {
     this.setWeight(this.full.get('ZombieWalk'), !crawl && moving && !runner && !attacking ? 1 : 0, dt);
     this.setWeight(this.full.get('ZombieRun'), !crawl && moving && runner && !attacking ? 1 : 0, dt);
     const walk = this.full.get('ZombieWalk');
-    if (walk) walk.timeScale = Math.max(0.5, this.speedS / (ZOMBIE_WALK_SPEED * z.scale));
+    if (walk) walk.timeScale = THREE.MathUtils.clamp(this.speedS / this.nat('ZombieWalk', ZOMBIE_WALK_SPEED), 0.5, 2.2);
     const run = this.full.get('ZombieRun');
-    if (run) run.timeScale = Math.max(0.6, this.speedS / (ZOMBIE_RUN_SPEED * z.scale));
+    if (run) run.timeScale = THREE.MathUtils.clamp(this.speedS / this.nat('ZombieRun', ZOMBIE_RUN_SPEED), 0.6, 1.8);
   }
 
   private animSurvivor(s: Survivor, dt: number): void {
@@ -429,22 +481,32 @@ export class GlbCharacterView {
     const sp = this.speedS;
     const moving = sp > 0.3;
     const lz = an.localZ, lx = an.localX;
-    const running = sp > 4.6;
+    // walk ↔ run crossfade by speed: the walk can be sped up to ~2×, the run slowed to ~0.55×, and the blend
+    // happens between those two speeds so the planted feet always travel at the body's speed (no sliding)
+    const walkNat = this.nat('Walk', 1.4), runNat = this.nat('Run', 4.5);
+    const wr = THREE.MathUtils.smoothstep(sp, walkNat * 1.9, runNat * 0.6);
+    const running = wr > 0.5;
     const target = new Map<Loco, number>();
     if (!moving) target.set(kind === 'rifle' ? 'RifleIdle' : kind === 'pistol' ? 'PistolIdle' : 'Idle', 1);
     else if (an.aiming || kind === 'rifle') {
       const f = Math.max(0, lz), b = Math.max(0, -lz), l = Math.max(0, -lx), r = Math.max(0, lx);
       const sum = f + b + l + r || 1;
-      target.set(running ? 'RifleRun' : 'RifleWalk', f / sum);
+      target.set('RifleWalk', (f / sum) * (1 - wr));
+      target.set('RifleRun', (f / sum) * wr);
       target.set('RifleWalkBack', b / sum);
       target.set('RifleStrafeLeft', l / sum);
       target.set('RifleStrafeRight', r / sum);
-    } else target.set(running ? 'Run' : kind === 'pistol' && !running ? 'PistolWalk' : 'Walk', 1);
+    } else {
+      target.set(kind === 'pistol' ? 'PistolWalk' : 'Walk', 1 - wr);
+      target.set('Run', wr);
+    }
     const LOCOS: Loco[] = ['Idle', 'Walk', 'Run', 'RifleIdle', 'RifleWalk', 'RifleRun', 'RifleWalkBack', 'RifleStrafeLeft', 'RifleStrafeRight', 'PistolIdle', 'PistolWalk'];
     for (const n of LOCOS) {
       const act = this.lo.get(n) ?? this.lo.get(fallbackLoco(n));
       this.setWeight(act, target.get(n) ?? 0, dt);
-      if (act) act.timeScale = moving ? THREE.MathUtils.clamp(sp / (LOCO_SPEED[n] ?? 1.4), 0.6, 1.8) : 1;
+      if (!act) continue;
+      const isRun = n === 'Run' || n === 'RifleRun';
+      act.timeScale = moving ? THREE.MathUtils.clamp(sp / this.nat(n, LOCO_SPEED[n] ?? 1.4), isRun ? 0.5 : 0.6, isRun ? 1.6 : 2.2) : 1;
     }
     // ---- upper body
     let upName: string;
@@ -477,7 +539,7 @@ function fallbackLoco(n: Loco): Loco {
   }
 }
 
-/** Root-motion-free clip speeds (m/s) — updated from the asset report. */
+/** Fallback clip speeds (m/s) if a clip's foot speed can't be measured at load (see measureNatural). */
 export const LOCO_SPEED: Partial<Record<Loco, number>> = { Walk: 1.4, Run: 4.5, RifleWalk: 1.5, RifleRun: 4.2, RifleWalkBack: 1.2, RifleStrafeLeft: 1.3, RifleStrafeRight: 1.3, PistolWalk: 1.4 };
 export const ZOMBIE_WALK_SPEED = 0.9;
 export const ZOMBIE_RUN_SPEED = 4.8;

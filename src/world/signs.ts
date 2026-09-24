@@ -35,6 +35,8 @@ export interface SignUVs {
   pesBridge: UV; bblockCrest: UV; mrdCanopy: UV; pesSociety: UV; porteBanner: UV;
   quadBanner: UV[]; lawSign: UV; fBlockRoof: UV; muralOuter: UV; muralInner: UV; guardBooth: UV;
   building: Map<string, UV>;
+  /** MRD/BE agent: BE-block glass logo, PES food point plate, Open Air Theatre stage mural. */
+  beLogo: UV; foodPoint: UV; oatMural: UV;
 }
 
 /** Draw every sign / mural into the atlas. */
@@ -226,6 +228,37 @@ export function drawSigns(atlas: SignAtlas, buildingSigns: { id: string; text: s
     }
   });
 
+  // BE block: white "be" + "BLOCK" logo on the entrance spider-glass (transparent background)
+  const beLogo = A.add(256, 176, (g, w) => {
+    g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    g.font = `300 118px ${SANS}`; g.fillText('be', w / 2, 118);
+    g.font = `600 30px ${SANS}`; g.fillText('B L O C K', w / 2, 160);
+  });
+  // PES food point plate (red with white text) in front of the BE block
+  const foodPoint = A.add(512, 96, (g, w, h) => {
+    g.fillStyle = '#c1261c'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffffff'; g.fillRect(0, 6, w, 3); g.fillRect(0, h - 9, w, 3);
+    drawPesLogo(g, 52, h / 2, 30, '#ffffff');
+    g.textAlign = 'left'; g.textBaseline = 'middle';
+    fitText(g, 'PES FOOD POINT', w - 110, 52, '800', SANS);
+    g.fillText('PES FOOD POINT', 96, h / 2 + 2);
+  });
+  // Open Air Theatre stage mural: bold abstract fish / leaf shapes in hot colours on navy
+  const oatMural = A.add(512, 256, (g, w, h) => {
+    g.fillStyle = '#23305a'; g.fillRect(0, 0, w, h);
+    const r = rng(636);
+    const hot = ['#e94b3c', '#f2c200', '#2d9cdb', '#27ae60', '#f08a24', '#9b59b6', '#e84393', '#00b8a9'];
+    for (let i = 0; i < 26; i++) {
+      g.fillStyle = hot[Math.floor(r() * hot.length)];
+      g.beginPath();
+      const cx = r() * w, cy = r() * h, rx = 20 + r() * 70, ry = 10 + r() * 40, a = r() * Math.PI;
+      g.ellipse(cx, cy, rx, ry, a, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#111b33'; g.lineWidth = 5; g.stroke();
+    }
+    g.strokeStyle = '#ffffff'; g.lineWidth = 4;
+    for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(r() * w, r() * h); g.bezierCurveTo(r() * w, r() * h, r() * w, r() * h, r() * w, r() * h); g.stroke(); }
+  });
+
   const building = new Map<string, UV>();
   for (const s of buildingSigns) {
     building.set(s.id, A.add(640, s.sub ? 160 : 110, (g, w, h) => {
@@ -236,5 +269,5 @@ export function drawSigns(atlas: SignAtlas, buildingSigns: { id: string; text: s
     }));
   }
   A.pack();
-  return { gateBeamEast, gateBeamWest, gatePillarText, gateBanner, pesBridge, bblockCrest, mrdCanopy, pesSociety, porteBanner, quadBanner, lawSign, fBlockRoof, muralOuter, muralInner, guardBooth, building };
+  return { gateBeamEast, gateBeamWest, gatePillarText, gateBanner, pesBridge, bblockCrest, mrdCanopy, pesSociety, porteBanner, quadBanner, lawSign, fBlockRoof, muralOuter, muralInner, guardBooth, building, beLogo, foodPoint, oatMural };
 }

@@ -3,7 +3,7 @@ import type { StaticCollision } from '../sim/Collision';
 import { GeoBuffer } from './buildings';
 import type { V2 } from './layout';
 import type { TreeSpecies } from './trees';
-import { cortenTexture, hedgeTexture, kerbTexture, pbrMaterial, speckleTexture, worldUniforms, type WorldTextures } from './materials';
+import { cortenTexture, detailMaterial, hedgeTexture, injectWorldLighting, kerbTexture, worldUniforms, type WorldTextures } from './materials';
 
 export const CHUNK = 128;
 /** Larger chunks for small, scattered detail (kerbs, lamps, fixtures) to keep draw calls down. */
@@ -38,7 +38,45 @@ export class Chunked {
   }
 }
 
-export type DetailKey = 'stone' | 'plaster' | 'metal' | 'glass' | 'wood' | 'polished' | 'hedge' | 'lime' | 'murraya' | 'corten' | 'kerb' | 'dark' | 'emissive';
+/**
+ * Detail material keys. stone = cream stone / render cladding, plaster = rough painted render, metal = steel,
+ * glass = tinted glazing (dielectric, reflective), wood = fine-grain timber / veneer, polished = polished granite
+ * (floors, columns), granite = honed / flamed granite (steps, plinths, copings), concrete = exposed concrete,
+ * paint = smooth satin paint (fascias, canopies, railings), dark = untextured matte (markings, voids).
+ * Vertex colours are the albedo for every key; textures only add grain.
+ */
+export type DetailKey = 'stone' | 'plaster' | 'metal' | 'glass' | 'wood' | 'polished' | 'granite' | 'concrete' | 'paint' | 'hedge' | 'lime' | 'murraya' | 'corten' | 'kerb' | 'dark' | 'emissive';
+
+/** Keys whose texture needs real UVs: triangles with zero UV area get a world-space box projection in flush(). */
+const PROJECT_KEYS = new Set(['stone', 'plaster', 'wood', 'polished', 'granite', 'concrete', 'hedge', 'lime', 'murraya']);
+
+/** Replace degenerate (zero-area) UVs with a world-space projection (1 UV unit per metre), leaving good UVs alone. */
+function fixDegenerateUVs(b: GeoBuffer): void {
+  const { pos, uv, idx } = b;
+  const nv = pos.length / 3;
+  const locked = new Uint8Array(nv);
+  const bad: number[] = [];
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t], c = idx[t + 1], d = idx[t + 2];
+    const area = (uv[c * 2] - uv[a * 2]) * (uv[d * 2 + 1] - uv[a * 2 + 1]) - (uv[d * 2] - uv[a * 2]) * (uv[c * 2 + 1] - uv[a * 2 + 1]);
+    if (Math.abs(area) > 1e-9) { locked[a] = locked[c] = locked[d] = 1; } else bad.push(t);
+  }
+  for (const t of bad) {
+    const ids = [idx[t], idx[t + 1], idx[t + 2]];
+    const [a, c, d] = ids;
+    const e1x = pos[c * 3] - pos[a * 3], e1y = pos[c * 3 + 1] - pos[a * 3 + 1], e1z = pos[c * 3 + 2] - pos[a * 3 + 2];
+    const e2x = pos[d * 3] - pos[a * 3], e2y = pos[d * 3 + 1] - pos[a * 3 + 1], e2z = pos[d * 3 + 2] - pos[a * 3 + 2];
+    let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    nx /= l; ny /= l; nz /= l;
+    for (const i of ids) {
+      if (locked[i]) continue;
+      const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+      if (Math.abs(ny) > 0.7) { uv[i * 2] = x; uv[i * 2 + 1] = -z; }
+      else { const hl = Math.hypot(nx, nz) || 1; uv[i * 2] = (x * -nz + z * nx) / hl; uv[i * 2 + 1] = y; }
+    }
+  }
+}
 
 interface InstSet { geo: THREE.BufferGeometry; mat: THREE.Material; mats: THREE.Matrix4[]; cols: THREE.Color[] | null; cast: boolean; receive: boolean }
 
@@ -160,26 +198,46 @@ export class WorldKit {
     if (m) return m;
     const t = this.tex;
     switch (key) {
-      // the plaster albedo averages ≈0.41 (linear): scale it out so vertex colours are the actual albedo
-      case 'stone': m = pbrMaterial(t.plaster, { color: new THREE.Color(2.3, 2.3, 2.3), roughness: 0.85, vertexColors: true, normalScale: 0.35 }); break;
-      case 'plaster': m = pbrMaterial(t.plaster, { color: new THREE.Color(2.3, 2.3, 2.3), roughness: 0.9, vertexColors: true, normalScale: 0.5 }); break;
-      case 'metal': m = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.3, roughness: 0.55 }); break;
-      case 'glass': m = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.85, roughness: 0.07 }); break;
-      case 'wood': m = pbrMaterial(t.plaster, { color: new THREE.Color(2.2, 2.2, 2.2), roughness: 0.6, vertexColors: true, normalScale: 0.3 }); break;
-      case 'dark': m = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.85 }); break;
-      case 'polished': {
-        const map = speckleTexture();
-        map.repeat.set(1, 1);
-        m = new THREE.MeshStandardMaterial({ map, color: new THREE.Color(1.3, 1.3, 1.3), vertexColors: true, roughness: 0.3, metalness: 0.0 });
+      // textured keys: vertex colour = albedo (textures are normalised per channel and only add grain)
+      case 'stone': m = detailMaterial(t.stucco, { key, roughness: 0.78, normalScale: 0.35, macro: 0.07 }); break;
+      case 'plaster': m = detailMaterial(t.stucco, { key, roughness: 0.9, normalScale: 0.7, macro: 0.1 }); break;
+      case 'wood': m = detailMaterial(t.wood, { key, roughness: 0.55, normalScale: 0.45, macro: 0.05, roughVar: 0.2 }); break;
+      case 'polished': m = detailMaterial(t.granite, { key, roughness: 0.13, normalScale: 0.12, macro: 0.04, roughVar: 0.45 }); break;
+      case 'granite': m = detailMaterial(t.granite, { key, roughness: 0.55, normalScale: 0.5, macro: 0.05 }); break;
+      case 'concrete': m = detailMaterial(t.concreteWall, { key, roughness: 0.85, normalScale: 0.6, macro: 0.08 }); break;
+      case 'metal': {
+        const mm = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.45, roughness: 0.48 });
+        mm.onBeforeCompile = (shader) => {
+          shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+{ vec3 mp = wlWorldPos(); roughnessFactor *= 0.8 + 0.4 * wlNoise(mp.xz * 2.1 + mp.y * 1.7); }`);
+          injectWorldLighting(shader);
+        };
+        mm.customProgramCacheKey = () => 'kit_metal';
+        m = mm;
         break;
       }
+      case 'paint': m = detailMaterial(t.stucco, { key, roughness: 0.4, normalScale: 0.06, macro: 0.03, roughVar: 0.25 }); break;
+      case 'glass': {
+        // tinted dielectric glazing: dark body (the vertex colour tints it), strong Fresnel reflection of the sky
+        const gm = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.0, roughness: 0.05 });
+        gm.onBeforeCompile = (shader) => {
+          shader.fragmentShader = shader.fragmentShader
+            .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 0.28;')
+            .replace('#include <lights_fragment_end>', '#if defined( RE_IndirectSpecular )\n  radiance *= 2.2;\n#endif\n#include <lights_fragment_end>');
+          injectWorldLighting(shader);
+        };
+        gm.customProgramCacheKey = () => 'kit_glass';
+        m = gm;
+        break;
+      }
+      case 'dark': m = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.05, roughness: 0.85 }); break;
       case 'hedge': case 'lime': case 'murraya': {
         const map = hedgeTexture(key === 'hedge' ? 'green' : key === 'lime' ? 'lime' : 'white');
         m = new THREE.MeshStandardMaterial({ map, color: new THREE.Color(1.7, 1.7, 1.7), vertexColors: true, roughness: 0.9 });
         break;
       }
       case 'corten': m = new THREE.MeshStandardMaterial({ map: cortenTexture(), vertexColors: true, roughness: 0.85, metalness: 0.15 }); break;
-      case 'kerb': m = new THREE.MeshStandardMaterial({ map: kerbTexture(), roughness: 0.8, vertexColors: true }); break;
+      case 'kerb': m = new THREE.MeshStandardMaterial({ map: kerbTexture(), roughness: 0.82, vertexColors: true }); break;
       case 'emissive': {
         const em = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0x333333, emissive: new THREE.Color(1.0, 0.86, 0.62), emissiveIntensity: 0 });
         this.updatables.push(() => { em.emissiveIntensity = worldUniforms.uNight.value * 5; });
@@ -188,15 +246,14 @@ export class WorldKit {
       }
       default: m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 });
     }
-    // detail materials use constant roughness (the texture ARM maps are too glossy for matte cladding)
-    if ((m as THREE.MeshStandardMaterial).roughnessMap && (key === 'stone' || key === 'plaster' || key === 'wood')) (m as THREE.MeshStandardMaterial).roughnessMap = null;
     this.mats.set(key, m);
     return m;
   }
 
   /** Flush detail buffers, instanced sets and signs into the group. */
   flush(): void {
-    const noShadow = new Set(['kerb', 'polished', 'emissive']);
+    const noShadow = new Set(['kerb', 'emissive']);
+    for (const [k, buf] of this.detail.map) if (PROJECT_KEYS.has(k.split('|')[0])) fixDegenerateUVs(buf);
     this.detail.build(this.group, (k) => this.material(k), (k) => ({ cast: !noShadow.has(k), receive: true }));
     for (const [key, s] of this.inst) {
       if (!s.mats.length) continue;

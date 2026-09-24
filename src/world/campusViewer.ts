@@ -32,7 +32,7 @@ const VIEWS: Record<string, [number, number, number, number, number]> = {
   coveredPlaza: [40, 1.7, -110, 2.9, 0.1], // key_1100 / 1136
   pergolaToBBlock: [30, 1.7, -107, 0.55, 0.25], // key_1034 / 1332
   skybridges: [-15, 1.7, -107, 1.35, 0.55], // key_1352
-  eastLawn: [140, 1.7, -60, -1.3, 0.05], // key_1812
+  eastLawn: [108, 1.7, -60, -1.3, 0.05], // key_1812 (the corten face is now the parking's lawn side)
   eastPromenade: [96, 1.7, -66, 0.05, 0.08], // key_1756
   lawTerrace: [92, 10.5, 24, -2.35, -0.2], // key_1534
   aerial: [70, 230, 40, 0.25, -0.95],
@@ -176,7 +176,7 @@ const CHECK_POINTS: Record<string, V2> = {
   mrdLoopNorth: [60, -190],
   bBlockRoad: [-61, -140],
   eastPromenade: [98, -40],
-  eastLawn: [130, -60],
+  eastLawn: [110, -60],
   lawTerraceFoot: [100, 10],
   pieRCube: [5, 30],
   westGateInside: [-66, -104],

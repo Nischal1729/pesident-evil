@@ -18,6 +18,8 @@ interface Prism {
   tag: string;
   stamp: number;
   passBullets: boolean;
+  /** sloped top (ramps / stair flights): top(x,z) = y0 + (y1 − y0)·clamp01(((x−ax)·dx + (z−az)·dz)·inv) */
+  ramp: { ax: number; az: number; dx: number; dz: number; inv: number; y0: number; y1: number; slope: number } | null;
 }
 
 interface Cyl {
@@ -39,10 +41,18 @@ export interface RayHit {
 }
 
 const CELL = 8;
+/** Max rise an actor walks up without jumping (steps, kerbs, tiers). Ramps are continuous and have no limit. */
+export const STEP_UP = 0.45;
+/** Outline tolerance for ground queries (m). */
+const GROUND_TOL = 0.15;
+/** Body height used for head-room / blocking tests in multi-level mode. */
+export const AGENT_HEIGHT = 1.8;
 
 export class StaticCollision {
   prisms: Prism[] = [];
   cyls: Cyl[] = [];
+  /** Ramp / stair-flight metadata for the upcoming multi-level movement (see addRamp). */
+  ramps: { prism: number; poly: V2[]; from: V2; to: V2; y0: number; y1: number; thickness: number }[] = [];
   private grid = new Map<number, { p: number[]; c: number[] }>();
   private stampCounter = 1;
 
@@ -72,26 +82,45 @@ export class StaticCollision {
       minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
     });
     const id = this.prisms.length;
-    this.prisms.push({ id, pts, n: p.length, base, height, minX, maxX, minZ, maxZ, surface, enabled: true, tag, stamp: 0, passBullets: tag.startsWith('gate:') });
+    this.prisms.push({ id, pts, n: p.length, base, height, minX, maxX, minZ, maxZ, surface, enabled: true, tag, stamp: 0, passBullets: tag.startsWith('gate:'), ramp: null });
     this.cellsFor(minX, maxX, minZ, maxZ, (c) => c.p.push(id));
     return id;
   }
 
+  /**
+   * Sloped walkable solid: ramps AND stair flights (collide stairs as a ramp, draw the steps visually).
+   * Surface height at p = y0 + (y1 − y0) · clamp01(dot(p − from, to − from) / |to − from|²); the solid spans from
+   * (surface − thickness) up to the surface (default thickness: down to y = 0).
+   * The sim is still flat (multi-level movement is planned): for now the ramp is recorded in `ramps` and collides
+   * as a plain prism up to max(y0, y1). Register raised geometry the way it physically is — podiums/decks as
+   * prisms (tops become walkable later), ramps/stairs with this — so it works unchanged once levels land.
+   */
+  addRamp(poly: V2[], from: V2, to: V2, y0: number, y1: number, surface: SurfaceKind = 'concrete', tag = 'ramp', thickness = Infinity): number {
+    const top = Math.max(y0, y1);
+    const base = Number.isFinite(thickness) ? Math.max(0, Math.min(y0, y1) - thickness) : 0;
+    const id = this.addPolygon(poly, top - base, surface, tag, base);
+    this.ramps.push({ prism: id, poly: poly.map((p) => [p[0], p[1]] as V2), from, to, y0, y1, thickness });
+    const dx = to[0] - from[0], dz = to[1] - from[1];
+    const l2 = dx * dx + dz * dz || 1;
+    this.prisms[id].ramp = { ax: from[0], az: from[1], dx, dz, inv: 1 / l2, y0, y1, slope: Math.abs(y1 - y0) / Math.sqrt(l2) };
+    return id;
+  }
+
   /** Thick line segment (walls, gates, fences) */
-  addSegment(a: V2, b: V2, thickness: number, height: number, surface: SurfaceKind = 'concrete', tag = ''): number {
+  addSegment(a: V2, b: V2, thickness: number, height: number, surface: SurfaceKind = 'concrete', tag = '', base = 0): number {
     const dx = b[0] - a[0], dz = b[1] - a[1];
     const l = Math.hypot(dx, dz) || 1;
     const nx = (-dz / l) * thickness * 0.5, nz = (dx / l) * thickness * 0.5;
-    return this.addPolygon([[a[0] + nx, a[1] + nz], [b[0] + nx, b[1] + nz], [b[0] - nx, b[1] - nz], [a[0] - nx, a[1] - nz]], height, surface, tag);
+    return this.addPolygon([[a[0] + nx, a[1] + nz], [b[0] + nx, b[1] + nz], [b[0] - nx, b[1] - nz], [a[0] - nx, a[1] - nz]], height, surface, tag, base);
   }
 
-  addPolyline(pts: V2[], thickness: number, height: number, surface: SurfaceKind = 'concrete', tag = ''): void {
-    for (let i = 1; i < pts.length; i++) this.addSegment(pts[i - 1], pts[i], thickness, height, surface, tag);
+  addPolyline(pts: V2[], thickness: number, height: number, surface: SurfaceKind = 'concrete', tag = '', base = 0): void {
+    for (let i = 1; i < pts.length; i++) this.addSegment(pts[i - 1], pts[i], thickness, height, surface, tag, base);
   }
 
-  addCircle(x: number, z: number, r: number, height: number, surface: SurfaceKind = 'wood', tag = ''): number {
+  addCircle(x: number, z: number, r: number, height: number, surface: SurfaceKind = 'wood', tag = '', base = 0): number {
     const id = this.cyls.length;
-    this.cyls.push({ id, x, z, r, base: 0, height, surface, enabled: true, tag, stamp: 0 });
+    this.cyls.push({ id, x, z, r, base, height, surface, enabled: true, tag, stamp: 0 });
     this.cellsFor(x - r, x + r, z - r, z + r, (c) => c.c.push(id));
     return id;
   }
@@ -206,6 +235,195 @@ export class StaticCollision {
     return false;
   }
 
+  // -------------------------------------------------------------------------------------------- multi-level queries
+  /** Top of a prism at (x,z): flat, or the ramp surface. */
+  topAt(P: Prism, x: number, z: number): number {
+    const r = P.ramp;
+    if (!r) return P.base + P.height;
+    let t = ((x - r.ax) * r.dx + (z - r.az) * r.dz) * r.inv;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return r.y0 + (r.y1 - r.y0) * t;
+  }
+
+  private cellAt(x: number, z: number): { p: number[]; c: number[] } | undefined {
+    return this.grid.get(this.key(Math.floor(x / CELL), Math.floor(z / CELL)));
+  }
+
+  /**
+   * Highest walkable surface under (x,z) that is at or below maxY (0 = terrain). Surfaces whose outline passes within
+   * GROUND_TOL count as underfoot, so hairline seams between adjacent solids (tier rings, stacked slabs) never open a
+   * hole to fall through.
+   */
+  groundAt(x: number, z: number, maxY: number): number {
+    let best = 0;
+    const cell = this.cellAt(x, z);
+    if (!cell) return best;
+    const T = GROUND_TOL;
+    for (const pi of cell.p) {
+      const P = this.prisms[pi];
+      if (!P.enabled || P.passBullets) continue;
+      if (x < P.minX - T || x > P.maxX + T || z < P.minZ - T || z > P.maxZ + T) continue;
+      const top = this.topAt(P, x, z);
+      if (top <= best || top > maxY) continue;
+      if (pointInPolygon(x, z, P.pts, P.n) || this.nearestEdge(P, x, z) < T * T) best = top;
+    }
+    for (const ci of cell.c) {
+      const C = this.cyls[ci];
+      if (!C.enabled) continue;
+      const top = C.base + C.height;
+      if (top <= best || top > maxY) continue;
+      if ((x - C.x) ** 2 + (z - C.z) ** 2 < C.r * C.r) best = top;
+    }
+    return best;
+  }
+
+  /** Lowest solid underside above y at (x,z) (Infinity if open sky). */
+  ceilingAt(x: number, z: number, y: number): number {
+    let best = Infinity;
+    const cell = this.cellAt(x, z);
+    if (!cell) return best;
+    for (const pi of cell.p) {
+      const P = this.prisms[pi];
+      if (!P.enabled || P.base <= y || P.base >= best) continue;
+      if (x < P.minX || x > P.maxX || z < P.minZ || z > P.maxZ) continue;
+      if (pointInPolygon(x, z, P.pts, P.n)) best = P.base;
+    }
+    return best;
+  }
+
+  /** Visit the tops of every solid whose footprint contains (x,z) (navigation candidates). Gates are skipped. */
+  forTopsAt(x: number, z: number, fn: (top: number) => void): void {
+    const cell = this.cellAt(x, z);
+    if (!cell) return;
+    for (const pi of cell.p) {
+      const P = this.prisms[pi];
+      if (!P.enabled || P.passBullets) continue;
+      if (x < P.minX || x > P.maxX || z < P.minZ || z > P.maxZ) continue;
+      if (pointInPolygon(x, z, P.pts, P.n)) fn(this.topAt(P, x, z));
+    }
+    for (const ci of cell.c) {
+      const C = this.cyls[ci];
+      if (C.enabled && (x - C.x) ** 2 + (z - C.z) ** 2 < C.r * C.r) fn(C.base + C.height);
+    }
+  }
+
+  /** Nearest point on the prism outline to (x,z): returns squared distance, writes the point to _near. */
+  private nearestEdge(P: Prism, x: number, z: number): number {
+    const pts = P.pts, n = P.n;
+    let best = Infinity;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const ax = pts[i * 2], az = pts[i * 2 + 1], cx = pts[j * 2], cz = pts[j * 2 + 1];
+      const dx = cx - ax, dz = cz - az;
+      const l2 = dx * dx + dz * dz;
+      let t = l2 > 0 ? ((x - ax) * dx + (z - az) * dz) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const qx = ax + dx * t, qz = az + dz * t;
+      const d = (x - qx) ** 2 + (z - qz) ** 2;
+      if (d < best) { best = d; _near.x = qx; _near.z = qz; }
+    }
+    return best;
+  }
+
+  /** Is any solid (within r of (x,z)) occupying the vertical band [y0, y1]? Ramps use their surface near the point. */
+  blockedBand(x: number, z: number, r: number, y0: number, y1: number, filter?: (tag: string) => boolean): boolean {
+    const cx0 = Math.floor((x - r) / CELL), cx1 = Math.floor((x + r) / CELL);
+    const cz0 = Math.floor((z - r) / CELL), cz1 = Math.floor((z + r) / CELL);
+    const stamp = ++this.stampCounter;
+    for (let cx = cx0; cx <= cx1; cx++)
+      for (let cz = cz0; cz <= cz1; cz++) {
+        const cell = this.grid.get(this.key(cx, cz));
+        if (!cell) continue;
+        for (const pi of cell.p) {
+          const P = this.prisms[pi];
+          if (P.stamp === stamp || !P.enabled) continue;
+          P.stamp = stamp;
+          if (P.base >= y1) continue;
+          if (!P.ramp && P.base + P.height <= y0) continue;
+          if (P.ramp && Math.max(P.ramp.y0, P.ramp.y1) <= y0) continue;
+          if (filter && !filter(P.tag)) continue;
+          if (x + r < P.minX || x - r > P.maxX || z + r < P.minZ || z - r > P.maxZ) continue;
+          if (pointInPolygon(x, z, P.pts, P.n)) {
+            const top = P.ramp ? this.topAt(P, x, z) + P.ramp.slope * r : P.base + P.height;
+            if (top > y0) return true;
+          } else if (this.nearestEdge(P, x, z) < r * r) {
+            if (this.topAt(P, _near.x, _near.z) > y0) return true;
+          }
+        }
+        for (const ci of cell.c) {
+          const C = this.cyls[ci];
+          if (C.stamp === stamp || !C.enabled) continue;
+          C.stamp = stamp;
+          if (C.base >= y1 || C.base + C.height <= y0) continue;
+          if (filter && !filter(C.tag)) continue;
+          if ((x - C.x) ** 2 + (z - C.z) ** 2 < (r + C.r) ** 2) return true;
+        }
+      }
+    return false;
+  }
+
+  /**
+   * Multi-level version of resolveCircle: push the body (feet at y, height h) out of every solid that occupies
+   * [y + STEP_UP, y + h]. Low steps, kerbs and ramps are walked onto instead (the caller snaps y to groundAt()).
+   */
+  resolveBody(pos: { x: number; z: number }, r: number, y: number, h = AGENT_HEIGHT): boolean {
+    let hit = false;
+    const feet = y + STEP_UP, head = y + h;
+    for (let iter = 0; iter < 3; iter++) {
+      let moved = false;
+      const cx0 = Math.floor((pos.x - r) / CELL), cx1 = Math.floor((pos.x + r) / CELL);
+      const cz0 = Math.floor((pos.z - r) / CELL), cz1 = Math.floor((pos.z + r) / CELL);
+      const stamp = ++this.stampCounter;
+      for (let cx = cx0; cx <= cx1; cx++)
+        for (let cz = cz0; cz <= cz1; cz++) {
+          const cell = this.grid.get(this.key(cx, cz));
+          if (!cell) continue;
+          for (const pi of cell.p) {
+            const P = this.prisms[pi];
+            if (P.stamp === stamp || !P.enabled) continue;
+            P.stamp = stamp;
+            if (P.base >= head) continue;
+            if (!P.ramp && P.base + P.height <= feet) continue;
+            if (P.ramp && Math.max(P.ramp.y0, P.ramp.y1) <= feet) continue;
+            if (pos.x + r < P.minX || pos.x - r > P.maxX || pos.z + r < P.minZ || pos.z - r > P.maxZ) continue;
+            const inside = pointInPolygon(pos.x, pos.z, P.pts, P.n);
+            const d2 = this.nearestEdge(P, pos.x, pos.z);
+            if (!inside && d2 >= r * r) continue;
+            // the surface where we touch it: on it (inside) → under our feet; at its edge → the rim we'd climb
+            const top = P.ramp ? (inside ? this.topAt(P, pos.x, pos.z) : this.topAt(P, _near.x, _near.z)) : P.base + P.height;
+            if (top <= feet) continue;
+            const d = Math.sqrt(d2) || 1e-6;
+            const bx = _near.x, bz = _near.z;
+            if (inside) {
+              const dx = bx - pos.x, dz = bz - pos.z;
+              pos.x = bx + (dx / d) * r; pos.z = bz + (dz / d) * r;
+            } else {
+              const dx = pos.x - bx, dz = pos.z - bz;
+              pos.x = bx + (dx / d) * r; pos.z = bz + (dz / d) * r;
+            }
+            moved = true; hit = true;
+          }
+          for (const ci of cell.c) {
+            const C = this.cyls[ci];
+            if (C.stamp === stamp || !C.enabled) continue;
+            C.stamp = stamp;
+            if (C.base >= head || C.base + C.height <= feet) continue;
+            const dx = pos.x - C.x, dz = pos.z - C.z;
+            const d = Math.hypot(dx, dz);
+            const min = r + C.r;
+            if (d < min) {
+              const f = d > 1e-5 ? (min - d) / d : 1;
+              pos.x += dx * f + (d > 1e-5 ? 0 : 0.01);
+              pos.z += dz * f;
+              moved = true; hit = true;
+            }
+          }
+        }
+      if (!moved) break;
+    }
+    return hit;
+  }
+
   /**
    * 3D ray vs prisms/cylinders/ground. dir must be normalized.
    * Traverses the grid with a DDA in XZ.
@@ -267,6 +485,7 @@ export class StaticCollision {
   private rayPrism(P: Prism, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, hl: number, bestT: number, res: RayHit): number {
     let best = bestT;
     const top = P.base + P.height;
+    const R = P.ramp;
     const pts = P.pts, n = P.n;
     if (hl > 1e-9) {
       for (let i = 0; i < n; i++) {
@@ -280,7 +499,7 @@ export class StaticCollision {
         const u = ((ax - ox) * dz - (az - oz) * dx) / den;
         if (u < 0 || u > 1) continue;
         const y = oy + dy * t;
-        if (y < P.base || y > top) continue;
+        if (y < P.base || y > (R ? this.topAt(P, ox + dx * t, oz + dz * t) : top)) continue;
         // outward normal (-ez, ex) normalized; only count hits from outside
         const el = Math.hypot(ex, ez);
         const nx = -ez / el, nz = ex / el;
@@ -289,8 +508,26 @@ export class StaticCollision {
         res.nx = nx; res.ny = 0; res.nz = nz; res.surface = P.surface; res.tag = P.tag;
       }
     }
+    // sloped top (ramps): plane y = y0 + s·((x−ax)·rdx + (z−az)·rdz), hit from above
+    if (R) {
+      const sl = (R.y1 - R.y0) * R.inv;
+      const A = (ox - R.ax) * R.dx + (oz - R.az) * R.dz, B = dx * R.dx + dz * R.dz;
+      const den = dy - sl * B;
+      if (Math.abs(den) > 1e-9) {
+        const t = (R.y0 + sl * A - oy) / den;
+        if (t > 1e-4 && t < best) {
+          const x = ox + dx * t, z = oz + dz * t;
+          // normal (−s·rdx, 1, −s·rdz): only count hits coming from above the surface
+          if (dy - sl * B < 0 && pointInPolygon(x, z, pts, n)) {
+            best = t;
+            const nl = Math.hypot(sl * R.dx, 1, sl * R.dz);
+            res.nx = (-sl * R.dx) / nl; res.ny = 1 / nl; res.nz = (-sl * R.dz) / nl; res.surface = P.surface; res.tag = P.tag;
+          }
+        }
+      }
+    }
     // roof (from above)
-    if (dy < -1e-6 && oy > top) {
+    if (!R && dy < -1e-6 && oy > top) {
       const t = (top - oy) / dy;
       if (t > 0 && t < best) {
         const x = ox + dx * t, z = oz + dz * t;
@@ -342,4 +579,5 @@ export class StaticCollision {
   }
 }
 
+const _near = { x: 0, z: 0 };
 const scratchHit: RayHit = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground', tag: '' };

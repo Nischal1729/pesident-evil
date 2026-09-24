@@ -7,12 +7,13 @@ import { buildGJBC } from './gjbc';
 import { Chunked, col, WorldKit } from './kit';
 import { buildLandscape } from './landscape';
 import {
-  AREAS, BUILDINGS, CAMPUS_BOUNDS, ENTRY_DIVIDER, GLOBE_POS, MRD_DRUM, ORR, ORR_NORMAL, orrPoint, PATHS, QUAD, ROADS, WALLS,
+  AREAS, BUILDINGS, CAMPUS_BOUNDS, ENTRY_DIVIDER, GLOBE_POS, MRD_DRUM, NO_TREE_ZONES, ORR, ORR_NORMAL, orrPoint, PATHS, QUAD, ROADS, WALLS,
   type BuildingDef, type FacadeStyle, type V2,
 } from './layout';
-import { barcodePaverTexture, facadeMaterial, FACADE_STYLES, greyPaverTexture, pbrMaterial, radialTexture, worldUniforms, type WorldTextures } from './materials';
+import { asphaltMaterial, barcodePaverTexture, facadeMaterial, FACADE_STYLES, greyPaverTexture, pbrMaterial, radialTexture, setLampLights, worldUniforms, type WorldTextures } from './materials';
 import { drawSigns, type SignUVs } from './signs';
 import { TreeSystem, type TreeSpecies } from './trees';
+import { lawnBlades, lawnMaterial } from './vegetation/lawn';
 import { buildLandmarksAll, type GateVisual } from './landmarks';
 
 const osm = osmJson as unknown;
@@ -25,7 +26,8 @@ interface OsmData {
 /** The playable campus ground (inside the compound walls). The main gate line is the edge (176,−120.6)→(176,−144.6). */
 export const CAMPUS_GROUND: V2[] = [
   [176, -144.6], [172, -147.5], [150, -158.8], [107.2, -180.2], [70, -199], [42, -214], [26, -221], [-4, -220], [-46, -215], [-72, -205],
-  [-72, 142], [80, 142], [80, 86], [127.8, 62], [154, 12], [154, -106.6], [156.2, -106.6], [156.2, -120.5], [176, -120.6],
+  // east side: around the HPC lab / food point, then along the 2-wheeler parking's back wall (layout.ts PARKING.backX) to the gate building
+  [-72, 142], [80, 142], [80, 86], [127.8, 62], [154, 12], [154, -30.3], [137.72, -30.3], [137.72, -110.8], [156.2, -110.8], [156.2, -120.5], [176, -120.6],
 ];
 
 export interface LampInfo { pos: THREE.Vector3; }
@@ -112,7 +114,7 @@ export class CampusBuilder {
     this.buildLamps(); lap('lamps');
     this.placeTrees(); lap('treePlacement');
     this.kit.flush(); lap('flush');
-    this.group.add(this.trees.build()); lap('trees');
+    this.group.add(this.trees.build({ viewDistance: this.quality.viewDistance })); lap('trees');
     return { group: this.group, collision: this.collision, lamps: this.lamps, gates: this.gates, roadPolys: this.roadPolys, lawnPolys: this.lawnPolys, updatables: this.kit.updatables };
   }
 
@@ -140,7 +142,7 @@ export class CampusBuilder {
     this.group.add(campus);
 
     const off = (m: THREE.Material, f: number) => { m.polygonOffset = true; m.polygonOffsetFactor = f; m.polygonOffsetUnits = f; return m; };
-    const grassMat = off(pbrMaterial(t.grass, { color: 0xb3c48f, macro: 0.9, macroScale: 0.06, macroTint: new THREE.Color(0.85, 0.8, 0.55), normalScale: 0.7 }), -2);
+    const grassMat = off(lawnMaterial(t.grass), -2); // NATURE: turf texture + anti-tiling (vegetation/lawn.ts)
     const concMat = off(pbrMaterial(t.concrete, { color: 0xcfc9c0, macro: 0.5, macroScale: 0.05 }), -2);
     const paver2 = off(pbrMaterial(t.pavers, { color: 0xd4cec4, macro: 0.5, macroScale: 0.05 }), -2);
     const barcodeMap = barcodePaverTexture();
@@ -175,19 +177,24 @@ export class CampusBuilder {
       m.matrixAutoUpdate = false; m.updateMatrix();
       this.group.add(m);
     }
+    // NATURE: short grass tufts around the camera on the lawns (high / ultra)
+    if (this.quality.viewDistance >= 500) {
+      const blades = lawnBlades(this.lawnPolys, { paths: PATHS });
+      if (blades) this.group.add(blades);
+    }
   }
 
   // -----------------------------------------------------------------------------------------------
   private buildRoads(): void {
     const t = this.tex;
-    const asphaltMat = pbrMaterial(t.asphalt, { color: new THREE.Color(0xb0aca8).multiplyScalar(1.45), macro: 0.7, macroScale: 0.05, normalScale: 0.9, macroTint: new THREE.Color(0.9, 0.86, 0.78), roughness: 0.9 });
-    asphaltMat.roughnessMap = null;
+    // weathered pale asphalt; strips use along-road UVs (u = s / width, v = 0..1 across) for lane-aware wear
+    const asphaltMat = asphaltMaterial(t.asphaltFine, t.asphaltMacro, { lanes: 2 });
     asphaltMat.polygonOffset = true; asphaltMat.polygonOffsetFactor = -4; asphaltMat.polygonOffsetUnits = -4;
     const asphalt = new Chunked({}, 256);
     const strips: V2[][] = [];
     for (const r of ROADS) {
       const c = polyCentroid(r.pts);
-      const strip = addStrip(asphalt.get('road', c[0], c[1]), r.pts, r.width, 0.06, 6);
+      const strip = addStrip(asphalt.get('road', c[0], c[1]), r.pts, r.width, 0.06, r.width, true);
       strips.push(strip);
       this.roadPolys.push(strip);
     }
@@ -235,7 +242,7 @@ export class CampusBuilder {
       const nearOrr = r.pts.every(([x, z]) => Math.abs((x - ORR.origin[0]) * ORR_NORMAL[0] + (z - ORR.origin[1]) * ORR_NORMAL[1]) < 30);
       if (nearOrr) continue;
       const c = polyCentroid(r.pts);
-      const strip = addStrip(asphalt.get('road', c[0], c[1]), r.pts, r.width, 0.05, 6);
+      const strip = addStrip(asphalt.get('road', c[0], c[1]), r.pts, r.width, 0.05, r.width, true);
       this.roadPolys.push(strip);
     }
     asphalt.build(this.group, () => asphaltMat, { cast: false, receive: true });
@@ -275,15 +282,15 @@ export class CampusBuilder {
 
   // -----------------------------------------------------------------------------------------------
   private buildORR(): void {
-    const asphaltMat = pbrMaterial(this.tex.asphalt, { color: 0x9c9894, macro: 0.7, macroScale: 0.04 });
+    const asphaltMat = asphaltMaterial(this.tex.asphaltFine, this.tex.asphaltMacro, { lanes: 3, color: new THREE.Color(0.12, 0.117, 0.112) });
     asphaltMat.polygonOffset = true; asphaltMat.polygonOffsetFactor = -4; asphaltMat.polygonOffsetUnits = -4;
     const t0 = -430, t1 = 330;
     const line = (off: number): V2[] => { const pts: V2[] = []; for (let t = t0; t <= t1; t += 40) pts.push(orrPoint(t, off)); return pts; };
     const buf = new GeoBuffer();
     const halfMain = (ORR.width - ORR.median) / 2;
     const off1 = ORR.median / 2 + halfMain / 2;
-    for (const off of [off1, -off1]) this.roadPolys.push(addStrip(buf, line(off), halfMain, 0.06, 7));
-    for (const off of [ORR.serviceOffset, -ORR.serviceOffset]) this.roadPolys.push(addStrip(buf, line(off), ORR.serviceWidth, 0.06, 7));
+    for (const off of [off1, -off1]) this.roadPolys.push(addStrip(buf, line(off), halfMain, 0.06, halfMain, true));
+    for (const off of [ORR.serviceOffset, -ORR.serviceOffset]) this.roadPolys.push(addStrip(buf, line(off), ORR.serviceWidth, 0.06, ORR.serviceWidth, true));
     const road = new THREE.Mesh(buf.toGeometry(), asphaltMat);
     road.receiveShadow = true;
     road.matrixAutoUpdate = false; road.updateMatrix();
@@ -308,17 +315,17 @@ export class CampusBuilder {
     const metro = this.kit;
     for (let t = t0; t < t1; t += 20) {
       const p = orrPoint(t + 10, 0);
-      metro.box('stone', p[0], 0.5, p[1], 20, 1.0, 0.6, rot, conc, 0.5);
+      metro.box('concrete', p[0], 0.5, p[1], 20, 1.0, 0.6, rot, conc, 0.5);
     }
     const r = rng(77);
     for (let t = t0 + 10; t < t1; t += 28) {
       const p = orrPoint(t, 0);
-      metro.buf('stone', p[0], p[1]).cylinder(p[0], 0, p[1], 0.95, 10.5, 12, conc, false);
-      metro.box('stone', p[0], 11.2, p[1], 2.4, 1.5, 7.5, rot + Math.PI / 2, conc, 0.5);
+      metro.buf('concrete', p[0], p[1]).cylinder(p[0], 0, p[1], 0.95, 10.5, 12, conc, false);
+      metro.box('concrete', p[0], 11.2, p[1], 2.4, 1.5, 7.5, rot + Math.PI / 2, conc, 0.5);
       this.collision.addCircle(p[0], p[1], 1.0, 12, 'concrete', 'pier');
       if (t < 150 && r() > 0.25) {
         const q = orrPoint(t + 14, 0);
-        metro.box('stone', q[0], 12.9, q[1], 27.4, 1.9, 8.5, rot, conc, 0.5);
+        metro.box('concrete', q[0], 12.9, q[1], 27.4, 1.9, 8.5, rot, conc, 0.5);
       }
     }
     // green construction mesh barriers along the service road (Namma Metro works)
@@ -566,16 +573,8 @@ export class CampusBuilder {
       place(p[0], p[1], ORR_NORMAL[0], ORR_NORMAL[1]);
     }
     for (const p of this.kit.lampPoints) { this.lamps.push({ pos: p.clone() }); pools.push(p.clone()); }
-    const poolTex = radialTexture('rgba(255,214,150,0.55)', 'rgba(255,200,130,0)');
-    const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8, fog: true });
-    this.kit.updatables.push(() => { poolMat.opacity = THREE.MathUtils.smoothstep(worldUniforms.uNight.value, 0.35, 0.8) * 0.9; });
-    const poolMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(14, 14).rotateX(-Math.PI / 2), poolMat, pools.length);
-    const m4 = new THREE.Matrix4();
-    pools.forEach((p, i) => { m4.makeTranslation(p.x, 0.09, p.z); poolMesh.setMatrixAt(i, m4); });
-    poolMesh.computeBoundingSphere();
-    poolMesh.renderOrder = 2;
-    this.kit.updatables.push(() => { poolMesh.visible = worldUniforms.uNight.value > 0.3; });
-    this.group.add(poolMesh);
+    // lamp pools: baked into a world light map that every lit world material samples at night (materials.ts)
+    setLampLights(pools);
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -587,7 +586,23 @@ export class CampusBuilder {
     if (collide) this.collision.addCircle(x, z, this.trees.trunkRadius(sp, scale), 4, 'wood', 'tree');
     const keep = sp === 'palm' || sp === 'cloud' || sp === 'frangipani' || sp === 'sapling' || sp === 'maroon' || sp === 'ficus';
     if (!keep && hash2(x * 3.1, z * 2.7) > this.quality.treeDensity) return; // visual thinning only
-    this.trees.add(sp, x, z, scale, hash2(x, z) * Math.PI * 2);
+    this.trees.add(sp, x, z, scale, hash2(x, z) * Math.PI * 2, this.treeBaseY(x, z));
+  }
+
+  /** Trees planted in raised planters / on terraces stand on them: top of the solid (ground-based, ≤ 4 m) prism under the trunk. */
+  private treeBaseY(x: number, z: number): number {
+    let y = 0;
+    for (const P of this.collision.prisms) {
+      if (!P.enabled || P.base > 0.2 || P.height < 0.25 || P.height > 4) continue;
+      if (x < P.minX || x > P.maxX || z < P.minZ || z > P.maxZ || P.tag === 'tree' || P.tag.startsWith('gate')) continue;
+      let inside = false;
+      for (let i = 0, j = P.n - 1; i < P.n; j = i++) {
+        const xi = P.pts[i * 2], zi = P.pts[i * 2 + 1], xj = P.pts[j * 2], zj = P.pts[j * 2 + 1];
+        if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+      }
+      if (inside) y = Math.max(y, P.base + P.height);
+    }
+    return y;
   }
 
   /** 1 m raster of road / path clearance used by tree placement (built lazily once). */
@@ -627,6 +642,8 @@ export class CampusBuilder {
 
   private clearForTree(x: number, z: number, r: number): boolean {
     if (x > QUAD.minX - 5 && x < QUAD.maxX + 5 && z > -118 && z < QUAD.maxZ) return false;
+    if (NO_TREE_ZONES.some((p) => pointInPoly(x, z, p))) return false; // GJB: 2-wheeler parking floor + pool
+    if (Math.hypot(x - 4.6, z + 121.6) < 10) return false; // keep the Open Air Theatre stage clear (MRD/BE)
     if (!this.roadClear(x, z)) return false;
     if (this.collision.blocked(x, z, r)) return false;
     return true;
@@ -643,7 +660,7 @@ export class CampusBuilder {
     // yellow copperpods along the ring-road wall behind the PES Lawn
     for (const s of samplePolyline([[104, -176.5], [150, -154], [168, -147.5]], 9, 0, 4)) tryTree(r() < 0.75 ? 'copperpod' : 'rain', s.p[0] + (r() - 0.5), s.p[1] + (r() - 0.5), 0.85 + r() * 0.3);
     // big dense ficus at the gate (south side, over the shelter) and a rain tree by the north pillar
-    this.addTree('ficus', 153.2, -109.4, 0.8);
+    this.addTree('ficus', 152, -113.5, 0.8);
     this.addTree('rain', 163, -151, 0.9);
     // frangipani garden + east plaza planters
     cluster(87, -153, 7, 9, () => 'frangipani', 0.8, 1.15, 3.2, 81);
@@ -651,18 +668,29 @@ export class CampusBuilder {
     // PES Lawn: mature Tabebuia / Pongamia / rain trees
     cluster(128, -160, 20, 12, () => (r() < 0.4 ? 'rain' : r() < 0.6 ? 'gulmohar' : 'copperpod'), 0.7, 1.0, 8, 91);
     // tiered "cloud" trees along the entry walkway (south side) and at the PES Lawn promenade
-    for (const s of samplePolyline([[108, -113.2], [144, -116.5]], 9, 0, 3)) tryTree('cloud', s.p[0], s.p[1], 0.9 + r() * 0.25, 0.8);
-    for (const s of samplePolyline([[112, -141.8], [160, -147]], 12, 0, 4)) tryTree('cloud', s.p[0], s.p[1], 0.9 + r() * 0.2, 0.8);
-    // east lawn: young saplings on a loose grid, a quarter with maroon leaves
-    for (let x = 108; x <= 148; x += 13) for (let z = -92; z <= -30; z += 11) {
-      const jx = x + (hash2(x, z) - 0.5) * 4, jz = z + (hash2(z, x) - 0.5) * 4;
-      tryTree(hash2(jx * 2, jz) < 0.25 ? 'maroon' : 'sapling', jx, jz, 1.0 + hash2(jz, jx) * 0.5, 0.6);
+    // (try a few lateral offsets so planter walls / crossing paths don't knock whole stretches out)
+    const tryAround = (sp: TreeSpecies, x: number, z: number, sc: number, clear: number, dz: number[]) => {
+      for (const o of dz) if (this.clearForTree(x, z + o, clear)) { this.addTree(sp, x, z + o, sc); return; }
+    };
+    for (const s of samplePolyline([[108, -113.2], [144, -116.5]], 9, 0, 3)) tryAround('cloud', s.p[0], s.p[1], 0.9 + r() * 0.25, 0.8, [0, 1.6, 2.6, -4.3]);
+    for (const s of samplePolyline([[112, -141.8], [160, -147]], 12, 0, 4)) tryAround('cloud', s.p[0], s.p[1], 0.9 + r() * 0.2, 0.8, [0, -1.2, 1.2, -2.2]);
+    // east lawn: young saplings on a loose grid, a quarter with maroon leaves. Follows the east_lawn AREA polygon
+    // (inset ~2 m from its edges) and the campus ground, so it adapts when the lawn outline changes.
+    const eastLawn = AREAS.find((a) => a.id === 'east_lawn');
+    if (eastLawn) {
+      const b = polyBounds(eastLawn.poly);
+      const inside = (x: number, z: number) => [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]].every(([ox, oz]) => pointInPoly(x + ox, z + oz, eastLawn.poly) && pointInPoly(x + ox, z + oz, CAMPUS_GROUND));
+      for (let x = b.minX + 4; x <= b.maxX - 2; x += 9) for (let z = b.minZ + 3; z <= b.maxZ - 2; z += 11) {
+        const jx = x + (hash2(x, z) - 0.5) * 3, jz = z + (hash2(z, x) - 0.5) * 4;
+        if (!inside(jx, jz)) continue;
+        tryTree(hash2(jx * 2, jz) < 0.25 ? 'maroon' : 'sapling', jx, jz, 1.0 + hash2(jz, jx) * 0.5, 0.6);
+      }
     }
     // mature trees along the B-Block east strip and around the Open Air Theatre
     for (let z = -190; z <= -122; z += 11) tryTree('rain', -7.8 + (r() - 0.5), z, 0.75 + r() * 0.2, 0.5);
-    cluster(22, -136, 13, 7, () => 'rain', 0.85, 1.1, 7, 71);
+    // (the Open Air Theatre plants its own terrace / planter rain trees in oat.ts; its tiers stay clear)
     // palms in the terraced garden near F-Block
-    cluster(80, 54, 11, 7, () => 'palm', 0.55, 0.8, 3.5, 61);
+    cluster(80, 54, 11, 7, () => 'palm', 0.85, 1.1, 3.5, 61);
     // remaining lawns
     for (const a of AREAS) {
       if (a.kind !== 'lawn' || ['pes_lawn', 'frangipani_garden', 'east_lawn', 'oat_lawn', 'walkway_lawn'].includes(a.id ?? '')) continue;

@@ -27,6 +27,8 @@ export class CameraRig {
     this.kickYaw += (Math.random() - 0.5) * pitch * 0.6;
   }
 
+  private pivotY: number | null = null;
+
   update(dt: number, target: THREE.Vector3, yaw: number, pitch: number, aiming: boolean, sprinting: boolean, downed: boolean): void {
     this.t += dt;
     this.aimBlend += ((aiming ? 1 : 0) - this.aimBlend) * Math.min(1, dt * 11);
@@ -37,6 +39,10 @@ export class CameraRig {
     const p = pitch + this.kick;
     const y = yaw + this.kickYaw;
     const tgt = _pivot.copy(target);
+    // smooth the pivot height so snapping up steps / onto ramps doesn't jolt the camera (jumps still read)
+    if (this.pivotY === null || Math.abs(tgt.y - this.pivotY) > 3) this.pivotY = tgt.y;
+    else this.pivotY += (tgt.y - this.pivotY) * Math.min(1, dt * 14);
+    tgt.y = this.pivotY;
     if (downed) tgt.y -= 0.9;
     cameraPose(tgt, y, p, this.aimBlend, _desired, _dir, this.shoulderS);
     cameraPivot(tgt, y, this.aimBlend, _pivot, this.shoulderS);

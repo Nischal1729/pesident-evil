@@ -8,12 +8,12 @@ import { CampusBuilder, type CampusBuild } from '../world/Campus';
 import { loadWorldTextures, worldUniforms } from '../world/materials';
 import { Sky } from '../world/Sky';
 import { TreeSystem } from '../world/trees';
-import { GLOBE_POS, MAIN_GATE_PORTAL, STATIONS } from '../world/layout';
+import { GATES, GLOBE_POS, MAIN_GATE_PORTAL, STATIONS } from '../world/layout';
 import { Post } from '../render/Post';
 import { CameraRig } from '../render/CameraRig';
 import { CharacterManager, WeaponModels } from '../render/Characters';
 import { GlbCharacterLibrary } from '../render/GlbCharacters';
-import { World } from '../sim/World';
+import { gateInward, World } from '../sim/World';
 import type { Look } from '../sim/actors';
 import { WEAPONS } from '../sim/weapons';
 import { Hud } from '../ui/Hud';
@@ -45,6 +45,10 @@ const SQUAD: { name: string; voice: 'male' | 'female'; weapon: 'rifle' | 'smg' |
   { name: 'Manjunath (Security)', voice: 'male', weapon: 'shotgun', acc: 0.66, look: { body: 'male', skin: '#6b3f28', hair: '#161210', shirt: '#26324f', pants: '#1f2430', shoes: '#111111', accessory: '#1d2f6f', seed: 45 } },
 ];
 
+const _gateX = new THREE.Vector3(1, 0, 0);
+const _gateZ = new THREE.Vector3();
+const _gateQ = new THREE.Quaternion();
+
 export class Game {
   engine!: Engine;
   settings: Settings = loadSettings();
@@ -75,6 +79,8 @@ export class Game {
   private pickupGeo = { ammo: new THREE.BoxGeometry(0.5, 0.3, 0.3), health: new THREE.BoxGeometry(0.4, 0.3, 0.2) };
   private pickupMat = { ammo: new THREE.MeshStandardMaterial({ color: 0x556b2f, emissive: 0x3a4a10, emissiveIntensity: 0.6 }), health: new THREE.MeshStandardMaterial({ color: 0xf2f2f2, emissive: 0xaa2020, emissiveIntensity: 0.5 }) };
   private gateAnim = new Map<string, number>();
+  /** Walkable ramps/stairs/podiums/decks with layered navigation (see World.levels). ?flat falls back to the old flat sim. */
+  readonly multiLevel = !new URLSearchParams(location.search).has('flat');
   private lastTod = -1;
   private stationMarkers: THREE.InstancedMesh | null = null;
   private clickHint: HTMLElement | null = null;
@@ -118,6 +124,7 @@ export class Game {
     const trees = new TreeSystem(tex.bark);
     const builder = new CampusBuilder(tex, trees, this.q);
     this.campus = builder.build();
+    for (const [id, g] of this.campus.gates) this.gateBase(id, g.panels);
     this.engine.scene.add(this.campus.group);
     this.menu.setProgress(0.75, 'Dressing the set…');
     await nextFrame();
@@ -132,7 +139,7 @@ export class Game {
       } catch (err) { console.warn('[props] failed, continuing without', err); }
     }
     this.menu.setProgress(0.85, 'Lighting…');
-    this.sky = new Sky(this.engine.renderer, this.engine.scene, this.q.shadowMapSize, this.q.shadowDistance);
+    this.sky = new Sky(this.engine.renderer, this.engine.scene, this.q.shadowMapSize, this.q.shadowDistance, { low: 4, medium: 6, high: 8, ultra: 10 }[this.settings.quality], { low: 0.35, medium: 0.42, high: 0.5, ultra: 0.6 }[this.settings.quality]);
     this.sky.setTime(0.02);
     this.post = new Post(this.engine.renderer, this.engine.scene, this.engine.camera, this.q);
     this.engine.onResize = (w, h) => this.post.setSize(w, h);
@@ -181,7 +188,7 @@ export class Game {
     }
     // reset collision state of gates (in case of restart)
     for (const [, g] of this.campus.gates) g.prismIds.forEach((id) => this.campus.collision.setPrismEnabled(id, true));
-    const world = new World(this.campus.collision, { maxZombies: this.q.maxZombies, difficulty: 1 });
+    const world = new World(this.campus.collision, { maxZombies: this.q.maxZombies, difficulty: 1, multiLevel: this.multiLevel });
     const gp = new Map<string, number[]>();
     for (const [id, g] of this.campus.gates) gp.set(id, g.prismIds);
     world.init(gp);
@@ -275,8 +282,8 @@ export class Game {
     this.world = null;
     this.chars.sync({ survivors: [], zombies: [] } as unknown as World, 1, 0, this.engine.camera.position);
     // restore gates visually
-    for (const [id, g] of this.campus.gates) {
-      g.panels.forEach((p, i) => { p.position.copy(g.closedPos[i]); p.rotation.x = 0; p.rotation.z = 0; });
+    for (const [id] of this.campus.gates) {
+      this.poseGate(id, 0);
       this.gateAnim.set(id, 0);
     }
     this.hud.show(false);
@@ -329,6 +336,7 @@ export class Game {
       this.sky.follow(pp);
       this.setTime(w.timeOfDay);
       this.fx?.update(dt);
+      this.sky.prepare(this.engine.camera);
       this.post.render(dt, p.alive ? THREE.MathUtils.clamp(1 - p.health / 40, 0, 1) : 1);
     } else {
       this.menuT += dt;
@@ -336,6 +344,7 @@ export class Game {
       this.sky.follow(this.engine.camera.position);
       this.setTime(0.06);
       this.fx?.update(dt);
+      this.sky.prepare(this.engine.camera);
       this.post.render(dt, 0);
     }
     for (const u of this.campus.updatables) u(dt, this.lastTod);
@@ -361,6 +370,8 @@ export class Game {
     if (Math.abs(t - this.lastTod) < 0.002) return;
     this.lastTod = t;
     this.sky.setTime(t);
+    // time-of-day exposure (dusk/night lift) at 60% of the keyframe curve: keeps the mood, keeps nights readable
+    this.post.setExposure(1 + (this.sky.exposure - 1) * 0.6);
     this.post.setNight(worldUniforms.uNight.value);
     this.fx?.setNight?.(worldUniforms.uNight.value);
   }
@@ -378,30 +389,43 @@ export class Game {
     if (Math.abs(cam.fov - 55) > 0.1) { cam.fov = 55; cam.updateProjectionMatrix(); }
   }
 
+  /** Base (closed) orientation of every gate leaf, captured once at boot: the animation always starts from it. */
+  private gateBaseQuat = new Map<string, THREE.Quaternion[]>();
+
+  private gateBase(id: string, panels: THREE.Object3D[]): THREE.Quaternion[] {
+    let q = this.gateBaseQuat.get(id);
+    if (!q) this.gateBaseQuat.set(id, (q = panels.map((p) => p.quaternion.clone())));
+    return q;
+  }
+
+  /** Pose the gate leaves from scratch: cur 0 = shut, 1 = knocked flat toward the campus. */
+  private poseGate(id: string, cur: number, shake = 0): void {
+    const vis = this.campus.gates.get(id);
+    const def = GATES.find((g) => g.id === id);
+    if (!vis || !def) return;
+    const base = this.gateBase(id, vis.panels);
+    const [ix, iz] = gateInward(def.a, def.b);
+    vis.panels.forEach((panel, i) => {
+      const fall = cur * (Math.PI / 2 - 0.05) * (i % 2 ? 1 : 0.92);
+      // the leaf's local +Z after its base yaw decides which way a +X tilt topples it; always topple inward
+      _gateZ.set(0, 0, 1).applyQuaternion(base[i]);
+      const sign = _gateZ.x * ix + _gateZ.z * iz >= 0 ? 1 : -1;
+      panel.quaternion.copy(base[i]).multiply(_gateQ.setFromAxisAngle(_gateX, sign * fall));
+      panel.position.copy(vis.closedPos[i]);
+      panel.position.x += ix * (Math.sin(fall) * 1.1) + shake;
+      panel.position.z += iz * (Math.sin(fall) * 1.1);
+    });
+  }
+
   private updateGates(dt: number, w: World): void {
     for (const g of w.gates) {
-      const vis = this.campus.gates.get(g.id);
-      if (!vis) continue;
       const target = g.broken ? 1 : 0;
       let cur = this.gateAnim.get(g.id) ?? 0;
       cur += (target - cur) * Math.min(1, dt * (g.broken ? 3 : 5));
+      if (Math.abs(target - cur) < 1e-3) cur = target;
       this.gateAnim.set(g.id, cur);
-      const shake = w.time - g.lastHitT < 0.15 ? (Math.random() - 0.5) * 0.04 : 0;
-      vis.panels.forEach((panel, i) => {
-        const base = vis.closedPos[i];
-        panel.position.copy(base);
-        // broken: panels knocked flat inward (toward the campus, -X for the main gate)
-        panel.rotation.z = 0;
-        panel.rotation.x = 0;
-        const fall = cur * (Math.PI / 2 - 0.05) * (i % 2 ? 1 : 0.92);
-        panel.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), 0);
-        panel.position.x += -Math.sin(fall) * 1.1 + shake;
-        panel.position.y = Math.max(0, Math.cos(fall) * 0) ;
-        panel.rotation.set(0, panel.rotation.y, 0);
-        panel.rotateX(0);
-        // tilt around the gate line: use local X axis (panel's length axis)
-        panel.rotateOnAxis(new THREE.Vector3(1, 0, 0), g.id === 'main' ? fall : -fall);
-      });
+      const shake = !g.broken && w.time - g.lastHitT < 0.15 ? (Math.random() - 0.5) * 0.04 : 0;
+      this.poseGate(g.id, cur, shake);
     }
   }
 
@@ -416,7 +440,7 @@ export class Game {
         this.engine.scene.add(m);
         this.pickupMeshes.set(pk.id, m);
       }
-      m.position.set(pk.pos.x, 0.45 + Math.sin(w.time * 3 + pk.id) * 0.1, pk.pos.z);
+      m.position.set(pk.pos.x, pk.pos.y + 0.45 + Math.sin(w.time * 3 + pk.id) * 0.1, pk.pos.z);
       m.rotation.y += dt * 2;
       m.visible = pk.ttl > 5 || Math.sin(w.time * 12) > 0;
     }
@@ -430,7 +454,7 @@ export class Game {
     const m4 = new THREE.Matrix4();
     const col = new THREE.Color();
     STATIONS.forEach((s, i) => {
-      m4.makeTranslation(s.pos[0], 0.08, s.pos[1]);
+      m4.makeTranslation(s.pos[0], (this.multiLevel ? s.y ?? 0 : 0) + 0.08, s.pos[1]);
       mesh.setMatrixAt(i, m4);
       col.set(s.kind === 'ammo' ? 0xf2b233 : s.kind === 'health' ? 0xe5484d : 0x46c46e).multiplyScalar(2);
       mesh.setColorAt(i, col);

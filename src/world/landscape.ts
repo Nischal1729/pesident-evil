@@ -2,59 +2,92 @@ import * as THREE from 'three';
 import { hash2, pointInPoly, polylineToStrip, rng, samplePolyline } from './geom';
 import { col, type DetailKey, type WorldKit } from './kit';
 import { AREAS, GLOBE_POS, LOW_WALLS, PATHS, ROADS, type V2 } from './layout';
-import { grassTuftTexture } from './materials';
-import { windify, type TreeSpecies } from './trees';
+import type { TreeSpecies } from './trees';
+import { foliageMaterial, fountainGrassGeometry, frondShrubGeometry, hedgeCardGeometry, leafyShrubGeometry } from './vegetation/shrubs';
 
 // ------------------------------------------------------------------------------------------------ small reusable pieces
 
 /** Black cube planter with a cycad / dracaena (instanced) + collision. */
-export function planterCube(kit: WorldKit, x: number, z: number, size = 0.8): void {
+export function planterCube(kit: WorldKit, x: number, z: number, size = 0.8, y = 0): void {
   const s = kit.instSet('planterCube', () => ({
     geo: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
     mat: new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.35, metalness: 0.15 }),
   }));
-  kit.addInst(s, new THREE.Vector3(x, 0, z), 0, size);
-  cycad(kit, x, size, z, 0.9 + hash2(x * 3, z * 7) * 0.3);
-  kit.collision.addCircle(x, z, size * 0.66, size, 'concrete', 'planter');
+  kit.addInst(s, new THREE.Vector3(x, y, z), 0, size);
+  cycad(kit, x, y + size, z, 0.9 + hash2(x * 3, z * 7) * 0.3);
+  kit.collision.addCircle(x, z, size * 0.66, y + size, 'concrete', 'planter');
 }
 
-function cycadGeometry(): THREE.BufferGeometry {
-  const pos: number[] = [], nrm: number[] = [], colr: number[] = [], idx: number[] = [];
-  const r = rng(77);
-  const blades = 16;
-  for (let i = 0; i < blades; i++) {
-    const a = (i / blades) * Math.PI * 2 + r() * 0.3;
-    const up = 0.35 + r() * 0.9; // elevation of the blade
-    const L = 0.55 + r() * 0.35, w = 0.06;
-    const dx = Math.cos(a), dz = Math.sin(a);
-    const sx = -dz * w, sz = dx * w;
-    const mid = [dx * L * 0.5 * Math.cos(up), L * 0.5 * Math.sin(up) + 0.05, dz * L * 0.5 * Math.cos(up)];
-    const tip = [dx * L * Math.cos(up * 0.7), L * Math.sin(up * 0.7) * 0.9, dz * L * Math.cos(up * 0.7)];
-    const o = pos.length / 3;
-    const pts = [[-sx * 0.5, 0.02, -sz * 0.5], [sx * 0.5, 0.02, sz * 0.5], [mid[0] + sx, mid[1], mid[2] + sz], [mid[0] - sx, mid[1], mid[2] - sz], [tip[0], tip[1], tip[2]]];
-    const cols = [[0.16, 0.3, 0.1], [0.16, 0.3, 0.1], [0.42, 0.55, 0.16], [0.36, 0.5, 0.14], [0.66, 0.68, 0.3]];
-    pts.forEach((p, k) => { pos.push(p[0], p[1], p[2]); nrm.push(dx * 0.3, 0.9, dz * 0.3); colr.push(cols[k][0], cols[k][1], cols[k][2]); });
-    idx.push(o, o + 1, o + 2, o, o + 2, o + 3, o + 3, o + 2, o + 4);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
-  g.setIndex(idx);
-  return g;
+/** Leaf tint for a shrub clump (mostly greens, a few yellow-green / dark). */
+function shrubTint(h: number): THREE.Color {
+  const b = 0.82 + h * 0.3;
+  return h < 0.12 ? new THREE.Color(1.15, 1.2, 0.7) : new THREE.Color(b * (0.95 + h * 0.1), b, b * (1.05 - h * 0.15));
 }
 
-/** Cycad / dracaena clump (instanced). */
-export function cycad(kit: WorldKit, x: number, y: number, z: number, scale = 1): void {
-  const s = kit.instSet('cycad', () => ({ geo: cycadGeometry(), mat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide }), cast: false }));
-  kit.addInst(s, new THREE.Vector3(x, y, z), hash2(x * 11, z * 5) * Math.PI * 2, scale);
+/** Purple heart (Tradescantia pallida) / maroon ground-cover tint for cycad(). */
+export const PURPLE_HEART = new THREE.Color(1.9, 0.5, 1.6);
+/** Maroon Iresine / Acalypha ground-cover tint. */
+export const MAROON_LEAF = new THREE.Color(1.8, 0.42, 0.45);
+
+/**
+ * Shrub clump (instanced): cycad / fern / dracaena fronds, or (about a third, by position hash) a rounded leafy
+ * shrub, so planted beds read as mixed planting. `tint` multiplies the leaf colour (e.g. PURPLE_HEART).
+ */
+export function cycad(kit: WorldKit, x: number, y: number, z: number, scale = 1, tint?: THREE.Color): void {
+  const h = hash2(x * 11, z * 5);
+  const leafy = hash2(x * 5.3 + 1, z * 3.1) < 0.35;
+  const s = leafy
+    ? kit.instSet('shrubLeafy', () => ({ geo: leafyShrubGeometry(), mat: foliageMaterial('shrub'), cast: false, colored: true }))
+    : kit.instSet('cycad', () => ({ geo: frondShrubGeometry(), mat: foliageMaterial('shrub'), cast: false, colored: true }));
+  kit.addInst(s, new THREE.Vector3(x, y, z), h * Math.PI * 2, scale * (leafy ? 0.95 : 1), tint ?? shrubTint(h));
 }
 
-/** A hedge / shrub box along a segment (hedge texture, slightly lumpy top via two boxes). */
+/**
+ * A hedge / shrub box along a segment: an inset core box (hedge texture) wrapped in instanced leaf-cluster cards on
+ * the top and both sides, so the silhouette is leafy rather than boxy. key: 'hedge' green, 'lime' golden-lime,
+ * 'murraya' dark green with white flowers.
+ */
 export function hedgeBox(kit: WorldKit, key: DetailKey, a: V2, b: V2, y0: number, y1: number, thick: number): void {
   const tint = col('#ffffff').multiplyScalar(0.92 + hash2(a[0], a[1]) * 0.12);
-  kit.segBox(key, a, b, y0, y1, thick, tint, 0, 0.1, 0.5);
-  kit.segBox(key, a, b, y1 - 0.05, y1 + 0.18, thick * 0.72, tint, 0, -0.3, 0.5);
+  kit.segBox(key, a, b, y0, y1 - 0.06, thick * 0.8, tint, 0, 0.02, 0.5);
+  kit.segBox(key, a, b, y1 - 0.12, y1 + 0.04, thick * 0.6, tint, 0, -0.3, 0.5);
+  const set = kit.instSet('hedgeFluff', () => ({ geo: hedgeCardGeometry(), mat: foliageMaterial('hedge'), cast: false, colored: true }));
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (L < 0.05) return;
+  const dx = (b[0] - a[0]) / L, dz = (b[1] - a[1]) / L;
+  const base = key === 'lime' ? new THREE.Color(1.3, 1.4, 0.55) : key === 'murraya' ? new THREE.Color(0.95, 1.02, 0.95) : new THREE.Color(0.8, 0.92, 0.8);
+  const r = rng(Math.floor(a[0] * 131 + a[1] * 17 + y0 * 7) >>> 0);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), zAxis = new THREE.Vector3(), xAxis = new THREE.Vector3(), yAxis = new THREE.Vector3();
+  const card = (px: number, py: number, pz: number, nx: number, ny: number, nz: number, size: number) => {
+    zAxis.set(nx + (r() - 0.5) * 1.1, ny + (r() - 0.5) * 0.9, nz + (r() - 0.5) * 1.1).normalize();
+    xAxis.set(0, 1, 0).cross(zAxis);
+    if (xAxis.lengthSq() < 1e-3) xAxis.set(dx, 0, dz);
+    xAxis.normalize();
+    yAxis.crossVectors(zAxis, xAxis);
+    m.makeBasis(xAxis, yAxis, zAxis);
+    q.setFromRotationMatrix(m).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), r() * Math.PI * 2));
+    m.compose(new THREE.Vector3(px, py, pz), q, new THREE.Vector3(size, size, size));
+    kit.addInstMatrix(set, m.clone(), base.clone().multiplyScalar(0.88 + r() * 0.24));
+  };
+  const rows = Math.max(1, Math.round(thick / 0.45));
+  for (let s = 0.15; s <= L - 0.1; s += 0.36) {
+    for (let k = 0; k < rows; k++) {
+      const o = ((k + 0.5) / rows - 0.5) * thick * 0.8 + (r() - 0.5) * 0.12;
+      const t = s + (r() - 0.5) * 0.15;
+      card(a[0] + dx * t - dz * o, y1 + 0.06 + r() * 0.1, a[1] + dz * t + dx * o, 0, 1, 0, 0.5 + r() * 0.2);
+    }
+  }
+  const vr = Math.max(1, Math.round((y1 - y0) / 0.42));
+  for (const side of [-1, 1]) {
+    for (let s = 0.2; s <= L - 0.1; s += 0.4) {
+      for (let k = 0; k < vr; k++) {
+        const y = y0 + ((k + 0.65) / vr) * (y1 - y0) + (r() - 0.5) * 0.08;
+        const t = s + (r() - 0.5) * 0.15;
+        const o = side * (thick * 0.42 + 0.06 + r() * 0.08);
+        card(a[0] + dx * t - dz * o, y, a[1] + dz * t + dx * o, -dz * side, 0.55, dx * side, 0.5 + r() * 0.18);
+      }
+    }
+  }
 }
 
 /** Tree through the campus tree hook. */
@@ -64,34 +97,9 @@ export function sapling(kit: WorldKit, x: number, z: number, sp: TreeSpecies = '
 
 // ------------------------------------------------------------------------------------------------ fountain grass
 
+/** Fountain-grass mound (instanced; leaf atlas + wind). */
 function tuftSet(kit: WorldKit) {
-  return kit.instSet('grassTuft', () => {
-    const q1 = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
-    const q2 = q1.clone().rotateY(Math.PI / 2);
-    const q3 = q1.clone().rotateY(Math.PI / 4);
-    const merged = mergeGeos([q1, q2, q3]);
-    const mat = new THREE.MeshStandardMaterial({ map: grassTuftTexture(), alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.9 });
-    windify(mat, 0.08);
-    return { geo: merged, mat, cast: false, colored: true };
-  });
-}
-
-function mergeGeos(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], idx: number[] = [];
-  let off = 0;
-  for (const g of geos) {
-    const p = g.attributes.position as THREE.BufferAttribute, n = g.attributes.normal as THREE.BufferAttribute, u = g.attributes.uv as THREE.BufferAttribute;
-    for (let i = 0; i < p.count; i++) { pos.push(p.getX(i), p.getY(i), p.getZ(i)); nrm.push(0, 1, 0); uv.push(u.getX(i), u.getY(i)); }
-    for (let i = 0; i < g.index!.count; i++) idx.push(g.index!.getX(i) + off);
-    off += p.count;
-    void n;
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  out.setIndex(idx);
-  return out;
+  return kit.instSet('grassTuft', () => ({ geo: fountainGrassGeometry(), mat: foliageMaterial('grass'), cast: false, colored: true }));
 }
 
 /** Raised bed strip along a polyline (offset sideways) filled with fountain-grass tufts. */
@@ -116,8 +124,9 @@ function grassBed(kit: WorldKit, pts: V2[], offset: number, width: number, seed:
     if (opts.avoid && opts.avoid(x, z)) continue;
     if (kit.collision.blocked(x, z, 0.2)) continue;
     const h = 0.7 + r() * 0.6;
-    const tint = opts.tint === 'purple' ? col('#8a4a78') : opts.tint === 'green' ? col('#6f9a3a') : col('#ffffff').multiplyScalar(0.85 + r() * 0.25);
-    kit.addInst(set, new THREE.Vector3(x, 0.05, z), r() * Math.PI, new THREE.Vector3(0.8 + r() * 0.5, h, 0.8 + r() * 0.5), tint);
+    const tint = opts.tint === 'purple' ? new THREE.Color(1.25, 0.62, 0.95) : opts.tint === 'green' ? new THREE.Color(0.8, 1.0, 0.75) : col('#ffffff').multiplyScalar(0.85 + r() * 0.25);
+    const w = 0.75 + r() * 0.35;
+    kit.addInst(set, new THREE.Vector3(x, 0.05, z), r() * Math.PI * 2, new THREE.Vector3(w, h, w * (0.9 + r() * 0.2)), tint);
   }
 }
 
@@ -162,7 +171,7 @@ export function buildLandscape(kit: WorldKit): void {
   for (let x = 108; x < 150; x += 7) {
     const zc = walkPathZ(walkway.pts, x) - walkway.width / 2 - 1.0;
     kit.buf('stone', x, zc).flatPoly([[x - 1.2, zc - 0.6], [x + 1.2, zc - 0.6], [x + 1.2, zc + 0.6], [x - 1.2, zc + 0.6]], 0.075, col('#4c2438'), 2);
-    for (let k = 0; k < 4; k++) cycad(kit, x - 0.9 + k * 0.6, 0.05, zc + (k % 2 ? 0.2 : -0.2), 0.7);
+    for (let k = 0; k < 4; k++) cycad(kit, x - 0.9 + k * 0.6, 0.05, zc + (k % 2 ? 0.2 : -0.2), 0.7, PURPLE_HEART);
   }
   // raised planter wall with a white-flowering hedge on the south side of the walkway (gaps for access)
   const wallRuns: [number, number][] = [[106, 116], [121, 131], [136, 144]];
@@ -197,7 +206,14 @@ export function buildLandscape(kit: WorldKit): void {
       const rr = 1.2 + r() * 1.4;
       const ring: V2[] = [];
       for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; ring.push([x + Math.cos(a) * rr * 1.3, z + Math.sin(a) * rr]); }
-      kit.buf('stone', x, z).flatPoly(ring, 0.07, r() < 0.6 ? col('#4f2744') : col('#6b1f2e'), 2);
+      const purple = r() < 0.6;
+      kit.buf('stone', x, z).flatPoly(ring, 0.07, purple ? col('#4f2744') : col('#6b1f2e'), 2);
+      // low purple-heart / maroon ground cover filling the bed
+      const pr = rng(i * 97 + 13);
+      for (let k = 0; k < rr * rr * 3.2; k++) {
+        const a = pr() * Math.PI * 2, d = Math.sqrt(pr()) * 0.85;
+        cycad(kit, x + Math.cos(a) * rr * 1.3 * d, 0.07, z + Math.sin(a) * rr * d, 0.4 + pr() * 0.2, purple ? PURPLE_HEART : MAROON_LEAF);
+      }
     }
   }
   // globe bed: low granite ring planter + shrubs; the globe (its own plinth) is placed by Props
@@ -259,18 +275,7 @@ function walkPathZ(pts: V2[], x: number): number {
 // ------------------------------------------------------------------------------------------------ sheds and shelters
 function shelters(kit: WorldKit): void {
   const white = col('#f1f1ee'), steel = col('#6f757b');
-  // bike parking canopy: white flat roof on slim posts over the bike yard
-  {
-    const x0 = 134.5, x1 = 150.5, z0 = -106.5, z1 = -97.5, h = 3.4;
-    kit.box('plaster', (x0 + x1) / 2, h + 0.15, (z0 + z1) / 2, x1 - x0 + 1, 0.3, z1 - z0 + 1, 0, white);
-    kit.box('metal', (x0 + x1) / 2, h - 0.1, (z0 + z1) / 2, x1 - x0, 0.2, 0.2, 0, steel);
-    for (let x = x0; x <= x1 + 0.01; x += 4) for (const z of [z0, z1]) {
-      kit.box('metal', x, h / 2, z, 0.14, h, 0.14, 0, steel);
-      kit.collision.addCircle(x, z, 0.15, h, 'metal', 'post');
-    }
-    // painted parking bays
-    for (let x = x0 + 1; x < x1; x += 1.2) kit.box('stone', x, 0.06, (z0 + z1) / 2, 0.06, 0.01, z1 - z0 - 1.5, 0, col('#e8e8e2'));
-  }
+  // (the old single-storey bike canopy is replaced by the 2-level 2-wheeler parking, src/world/gjb/parking.ts)
   // steel mesh shelter on a raised plinth near the gate walkway
   {
     const x0 = 145.5, x1 = 155.3, z0 = -117.2, z1 = -111.2, h = 3.2;

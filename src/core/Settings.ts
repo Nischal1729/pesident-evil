@@ -26,13 +26,15 @@ export interface QualityProfile {
   characterShadowDistance: number;
   animLodNear: number;
   dynamicLights: number;
+  /** World material detail: 0 = flat glass / single-sample roads, 1 = interior-mapped windows, 2 = + furniture, full detail. */
+  materialDetail?: number;
 }
 
 export const QUALITY: Record<Quality, QualityProfile> = {
-  low: { pixelRatio: 0.75, shadowMapSize: 1024, shadowDistance: 45, ao: false, aoHalfRes: true, bloom: false, smaa: false, viewDistance: 260, maxZombies: 35, treeDensity: 0.5, characterShadowDistance: 0, animLodNear: 15, dynamicLights: 2 },
-  medium: { pixelRatio: 1, shadowMapSize: 2048, shadowDistance: 60, ao: true, aoHalfRes: true, bloom: true, smaa: true, viewDistance: 380, maxZombies: 50, treeDensity: 0.8, characterShadowDistance: 18, animLodNear: 25, dynamicLights: 4 },
-  high: { pixelRatio: Math.min(window.devicePixelRatio, 1.5), shadowMapSize: 4096, shadowDistance: 75, ao: true, aoHalfRes: true, bloom: true, smaa: true, viewDistance: 500, maxZombies: 70, treeDensity: 1, characterShadowDistance: 30, animLodNear: 35, dynamicLights: 6 },
-  ultra: { pixelRatio: Math.min(window.devicePixelRatio, 2), shadowMapSize: 4096, shadowDistance: 95, ao: true, aoHalfRes: false, bloom: true, smaa: true, viewDistance: 650, maxZombies: 90, treeDensity: 1, characterShadowDistance: 45, animLodNear: 50, dynamicLights: 8 },
+  low: { pixelRatio: 0.75, shadowMapSize: 1024, shadowDistance: 45, ao: false, aoHalfRes: true, bloom: false, smaa: false, viewDistance: 260, maxZombies: 35, treeDensity: 0.5, characterShadowDistance: 0, animLodNear: 15, dynamicLights: 2, materialDetail: 0 },
+  medium: { pixelRatio: 1, shadowMapSize: 2048, shadowDistance: 60, ao: true, aoHalfRes: true, bloom: true, smaa: true, viewDistance: 380, maxZombies: 50, treeDensity: 0.8, characterShadowDistance: 18, animLodNear: 25, dynamicLights: 4, materialDetail: 1 },
+  high: { pixelRatio: Math.min(window.devicePixelRatio, 1.5), shadowMapSize: 4096, shadowDistance: 75, ao: true, aoHalfRes: true, bloom: true, smaa: true, viewDistance: 500, maxZombies: 70, treeDensity: 1, characterShadowDistance: 30, animLodNear: 35, dynamicLights: 6, materialDetail: 2 },
+  ultra: { pixelRatio: Math.min(window.devicePixelRatio, 2), shadowMapSize: 4096, shadowDistance: 95, ao: true, aoHalfRes: false, bloom: true, smaa: true, viewDistance: 650, maxZombies: 90, treeDensity: 1, characterShadowDistance: 45, animLodNear: 50, dynamicLights: 8, materialDetail: 2 },
 };
 
 const DEFAULTS: Settings = {

@@ -1,4 +1,4 @@
-"""PESU: Dead Semester - character pipeline (Blender 5.2, headless).
+"""Pesident Evil - character pipeline (Blender 5.2, headless).
 
 Builds public/models/characters/{male,female}.glb (+ *_lod.glb) from the CC0 Quaternius packs in
 tools/blender/_downloads/ (Universal Base Characters [Standard], Universal Animation Library 1 & 2
@@ -1351,7 +1351,7 @@ def foot_speed(poses):
         if zmin > 0.08:
             continue
         for a, b in zip(P, P[1:]):
-            if a.z < zmin + 0.012 and b.z < zmin + 0.012:
+            if a.z < zmin + 0.02 and b.z < zmin + 0.02:
                 v = (b - a) * FPS
                 v.z = 0
                 vels.append(v.length)
@@ -1916,7 +1916,13 @@ def bat_swing(rest_pose, finger_src, ctx, dur=0.8):
             q1 = -q1
         M = q0.slerp(q1, u).to_matrix()
         p = rest_pose.copy()
+        feet = {sd: (p.X(sd + 'Foot'), p.W(sd + 'Foot'), p.W(sd + 'ToeBase'), p.X(sd + 'Leg') - p.X(sd + 'UpLeg'))
+                for sd in ('Left', 'Right')}
         p.rotate_world('Hips', Matrix.Rotation(yaw * 0.3, 3, 'Z'))
+        for sd, (ank, Wf, Wt, kd) in feet.items():
+            leg_ik(p, sd, ank, kd + Vector((0, -0.6, 0)))
+            p.set_W(sd + 'Foot', Wf)
+            p.set_W(sd + 'ToeBase', Wt)
         spine_bend(p, yaw=yaw * 0.7, pitch=rad(6) * math.sin(math.pi * clamp(t / dur, 0, 1)))
         head_turn(p, yaw=-yaw * 0.6)
         bat_hold(p, ctx, C + off, M)
@@ -2040,8 +2046,7 @@ def zombie_run(jog, ctx, speed=0.83):
     for i, p in enumerate(src):
         q = p.copy()
         ph = 2 * math.pi * i / (n - 1)
-        q.rotate_world('Hips', Matrix.Rotation(-rad(10), 3, 'X'))
-        spine_bend(q, pitch=rad(20), roll=rad(5) * math.sin(ph))
+        spine_bend(q, pitch=rad(28), roll=rad(5) * math.sin(ph))
         head_turn(q, pitch=rad(-34), roll=rad(7) * math.sin(ph + 1.0))
         for side in ('Left', 'Right'):
             sg = 1 if side == 'Left' else -1

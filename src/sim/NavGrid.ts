@@ -5,6 +5,15 @@ import { distToSegment } from '../world/geom';
 
 export type FieldKind = 'zombie' | 'player';
 
+/** What the simulation needs from a navigation backend (flat NavGrid or multi-level LayeredNav). */
+export interface Nav {
+  build(col: StaticCollision, gates: GateDef[]): void;
+  setGateClosed(gi: number, closed: boolean): void;
+  request(kind: FieldKind, targets: { x: number; y?: number; z: number }[], maxCost?: number): void;
+  isBlocked(x: number, z: number, y?: number): boolean;
+  descend(kind: FieldKind, x: number, z: number, out: { x: number; z: number }, y?: number): number;
+}
+
 /**
  * 1 m navigation grid + asynchronous flow fields (Web Worker, double-buffered).
  * 'zombie' field: distance to nearest survivor. 'player' field: distance to the local player (NPC following).
@@ -83,7 +92,7 @@ export class NavGrid {
   }
 
   /** Request a new field toward the given world-space target points. */
-  request(kind: FieldKind, targets: { x: number; z: number }[], maxCost = 60000): void {
+  request(kind: FieldKind, targets: { x: number; y?: number; z: number }[], maxCost = 60000): void {
     if (this.busy.get(kind)) return;
     const t = new Float32Array(targets.length * 2);
     targets.forEach((p, i) => { t[i * 2] = p.x - this.minX; t[i * 2 + 1] = p.z - this.minZ; });
@@ -107,7 +116,7 @@ export class NavGrid {
     return this.fields.get(kind)![j * this.w + i];
   }
 
-  isBlocked(x: number, z: number): boolean {
+  isBlocked(x: number, z: number, _y = 0): boolean {
     const i = Math.floor(x - this.minX), j = Math.floor(z - this.minZ);
     if (i < 0 || j < 0 || i >= this.w || j >= this.h) return true;
     return this.grid[j * this.w + i] === 1;
@@ -124,7 +133,7 @@ export class NavGrid {
    * Direction of steepest descent at (x,z). Writes into out {x,z}; returns the next cell's gate index or -1,
    * or -2 if no route.
    */
-  descend(kind: FieldKind, x: number, z: number, out: { x: number; z: number }): number {
+  descend(kind: FieldKind, x: number, z: number, out: { x: number; z: number }, _y = 0): number {
     const f = this.fields.get(kind)!;
     const w = this.w;
     let i = Math.floor(x - this.minX), j = Math.floor(z - this.minZ);

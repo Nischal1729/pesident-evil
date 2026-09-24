@@ -1,6 +1,9 @@
 """
 Pesident Evil -- procedural campus prop generator (Blender 5.2, headless).
 
+SUPERSEDED by tools/props/build.py (realistic baked-atlas props with LODs). This legacy flat-colour generator would
+overwrite them, so it only runs with an explicit `--legacy` argument.
+
 Run from the project root:
     /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P tools/blender/props.py
     ... -P tools/blender/props.py -- auto_rickshaw bench     (build a subset)
@@ -14,6 +17,9 @@ Contract (docs/ARCHITECTURE.md, "Props"): origin at the base centre (ground y = 
 Design coordinates below are Blender: +X = prop's left when looking at its front, -Y = front, +Z = up.
 """
 import bpy, bmesh, math, os, sys, subprocess, time
+if '--legacy' not in sys.argv:
+    print('tools/blender/props.py is superseded by tools/props/build.py; pass --legacy to run it anyway')
+    sys.exit(0)
 from mathutils import Vector, Matrix, Euler
 
 # ==== BEGIN COMMON (identical in weapons.py and props.py so each script is standalone) ====

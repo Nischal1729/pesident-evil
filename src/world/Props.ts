@@ -4,7 +4,9 @@ import type { SurfaceKind } from '../core/Events';
 import type { QualityProfile } from '../core/Settings';
 import { StaticCollision } from '../sim/Collision';
 import { distToSegment, pointInPoly, polylineToStrip, rng, samplePolyline } from './geom';
-import { AREAS, BUILDINGS, GATES, GLOBE_POS, ORR, orrPoint, PLAYER_SPAWN, ROADS, SPAWN_ZONES, STATIONS, type GateDef, type StationDef, type V2 } from './layout';
+import { AREAS, BUILDINGS, GATES, GLOBE_POS, ORR, orrPoint, PLAYER_SPAWN, QUAD, ROADS, SPAWN_ZONES, STATIONS, type GateDef, type StationDef, type V2 } from './layout';
+import { parkingSlots } from './gjb/parking';
+import { injectWorldLighting } from './materials';
 
 /**
  * Prop dressing for the campus and the Outer Ring Road.
@@ -25,18 +27,19 @@ export interface PropsBuild {
 
 const MODEL_DIR = `${import.meta.env.BASE_URL}models/`;
 /**
- * Instancing chunk size, shadow distance and draw distance per prop type. Each chunk is a THREE.LOD:
- * level 0 = InstancedMeshes that cast shadows, level 1 = the same meshes (shared instance buffers) without shadows,
- * last level = nothing. The low evening sun stretches the shadow frustum ~400 m, so this keeps the shadow pass to
- * props near the camera. Distances are measured to the chunk centre (instances switch up to half a cell diagonal early).
+ * Per prop type: [unused (old chunk size), shadow-casting distance m, draw distance m]. Every prop type is one
+ * InstancedProp with per-instance distance bands (see lodLevels): full model with shadows up to the shadow distance,
+ * without shadows up to LOD_DIST, then the `_lod` model, nothing past the draw distance. The low evening sun
+ * stretches the shadow frustum ~400 m, so this keeps the shadow pass to props near the camera.
  */
-/** distance at which protos with a low-poly `far` geometry switch to it */
-const FAR_LOD: Record<string, number> = { car: 45, auto: 40, bike: 20, college_bus: 70, bus: 70, barricade: 40 };
+/** distance (m, camera to instance) at which protos with a low-poly `_lod` model switch to it */
+const LOD_DIST: Record<string, number> = { car: 38, car_sedan: 38, auto: 32, bike: 13, motorbike: 13, college_bus: 60, bus: 60, barricade: 30 };
 const CHUNK: Record<string, [number, number, number]> = {
-  // [cell m, shadow-casting distance m, draw distance m]
-  bike: [32, 18, 120], bench: [48, 35, 120], bin: [40, 25, 95], chair: [40, 0, 80], cooler: [40, 25, 95], ammo: [40, 25, 110],
-  medkit: [40, 0, 80], table: [48, 35, 120], sandbags: [48, 50, 170], barricade: [48, 40, 170], metro: [64, 55, 240],
-  car: [64, 45, 280], auto: [64, 40, 240], bus: [96, 70, 420], college_bus: [96, 70, 380], globe: [128, 120, 420],
+  // [cell m (unused), shadow-casting distance m, draw distance m]; LOD'd types cast shadows only from the full model
+  // (shadow distance = LOD distance), so each costs two bands (≤ 2 draw calls + 1 shadow draw) when in view
+  bike: [32, 13, 120], motorbike: [32, 13, 120], bench: [48, 35, 120], bin: [40, 25, 95], chair: [40, 0, 80], cooler: [40, 25, 95], ammo: [40, 25, 110],
+  medkit: [40, 0, 80], table: [48, 35, 120], sandbags: [48, 50, 170], barricade: [48, 30, 170], metro: [64, 55, 240],
+  car: [64, 38, 280], car_sedan: [64, 38, 280], auto: [64, 32, 240], bus: [96, 60, 420], college_bus: [96, 60, 380], globe: [128, 120, 420],
 };
 const CHUNK_DEFAULT: [number, number, number] = [96, 70, 250];
 const HALF_PI = Math.PI / 2;
@@ -68,8 +71,9 @@ function makeFlatMaterial(): THREE.MeshStandardMaterial {
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vPbr.x;')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vPbr.y;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vPbr.z;');
+    injectWorldLighting(sh); // street-lamp light map at night (materials.ts)
   };
-  m.customProgramCacheKey = () => 'prop_flat_pbr_v1';
+  m.customProgramCacheKey = () => 'prop_flat_pbr_v2';
   return m;
 }
 
@@ -153,6 +157,61 @@ function filterTris(geo: THREE.BufferGeometry, keep: (cx: number, cy: number, cz
 }
 
 // ---------------------------------------------------------------------------------------------
+// Textured props (tools/props/*.py): ONE material per prop with an albedo atlas whose alpha is the per-instance paint
+// mask (car / scooter body), plus an ORM map (R = baked AO, G = roughness, B = metalness).
+// ---------------------------------------------------------------------------------------------
+function makeTexturedMaterial(src: THREE.MeshStandardMaterial, tinted: boolean): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({
+    map: src.map, roughnessMap: src.roughnessMap, metalnessMap: src.metalnessMap, aoMap: src.aoMap, normalMap: src.normalMap,
+    roughness: 1, metalness: 1, aoMapIntensity: 1,
+  });
+  m.name = `prop_tex:${src.name}`;
+  if (src.normalMap) m.normalScale.copy(src.normalScale);
+  if (m.map) m.map.anisotropy = Math.max(m.map.anisotropy, 4);
+  if (tinted) {
+    // instance colour multiplies only where the albedo alpha (paint mask) is set
+    m.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace(
+        '#include <color_fragment>',
+        '#if defined( USE_COLOR )\n\tdiffuseColor.rgb *= mix( vec3( 1.0 ), vColor.rgb, sampledDiffuseColor.a );\n#endif\n\tdiffuseColor.a = 1.0;',
+      );
+      injectWorldLighting(sh);
+    };
+    m.customProgramCacheKey = () => 'prop_tex_tint_v2';
+  }
+  return m;
+}
+
+/** Merge textured primitives into one geometry (position / normal / uv). */
+function mergeTextured(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  let nv = 0, ni = 0;
+  for (const g of geos) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
+  const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), uv = new Float32Array(nv * 2);
+  const idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
+  let vo = 0, io = 0;
+  for (const g of geos) {
+    const P = g.attributes.position as THREE.BufferAttribute, N = g.attributes.normal as THREE.BufferAttribute | undefined, U = g.attributes.uv as THREE.BufferAttribute | undefined;
+    for (let i = 0; i < P.count; i++) {
+      const o = (vo + i) * 3;
+      pos[o] = P.getX(i); pos[o + 1] = P.getY(i); pos[o + 2] = P.getZ(i);
+      if (N) { nrm[o] = N.getX(i); nrm[o + 1] = N.getY(i); nrm[o + 2] = N.getZ(i); } else nrm[o + 1] = 1;
+      if (U) { uv[(vo + i) * 2] = U.getX(i); uv[(vo + i) * 2 + 1] = U.getY(i); }
+    }
+    if (g.index) for (let i = 0; i < g.index.count; i++) idx[io++] = g.index.getX(i) + vo;
+    else for (let i = 0; i < P.count; i++) idx[io++] = vo + i;
+    vo += P.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingBox();
+  out.computeBoundingSphere();
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Prototypes (one per prop type)
 // ---------------------------------------------------------------------------------------------
 interface Part { name: string; geo: THREE.BufferGeometry; mat: THREE.Material; tinted: boolean }
@@ -162,25 +221,28 @@ interface Proto {
   hull: Float32Array; // all vertex positions (for resting tilted props on the ground)
   box: THREE.Box3;
   shadow: 0 | 1 | 2; // 0 never, 1 only on high-res shadow maps, 2 always
-  far: THREE.BufferGeometry | null; // low-poly flat part for distant instances (big primitives only)
+  lodParts: Part[] | null; // low-poly version for distant instances (`<name>_lod.glb`, or a flat material subset)
 }
 
 interface LoadOpts {
-  tint?: string; // material recoloured per instance
-  palette?: Record<string, number>; // material name → replacement base colour (sRGB hex)
+  tint?: string | true; // flat GLBs: material recoloured per instance; textured GLBs: use the albedo-alpha paint mask
+  palette?: Record<string, number>; // flat GLBs: material name → replacement base colour (sRGB hex)
   keep?: (mat: string, cx: number, cy: number, cz: number) => boolean;
   recentre?: boolean;
   shadow?: 0 | 1 | 2;
-  far?: string[]; // materials kept in the distant low-poly LOD
+  far?: string[]; // flat GLBs: materials kept in the distant low-poly LOD
+  lod?: string; // textured GLBs: URL of the `_lod.glb`
 }
 
-async function loadProto(assets: Assets, url: string, name: string, flatMat: THREE.Material, o: LoadOpts = {}): Promise<Proto | null> {
+interface Collected { flat: FlatSrc[]; tex: Map<THREE.Texture, { mat: THREE.MeshStandardMaterial; geos: THREE.BufferGeometry[] }> }
+
+async function collectGltf(assets: Assets, url: string, o: LoadOpts): Promise<Collected | null> {
   const gltf = await assets.gltf(url);
   if (!gltf) return null;
   const root = gltf.scene;
   root.updateMatrixWorld(true);
   const flat: FlatSrc[] = [];
-  const textured = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const tex: Collected['tex'] = new Map();
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -190,35 +252,43 @@ async function loadProto(assets: Assets, url: string, name: string, flatMat: THR
     if (o.keep) geo = filterTris(geo, (x, y, z) => o.keep!(mat.name, x, y, z));
     if (!geo) return;
     if (mat.map) {
-      const l = textured.get(mat) ?? [];
-      l.push(geo);
-      textured.set(mat, l);
+      const e = tex.get(mat.map) ?? { mat, geos: [] };
+      e.geos.push(geo);
+      tex.set(mat.map, e);
       return;
     }
-    const tint = o.tint !== undefined && mat.name === o.tint;
+    const tint = typeof o.tint === 'string' && mat.name === o.tint;
     const color = safeColor(tint ? new THREE.Color(1, 1, 1) : o.palette?.[mat.name] !== undefined ? new THREE.Color(o.palette[mat.name]) : mat.color.clone());
     let emit = 0;
     const e = mat.emissive;
     if (e && Math.max(e.r, e.g, e.b) > 0) emit = (mat.emissiveIntensity ?? 1) * Math.max(e.r, e.g, e.b) / Math.max(1e-3, Math.max(color.r, color.g, color.b));
     flat.push({ geo, color, pbr: [mat.roughness ?? 0.8, mat.metalness ?? 0, emit, tint ? 1 : 0], mat: mat.name });
   });
-  const geos = [...flat.map((f) => f.geo), ...[...textured.values()].flat()];
-  if (!geos.length) return null;
+  return flat.length || tex.size ? { flat, tex } : null;
+}
+
+function partsOf(c: Collected, o: LoadOpts, flatMat: THREE.Material): Part[] {
+  const parts: Part[] = [];
+  if (c.flat.length) parts.push({ name: 'flat', geo: mergeFlat(c.flat), mat: flatMat, tinted: o.tint !== undefined });
+  for (const { mat, geos } of c.tex.values()) {
+    const tinted = o.tint !== undefined;
+    parts.push({ name: 'tex', geo: mergeTextured(geos), mat: makeTexturedMaterial(mat, tinted), tinted });
+  }
+  return parts;
+}
+
+async function loadProto(assets: Assets, url: string, name: string, flatMat: THREE.Material, o: LoadOpts = {}): Promise<Proto | null> {
+  const [c, cl] = await Promise.all([collectGltf(assets, url, o), o.lod ? collectGltf(assets, o.lod, { ...o, keep: undefined }) : Promise.resolve(null)]);
+  if (!c) return null;
+  const geos = [...c.flat.map((f) => f.geo), ...[...c.tex.values()].flatMap((t) => t.geos)];
   if (o.recentre) {
     const b = new THREE.Box3();
     for (const g of geos) { g.computeBoundingBox(); b.union(g.boundingBox!); }
     const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2;
-    for (const g of geos) g.translate(-cx, -b.min.y, -cz);
+    const lodGeos = cl ? [...cl.flat.map((f) => f.geo), ...[...cl.tex.values()].flatMap((t) => t.geos)] : [];
+    for (const g of [...geos, ...lodGeos]) g.translate(-cx, -b.min.y, -cz);
   }
-  const parts: Part[] = [];
-  if (flat.length) parts.push({ name: 'flat', geo: mergeFlat(flat), mat: flatMat, tinted: o.tint !== undefined });
-  // textured primitives (the metro barrier's net) keep their own glTF material and UVs
-  for (const [mat, list] of textured) {
-    list.forEach((g, i) => {
-      g.computeBoundingSphere();
-      parts.push({ name: `${mat.name || 'tex'}${i ? i : ''}`, geo: g, mat, tinted: false });
-    });
-  }
+  const parts = partsOf(c, o, flatMat);
   let nv = 0;
   for (const g of geos) nv += g.attributes.position.count;
   const hull = new Float32Array(nv * 3);
@@ -230,8 +300,194 @@ async function loadProto(assets: Assets, url: string, name: string, flatMat: THR
     g.computeBoundingBox();
     box.union(g.boundingBox!);
   }
-  const farSrc = o.far ? flat.filter((f) => o.far!.includes(f.mat ?? '')) : [];
-  return { name, parts, hull, box, shadow: o.shadow ?? 2, far: farSrc.length ? mergeFlat(farSrc) : null };
+  let lodParts: Part[] | null = cl ? partsOf(cl, o, flatMat) : null;
+  if (!lodParts && o.far) {
+    const farSrc = c.flat.filter((f) => o.far!.includes(f.mat ?? ''));
+    if (farSrc.length) lodParts = [{ name: 'flat', geo: mergeFlat(farSrc), mat: flatMat, tinted: o.tint !== undefined }];
+  }
+  return { name, parts, hull, box, shadow: o.shadow ?? 2, lodParts };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Per-instance LOD instancing
+// ---------------------------------------------------------------------------------------------
+/** One LOD band: instances whose distance to the camera is ≤ maxDist (and > the previous band's) draw with `parts`. */
+export interface LodLevel { parts: Part[]; maxDist: number; shadow: boolean; cull: boolean }
+
+/** Bands for a proto: full model (shadowed / unshadowed) up to lodDist, then the low-poly model, nothing past drawDist. */
+function lodLevels(p: Proto, shadowDist: number, drawDist: number, lodDist: number): LodLevel[] {
+  const out: LodLevel[] = [];
+  const lod = p.lodParts ? Math.min(lodDist, drawDist) : drawDist;
+  if (shadowDist > 0) out.push({ parts: p.parts, maxDist: Math.min(shadowDist, lod), shadow: true, cull: false });
+  if (lod > shadowDist) out.push({ parts: p.parts, maxDist: lod, shadow: false, cull: true });
+  if (p.lodParts && drawDist > lod) {
+    if (shadowDist > lod) out.push({ parts: p.lodParts, maxDist: shadowDist, shadow: true, cull: false });
+    out.push({ parts: p.lodParts, maxDist: drawDist, shadow: false, cull: true });
+  }
+  return out;
+}
+
+let lodCamera: THREE.Camera | null = null;
+const _frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _cv = new THREE.Vector3(), _cq = new THREE.Quaternion(), _sp = new THREE.Sphere();
+
+/**
+ * Instanced prop with per-instance LOD. Every instance is re-sorted into its distance band whenever the camera moves
+ * (≥ 0.5 m or ≥ ~2°), so a row of scooters switches model bike by bike instead of chunk by chunk. Bands that don't
+ * cast shadows are also frustum-culled per instance; shadow-casting bands keep off-screen instances so their shadows
+ * don't pop. Cost: one InstancedMesh (draw call) per band and part, O(instances) CPU per camera move.
+ * The update runs in updateMatrixWorld (before three.js uploads buffers), using the camera captured from the
+ * previous frame's render, so no game-loop hook is needed.
+ *
+ *     const ip = new InstancedProp('bikes', levels, box, true); ip.addInstance(matrix, color); ...; ip.build(); scene.add(ip);
+ */
+export class InstancedProp extends THREE.Group {
+  private mats: number[] = [];
+  private cols: number[] = [];
+  private matArr = new Float32Array(0);
+  private colArr = new Float32Array(0);
+  private cx: number[] = []; private cy: number[] = []; private cz: number[] = []; private cr: number[] = [];
+  private bands: { def: LodLevel; meshes: THREE.InstancedMesh[] }[] = [];
+  private built = false;
+  private last = new Float64Array([NaN, 0, 0, 0, 0, 0, 0]);
+  private bc = new THREE.Vector3();
+  private br = 1;
+  drawCalls = 0;
+
+  constructor(name: string, private levels: LodLevel[], box: THREE.Box3, private tinted: boolean) {
+    super();
+    this.name = name;
+    box.getCenter(this.bc);
+    this.br = Math.max(0.05, box.getSize(new THREE.Vector3()).length() / 2);
+  }
+
+  get instanceCount(): number { return this.cx.length; }
+
+  addInstance(m: THREE.Matrix4, color?: THREE.Color | null): void {
+    const e = m.elements;
+    for (let i = 0; i < 16; i++) this.mats.push(e[i]);
+    const c = color ?? null;
+    this.cols.push(c ? c.r : 1, c ? c.g : 1, c ? c.b : 1);
+    _cv.copy(this.bc).applyMatrix4(m);
+    const s = Math.max(Math.hypot(e[0], e[1], e[2]), Math.hypot(e[4], e[5], e[6]), Math.hypot(e[8], e[9], e[10]));
+    this.cx.push(_cv.x); this.cy.push(_cv.y); this.cz.push(_cv.z); this.cr.push(this.br * s);
+  }
+
+  /** World positions (instance origins) — debugging. */
+  positions(): number[][] {
+    const out: number[][] = [];
+    for (let i = 0; i < this.cx.length; i++) out.push([+this.mats[i * 16 + 12].toFixed(1), +this.mats[i * 16 + 13].toFixed(2), +this.mats[i * 16 + 14].toFixed(1)]);
+    return out;
+  }
+
+  build(): this {
+    const n = this.cx.length;
+    if (!n) return this;
+    this.matArr = new Float32Array(this.mats);
+    this.colArr = new Float32Array(this.cols);
+    this.levels.forEach((def, li) => {
+      const meshes = def.parts.map((p) => {
+        const im = new THREE.InstancedMesh(p.geo, p.mat, n);
+        im.count = 0;
+        im.castShadow = def.shadow;
+        im.receiveShadow = true;
+        im.matrixAutoUpdate = false;
+        im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        if (this.tinted && p.tinted) {
+          im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+          im.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        }
+        im.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 0);
+        im.name = `${this.name}:L${li}:${p.name}`;
+        super.add(im);
+        return im;
+      });
+      this.bands.push({ def, meshes });
+    });
+    this.drawCalls = this.bands.reduce((a, b) => a + b.meshes.length, 0);
+    // camera capture: a no-draw hook object in the render list
+    const hook = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
+    hook.geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0, 0, 0, 0], 3));
+    hook.geometry.setDrawRange(0, 0);
+    hook.frustumCulled = false;
+    hook.name = `${this.name}:lodhook`;
+    hook.onBeforeRender = (_r, _s, cam) => { if ((cam as THREE.PerspectiveCamera).isPerspectiveCamera) lodCamera = cam; };
+    super.add(hook);
+    this.built = true;
+    this.refresh(null);
+    return this;
+  }
+
+  override updateMatrixWorld(force?: boolean): void {
+    super.updateMatrixWorld(force);
+    if (this.built) this.refresh(lodCamera);
+  }
+
+  /** Re-sort instances into bands for this camera (null = everything in the cheapest band, unculled). */
+  refresh(cam: THREE.Camera | null, force = false): void {
+    let px = 0, py = 0, pz = 0;
+    if (cam) {
+      cam.updateMatrixWorld();
+      _cv.setFromMatrixPosition(cam.matrixWorld);
+      cam.getWorldQuaternion(_cq);
+      const L = this.last;
+      const moved = Number.isNaN(L[0]) || (_cv.x - L[0]) ** 2 + (_cv.y - L[1]) ** 2 + (_cv.z - L[2]) ** 2 > 0.25;
+      const turned = Math.abs(_cq.x * L[3] + _cq.y * L[4] + _cq.z * L[5] + _cq.w * L[6]) < 0.99985;
+      if (!force && !moved && !turned) return;
+      L[0] = _cv.x; L[1] = _cv.y; L[2] = _cv.z; L[3] = _cq.x; L[4] = _cq.y; L[5] = _cq.z; L[6] = _cq.w;
+      // camera in this object's space (instances are stored relative to it)
+      _inv.copy(this.matrixWorld).invert();
+      _cv.applyMatrix4(_inv);
+      px = _cv.x; py = _cv.y; pz = _cv.z;
+      _pm.multiplyMatrices((cam as THREE.PerspectiveCamera).projectionMatrix, cam.matrixWorldInverse).multiply(this.matrixWorld);
+      _frustum.setFromProjectionMatrix(_pm);
+    }
+    const nb = this.bands.length;
+    const counts = new Array<number>(nb).fill(0);
+    const mins = Array.from({ length: nb }, () => [Infinity, Infinity, Infinity]);
+    const maxs = Array.from({ length: nb }, () => [-Infinity, -Infinity, -Infinity]);
+    for (let i = 0; i < this.cx.length; i++) {
+      let band = nb - 1;
+      if (cam) {
+        const d = Math.hypot(this.cx[i] - px, (this.cy[i] - py) * 0.5, this.cz[i] - pz) - this.cr[i] * 0.3;
+        band = -1;
+        for (let b = 0; b < nb; b++) if (d <= this.bands[b].def.maxDist) { band = b; break; }
+        if (band < 0) continue;
+        if (this.bands[band].def.cull) {
+          _sp.center.set(this.cx[i], this.cy[i], this.cz[i]);
+          _sp.radius = this.cr[i];
+          if (!_frustum.intersectsSphere(_sp)) continue;
+        }
+      }
+      const k = counts[band]++;
+      for (const im of this.bands[band].meshes) {
+        im.instanceMatrix.array.set(this.matArr.subarray(i * 16, i * 16 + 16), k * 16);
+        if (im.instanceColor) im.instanceColor.array.set(this.colArr.subarray(i * 3, i * 3 + 3), k * 3);
+      }
+      const mn = mins[band], mx = maxs[band], r = this.cr[i];
+      mn[0] = Math.min(mn[0], this.cx[i] - r); mn[1] = Math.min(mn[1], this.cy[i] - r); mn[2] = Math.min(mn[2], this.cz[i] - r);
+      mx[0] = Math.max(mx[0], this.cx[i] + r); mx[1] = Math.max(mx[1], this.cy[i] + r); mx[2] = Math.max(mx[2], this.cz[i] + r);
+    }
+    this.bands.forEach((b, bi) => {
+      const n = counts[bi];
+      for (const im of b.meshes) {
+        // never touch .visible here: N8AO saves/restores visibility around its own scene renders, which also run this
+        // update; an empty band is parked out of every frustum instead
+        im.count = n;
+        if (!n) { im.boundingSphere!.center.set(0, -1e6, 0); im.boundingSphere!.radius = 0; continue; }
+        im.instanceMatrix.clearUpdateRanges();
+        im.instanceMatrix.addUpdateRange(0, n * 16);
+        im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor) {
+          im.instanceColor.clearUpdateRanges();
+          im.instanceColor.addUpdateRange(0, n * 3);
+          im.instanceColor.needsUpdate = true;
+        }
+        const mn = mins[bi], mx = maxs[bi];
+        im.boundingSphere!.center.set((mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2);
+        im.boundingSphere!.radius = Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2;
+      }
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -424,8 +680,8 @@ interface PlaceOpts extends FreeOpts {
 }
 interface Capsule { a: V2; b: V2; hw: number; minX: number; maxX: number; minZ: number; maxZ: number }
 
-const CAR_PAINT = [0xe9e9e6, 0xb9bdc2, 0xa3161a, 0x1f4aa0, 0x5d6166]; // white, silver, red, blue, grey
-const SCOOTER_PAINT = [0xe8e8e4, 0x17181b, 0xa81c1c, 0x1f3f8f, 0x7d8288, 0x5b1a24];
+export const CAR_PAINT = [0xe9e9e6, 0xb9bdc2, 0xa3161a, 0x1f4aa0, 0x5d6166]; // white, silver, red, blue, grey
+export const SCOOTER_PAINT = [0xe8e8e4, 0x17181b, 0xa81c1c, 0x1f3f8f, 0x7d8288, 0x5b1a24];
 
 class Dresser {
   group = new THREE.Group();
@@ -554,9 +810,10 @@ class Dresser {
     this.q.setFromEuler(this.e);
     const s = o.scale ?? 1;
     const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), this.q, new THREE.Vector3(s, s, s));
-    const list = this.sets.get(name) ?? [];
+    const setName = this.variant(name, x, z);
+    const list = this.sets.get(setName) ?? [];
     list.push({ m, x, z, color: o.color !== undefined ? safeColor(new THREE.Color(o.color)) : null });
-    this.sets.set(name, list);
+    this.sets.set(setName, list);
     const P: Placed = { x, z, yaw, cx, cz, w: f.w, l: f.l, h: f.h + (o.y ?? 0), y };
     const sol = o.solid;
     if (sol) {
@@ -578,6 +835,18 @@ class Dresser {
     return P;
   }
 
+  /**
+   * Visual variant of a placed prop (footprint and collision stay the base prop's): ~40 % of the parked scooters are
+   * commuter motorcycles and ~40 % of the cars are sedans. Hashed from the position, so it is deterministic and
+   * independent of placement order.
+   */
+  private variant(name: string, x: number, z: number): string {
+    const h = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
+    if (name === 'bike' && h < 0.4 && this.protos.has('motorbike')) return 'motorbike';
+    if (name === 'car' && h < 0.4 && this.protos.has('car_sedan')) return 'car_sedan';
+    return name;
+  }
+
   addStatic(geo: THREE.BufferGeometry): void { this.staticSrc.push({ geo }); }
 
   protoGeo(name: string): THREE.BufferGeometry | null {
@@ -593,72 +862,15 @@ class Dresser {
     for (const [name, list] of this.sets) {
       const proto = this.protos.get(name);
       if (!proto || !list.length) continue;
-      const [cell, shadowDist, dist] = CHUNK[name] ?? CHUNK_DEFAULT;
+      const [, shadowDist, dist] = CHUNK[name] ?? CHUNK_DEFAULT;
       const casts = shadowsOn && (proto.shadow === 2 || (proto.shadow === 1 && hiShadow)) && shadowDist > 0;
-      const chunks = new Map<string, Inst[]>();
-      for (const it of list) {
-        const k = `${Math.floor(it.x / cell)},${Math.floor(it.z / cell)}`;
-        const c = chunks.get(k) ?? [];
-        c.push(it);
-        chunks.set(k, c);
-      }
-      for (const [k, insts] of chunks) {
-        // chunk origin = mean instance position; instance matrices are stored relative to it
-        let cx = 0, cz = 0;
-        for (const it of insts) { cx += it.x; cz += it.z; }
-        cx /= insts.length; cz /= insts.length;
-        const toLocal = new THREE.Matrix4().makeTranslation(-cx, 0, -cz);
-        const lod = new THREE.LOD();
-        lod.name = `prop:${name}:lod:${k}`;
-        lod.position.set(cx, 0, cz);
-        const near = new THREE.Group(), mid = new THREE.Group(), far = new THREE.Group();
-        const tmp = new THREE.Matrix4();
-        const farDist = proto.far ? FAR_LOD[name] ?? 0 : 0;
-        for (const part of proto.parts) {
-          const im = new THREE.InstancedMesh(part.geo, part.mat, insts.length);
-          insts.forEach((it, i) => {
-            im.setMatrixAt(i, tmp.multiplyMatrices(toLocal, it.m));
-            if (part.tinted) im.setColorAt(i, it.color ?? new THREE.Color(1, 1, 1));
-          });
-          im.instanceMatrix.needsUpdate = true;
-          if (im.instanceColor) im.instanceColor.needsUpdate = true;
-          im.receiveShadow = true;
-          im.computeBoundingSphere();
-          im.matrixAutoUpdate = false;
-          im.updateMatrix();
-          im.name = `prop:${name}:${part.name}:${k}`;
-          // twin without shadows sharing the same GPU instance buffers (only one level is visible at a time)
-          const twin = new THREE.InstancedMesh(part.geo, part.mat, insts.length);
-          twin.instanceMatrix = im.instanceMatrix;
-          twin.instanceColor = im.instanceColor;
-          twin.boundingSphere = im.boundingSphere;
-          twin.receiveShadow = true;
-          twin.matrixAutoUpdate = false;
-          twin.name = `${im.name}:noshadow`;
-          im.castShadow = casts;
-          near.add(im);
-          mid.add(twin);
-          calls++;
-          if (farDist && proto.far && part.name === 'flat') {
-            // distant low-poly version (no shadows), same instance buffers
-            const lo = new THREE.InstancedMesh(proto.far, part.mat, insts.length);
-            lo.instanceMatrix = im.instanceMatrix;
-            lo.instanceColor = im.instanceColor;
-            lo.boundingSphere = im.boundingSphere;
-            lo.receiveShadow = true;
-            lo.matrixAutoUpdate = false;
-            lo.name = `${im.name}:far`;
-            far.add(lo);
-          } else if (farDist) far.add(twin.clone());
-        }
-        lod.addLevel(casts ? near : mid, 0);
-        if (casts && (!farDist || shadowDist < farDist)) lod.addLevel(mid, shadowDist);
-        if (farDist) lod.addLevel(far, Math.max(farDist, casts ? shadowDist : 0));
-        lod.addLevel(new THREE.Object3D(), dist);
-        lod.updateMatrix();
-        this.group.add(lod);
-        instances += insts.length;
-      }
+      const levels = lodLevels(proto, casts ? shadowDist : 0, dist, LOD_DIST[name] ?? Infinity);
+      const ip = new InstancedProp(`prop:${name}`, levels, proto.box, proto.parts.some((p) => p.tinted));
+      for (const it of list) ip.addInstance(it.m, it.color);
+      ip.build();
+      this.group.add(ip);
+      calls += ip.drawCalls;
+      instances += list.length;
     }
     if (this.staticSrc.length) {
       const mesh = new THREE.Mesh(mergeFlat(this.staticSrc), this.flatMat);
@@ -1397,36 +1609,29 @@ class Dresser {
 
   // ------------------------------------------------------------------ GJB courtyard (Quad)
   courtyard(): void {
+    // The Quad is on the GJBC 1st floor (GJB_L1 podium, reference/GJB_NOTES.md): its dressing is lifted to L1 and
+    // forced (the podium prism fills the ground-floor footprint). Decor only for now — TODO: give these collision at
+    // L1 once multi-level movement lands (StaticCollision circles have no base yet).
     const R = rng(1501);
-    const quad = AREAS.find((a) => a.id === 'quad');
-    let minX = 20, maxX = 48, minZ = -80, maxZ = -30;
-    if (quad) {
-      minX = Math.min(...quad.poly.map((p) => p[0])); maxX = Math.max(...quad.poly.map((p) => p[0]));
-      minZ = Math.min(...quad.poly.map((p) => p[1])); maxZ = Math.max(...quad.poly.map((p) => p[1]));
-    }
+    const y = QUAD.floorY;
+    const minX = QUAD.minX - 4, maxX = QUAD.maxX + 4, minZ = QUAD.minZ, maxZ = QUAD.maxZ;
     const cx = (minX + maxX) / 2, w = maxX - minX;
+    const deco = { y, force: true };
     // two rows of benches facing the middle of the Quad (kite-able lanes left between them and the arcades)
     for (const [x, yaw] of [[cx - w * 0.2, HALF_PI], [cx + w * 0.2, -HALF_PI]] as V2[]) {
       for (let z = minZ + 9; z < maxZ - 6; z += 9) {
-        const p = this.place('bench', x, z, yaw + (R() - 0.5) * 0.05, { margin: 0.2, solid: { shape: 'rect', surface: 'wood' } });
-        if (p && R() < 0.45) {
+        this.place('bench', x, z, yaw + (R() - 0.5) * 0.05, deco);
+        if (R() < 0.45) {
           const [bx, bz] = local(x, z, yaw, (R() < 0.5 ? -1 : 1) * 1.35, 0.1);
-          this.place('bin', bx, bz, R() * 6, { margin: 0.05, solid: { shape: 'circle', surface: 'metal' } });
+          this.place('bin', bx, bz, R() * 6, deco);
         }
       }
     }
-    // water coolers against the arcade walls (step inward from the edge until they fit)
-    for (const [x, z, yaw, ax] of [[minX + 0.4, (minZ + maxZ) / 2 - 3, HALF_PI, 1], [maxX - 0.4, (minZ + maxZ) / 2 + 9, -HALF_PI, -1], [maxX - 0.4, minZ + 24, -HALF_PI, -1]] as [number, number, number, number][]) {
-      this.againstWall('cooler', x, z, yaw, [ax, 0], { shape: 'circle', surface: 'metal' }, 60);
+    // water coolers against the arcade back walls, a bin rolling on the granite
+    for (const [x, z, yaw] of [[minX + 0.45, (minZ + maxZ) / 2 - 3, HALF_PI], [maxX - 0.45, (minZ + maxZ) / 2 + 9, -HALF_PI], [maxX - 0.45, minZ + 24, -HALF_PI]] as [number, number, number][]) {
+      this.place('cooler', x, z, yaw, deco);
     }
-    // a bin rolling on the granite, notice boards by the arcades
-    this.place('bin', cx + 3.5, maxZ - 12, 1.1, { roll: HALF_PI, margin: 0.05 });
-    for (const [x, z, yaw] of [[cx - 7, maxZ - 1.2, Math.PI], [minX + 1.2, minZ + 20, HALF_PI], [maxX - 1.2, maxZ - 20, -HALF_PI]] as [number, number, number][]) {
-      for (let k = 0; k < 12; k++) {
-        const nx = Math.sin(yaw), nz = Math.cos(yaw);
-        if (this.noticeBoard(x + nx * k * 0.5, z + nz * k * 0.5, yaw)) break;
-      }
-    }
+    this.place('bin', cx + 3.5, maxZ - 12, 1.1, { ...deco, roll: HALF_PI });
   }
 
   // ------------------------------------------------------------------ lawns: benches + bins
@@ -1506,12 +1711,11 @@ class Dresser {
     const paint = () => SCOOTER_PAINT[Math.floor(R() * SCOOTER_PAINT.length)];
     const bike = (x: number, z: number, yaw: number) =>
       this.place('bike', x, z, yaw + (R() - 0.5) * 0.16, { color: paint(), margin: -0.05, offRoad: true, solid: { shape: 'seg', surface: 'metal', h: 1.1, pad: -0.2 } });
-    // bike-parking yard under the canopy (CAMPUS_NOTES §3.7): facing rows across the yard
-    const yard = AREAS.find((a) => a.id === 'bike_yard');
-    const yb = yard ? { minX: Math.min(...yard.poly.map((p) => p[0])), maxX: Math.max(...yard.poly.map((p) => p[0])), minZ: Math.min(...yard.poly.map((p) => p[1])), maxZ: Math.max(...yard.poly.map((p) => p[1])) } : { minX: 139, maxX: 153, minZ: -107, maxZ: -97 };
-    for (let z = yb.minZ + 1.3, row = 0; z < yb.maxZ - 0.8; z += row % 2 ? 2.6 : 1.9, row++) {
-      const yaw = row % 2 ? 0 : Math.PI;
-      for (let x = yb.minX + 1.0; x < yb.maxX - 0.6; x += 1.02) if (R() > 0.64) bike(x, z, yaw);
+    // 2-wheeler parking along the east lawn, both levels (reference/GJB_NOTES.md §4; slots from gjb/parking.ts).
+    // Ground floor: normal prop collision; upper deck: decor at the deck height (its row collision is registered by the parking).
+    for (const sl of parkingSlots()) {
+      if (sl.y > 0) this.place('bike', sl.x, sl.z, sl.yaw + (R() - 0.5) * 0.12, { color: paint(), y: sl.y, force: true });
+      else this.place('bike', sl.x, sl.z, sl.yaw + (R() - 0.5) * 0.12, { color: paint(), margin: -0.05, laneOk: true, solid: { shape: 'seg', surface: 'metal', h: 1.1, pad: -0.2 } });
     }
     // hostels: rows nosed against the walls facing a road
     for (const b of BUILDINGS.filter((q) => q.style === 'hostel')) {
@@ -1545,35 +1749,110 @@ function gateFrame(g: GateDef): { mid: V2; u: V2; n: V2; len: number } {
 }
 
 // ---------------------------------------------------------------------------------------------
+const P = (f: string) => `${MODEL_DIR}props/${f}.glb`;
+const W = (f: string) => `${MODEL_DIR}weapons/${f}.glb`;
+/** Prop types: name → [GLB url, load options]. Textured GLBs come from tools/props (see docs/ARCHITECTURE.md §Props). */
+const PROP_DEFS: Record<string, [string, LoadOpts]> = {
+  globe: [P('pes_globe'), {}],
+  bike: [P('bike'), { tint: true, shadow: 1, lod: P('bike_lod') }],
+  motorbike: [P('motorbike'), { tint: true, shadow: 1, lod: P('motorbike_lod') }],
+  car: [P('car_hatchback'), { tint: true, lod: P('car_hatchback_lod') }],
+  car_sedan: [P('car_sedan'), { tint: true, lod: P('car_sedan_lod') }],
+  auto: [P('auto_rickshaw'), { lod: P('auto_rickshaw_lod') }],
+  bus: [P('bmtc_bus'), { lod: P('bmtc_bus_lod') }],
+  college_bus: [P('college_bus'), { lod: P('college_bus_lod') }],
+  bench: [P('bench'), {}],
+  table: [P('cafe_table_set'), {}],
+  chair: [P('plastic_chair'), { shadow: 1 }],
+  barricade: [P('folding_barricade'), { lod: P('folding_barricade_lod') }],
+  metro: [P('metro_barrier'), {}],
+  bin: [P('trash_bin'), { shadow: 1 }],
+  cooler: [P('water_cooler'), { shadow: 1 }],
+  ammo: [P('ammo_crate'), { shadow: 1 }],
+  medkit: [P('medkit'), { shadow: 0 }],
+  sandbags: [P('sandbags'), {}],
+  w_shotgun: [W('shotgun'), {}],
+  w_smg: [W('smg'), {}],
+  w_rifle: [W('rifle'), {}],
+};
+
+let sharedFlat: THREE.MeshStandardMaterial | null = null;
+const protoCache = new Map<string, Promise<Proto | null>>();
+function getProto(assets: Assets, name: string): Promise<Proto | null> {
+  let p = protoCache.get(name);
+  if (!p) {
+    const def = PROP_DEFS[name];
+    sharedFlat ??= makeFlatMaterial();
+    p = def ? loadProto(assets, def[0], name, sharedFlat, def[1]) : Promise.resolve(null);
+    protoCache.set(name, p);
+  }
+  return p;
+}
+
+/**
+ * Public API for placing campus props outside Props.ts (e.g. the GJB two-wheeler parking). Returns an empty
+ * InstancedProp with the same model, materials, LOD bands and shadow rules as the campus dressing; add instances, then
+ * build() and add it to the scene. Collision is up to the caller (footprint: `ip.userData.box`, local metres,
+ * origin at the base centre, facing +Z).
+ *
+ *   const ip = await createPropInstancer(assets, 'bike', quality);        // 'bike' = scooter, 'motorbike', 'car', ...
+ *   ip?.addInstance(new THREE.Matrix4().compose(pos, quat, ONE), new THREE.Color(SCOOTER_PAINT[k]));
+ *   ip?.build(); group.add(ip);
+ */
+export async function createPropInstancer(assets: Assets, name: string, quality: QualityProfile, o: { shadowDist?: number; drawDist?: number; lodDist?: number } = {}): Promise<InstancedProp | null> {
+  const proto = await getProto(assets, name);
+  if (!proto) return null;
+  const [, sd, dd] = CHUNK[name] ?? CHUNK_DEFAULT;
+  const shadowsOn = quality.shadowMapSize > 0, hiShadow = quality.shadowMapSize >= 4096;
+  const casts = shadowsOn && (proto.shadow === 2 || (proto.shadow === 1 && hiShadow));
+  const levels = lodLevels(proto, casts ? o.shadowDist ?? sd : 0, o.drawDist ?? dd, o.lodDist ?? LOD_DIST[name] ?? Infinity);
+  const ip = new InstancedProp(`prop:${name}`, levels, proto.box, proto.parts.some((p) => p.tinted));
+  ip.userData.box = proto.box.clone();
+  return ip;
+}
+
+/**
+ * Every prop model in a row (front row: full model, back row: its `_lod`), for props-viewer.html?showroom=1.
+ * Tinted models get a paint colour so the paint mask can be checked.
+ */
+export async function buildShowroom(assets: Assets): Promise<{ group: THREE.Group; items: { name: string; x: number; tris: number; lodTris: number }[] }> {
+  const names = Object.keys(PROP_DEFS).filter((n) => !n.startsWith('w_'));
+  const protos = await Promise.all(names.map((n) => getProto(assets, n)));
+  const group = new THREE.Group();
+  group.name = 'showroom';
+  const items: { name: string; x: number; tris: number; lodTris: number }[] = [];
+  const tris = (parts: Part[]) => parts.reduce((a, q) => a + (q.geo.index ? q.geo.index.count : q.geo.attributes.position.count) / 3, 0);
+  const paint = [0xa3161a, 0x1f4aa0, 0xe9e9e6, 0x5d6166];
+  let x = 0;
+  protos.forEach((p, i) => {
+    if (!p) return;
+    const w = p.box.max.x - p.box.min.x;
+    x += w / 2;
+    const put = (parts: Part[], z: number) => {
+      for (const part of parts) {
+        const m = new THREE.InstancedMesh(part.geo, part.mat, 1);
+        m.setMatrixAt(0, new THREE.Matrix4().makeTranslation(x, 0, z));
+        if (part.tinted) m.setColorAt(0, new THREE.Color(paint[i % paint.length]));
+        m.castShadow = m.receiveShadow = true;
+        m.name = `showroom:${p.name}:${part.name}`;
+        group.add(m);
+      }
+    };
+    put(p.parts, 0);
+    if (p.lodParts) put(p.lodParts, -Math.max(4, (p.box.max.z - p.box.min.z) + 2));
+    items.push({ name: p.name, x: +x.toFixed(2), tris: tris(p.parts), lodTris: p.lodParts ? tris(p.lodParts) : 0 });
+    x += w / 2 + 1.2;
+  });
+  return { group, items };
+}
+
 export async function buildProps(assets: Assets, collision: StaticCollision, opts: { quality: QualityProfile; medianPts: V2[] }): Promise<PropsBuild> {
   const t0 = performance.now();
-  const flatMat = makeFlatMaterial();
-  const P = (f: string) => `${MODEL_DIR}props/${f}.glb`;
-  const W = (f: string) => `${MODEL_DIR}weapons/${f}.glb`;
-  const defs: [string, string, LoadOpts][] = [
-    ['globe', P('pes_globe'), {}],
-    ['bike', P('bike'), { tint: 'body', shadow: 1, far: ['body', 'tyre'] }],
-    ['car', P('car_hatchback'), { tint: 'body', far: ['body', 'glass', 'wheelwell'] }],
-    ['auto', P('auto_rickshaw'), { far: ['auto_green', 'auto_yellow', 'auto_glass', 'auto_canvas'] }],
-    ['bus', P('bmtc_bus'), { far: ['bus_blue', 'bus_white', 'bus_glass', 'bus_led', 'tyre'] }],
-    ['college_bus', P('bmtc_bus'), { palette: { bus_white: 0xf2c200, bus_blue: 0x1e8c3a }, far: ['bus_blue', 'bus_white', 'bus_glass', 'tyre'] }],
-    ['bench', P('bench'), {}],
-    ['table', P('cafe_table_set'), {}],
-    ['chair', P('cafe_table_set'), { keep: (m, x, _y, z) => m === 'chair_red' && z > 0.42 && Math.abs(x) < 0.6, recentre: true, shadow: 1 }],
-    ['barricade', P('folding_barricade'), { far: ['barr_yellow', 'barr_black'] }],
-    ['metro', P('metro_barrier'), {}],
-    ['bin', P('trash_bin'), { shadow: 1 }],
-    ['cooler', P('water_cooler'), { shadow: 1 }],
-    ['ammo', P('ammo_crate'), { shadow: 1 }],
-    ['medkit', P('medkit'), { shadow: 0 }],
-    ['sandbags', P('sandbags'), {}],
-    ['w_shotgun', W('shotgun'), {}],
-    ['w_smg', W('smg'), {}],
-    ['w_rifle', W('rifle'), {}],
-  ];
-  const loaded = await Promise.all(defs.map(([name, url, o]) => loadProto(assets, url, name, flatMat, o)));
+  const names = Object.keys(PROP_DEFS);
+  const loaded = await Promise.all(names.map((n) => getProto(assets, n)));
   const protos = new Map<string, Proto>();
-  loaded.forEach((p, i) => { if (p) protos.set(defs[i][0], p); });
+  loaded.forEach((p, i) => { if (p) protos.set(names[i], p); });
+  const flatMat = sharedFlat ?? makeFlatMaterial();
 
   const d = new Dresser(protos, collision, flatMat, opts.quality);
   // order matters: fixed anchors first, then set pieces, then scatter (each pass sees the previous ones' collision)

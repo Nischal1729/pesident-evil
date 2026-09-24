@@ -86,3 +86,70 @@ export function computeFlowField(
     cost++;
   }
 }
+
+/**
+ * Dial's-algorithm flow field over a layered navigation graph (multi-level): nodes are walkable surfaces (several
+ * per 1 m cell where floors stack). Costs spread along REVERSED edges — rStart/rList/rCost is the CSR list of each
+ * node's predecessors (m with an edge m→n, cost 10 straight / 14 diagonal) — so that a body at m always finds a
+ * lower-cost node among its own forward edges (the graph is not symmetric where surfaces of different heights meet).
+ * nodeGate[n] = gate index (−1): passing through a closed gate costs GATE_PENALTY.
+ */
+export function computeGraphField(
+  n: number, rStart: Int32Array, rList: Int32Array, rCost: Uint8Array, nodeGate: Int8Array, gateClosed: ArrayLike<number>,
+  targets: ArrayLike<number>, out: Uint32Array, maxCost = 60000,
+): void {
+  out.fill(INF);
+  const NB = 512;
+  const buckets: Int32Array[] = [];
+  const sizes = new Int32Array(NB);
+  for (let i = 0; i < NB; i++) buckets.push(new Int32Array(256));
+  const push = (cost: number, idx: number) => {
+    const b = cost % NB;
+    let arr = buckets[b];
+    if (sizes[b] >= arr.length) {
+      const nn = new Int32Array(arr.length * 2);
+      nn.set(arr);
+      buckets[b] = arr = nn;
+    }
+    arr[sizes[b]++] = idx;
+  };
+  let pending = 0;
+  for (let t = 0; t < targets.length; t++) {
+    const idx = targets[t];
+    if (idx < 0 || idx >= n || out[idx] === 0) continue;
+    out[idx] = 0;
+    push(0, idx);
+    pending++;
+  }
+  let cost = 0, emptyRun = 0;
+  while (pending > 0 && cost <= maxCost) {
+    const b = cost % NB;
+    if (sizes[b] === 0) {
+      cost++;
+      if (++emptyRun > NB) break;
+      continue;
+    }
+    emptyRun = 0;
+    const arr = buckets[b];
+    const cnt = sizes[b];
+    sizes[b] = 0;
+    for (let k = 0; k < cnt; k++) {
+      const idx = arr[k];
+      pending--;
+      if (out[idx] !== cost) continue;
+      for (let e = rStart[idx]; e < rStart[idx + 1]; e++) {
+        const m = rList[e];
+        let step = rCost[e];
+        const gi = nodeGate[m];
+        if (gi >= 0 && gateClosed[gi]) step += GATE_PENALTY;
+        const nc = cost + step;
+        if (nc < out[m]) {
+          out[m] = nc;
+          push(nc, m);
+          pending++;
+        }
+      }
+    }
+    cost++;
+  }
+}
