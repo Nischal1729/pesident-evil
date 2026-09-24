@@ -1,0 +1,2924 @@
+{
+ "origin_latlon": [
+  12.934777142105263,
+  77.53216528947368
+ ],
+ "campus": [
+  [
+   [
+    -54.7,
+    93.8
+   ],
+   [
+    25.6,
+    116.7
+   ],
+   [
+    50.5,
+    104.6
+   ],
+   [
+    58.8,
+    99.6
+   ],
+   [
+    60.5,
+    63.2
+   ],
+   [
+    60.5,
+    42.0
+   ],
+   [
+    62.7,
+    -5.7
+   ],
+   [
+    62.8,
+    -18.7
+   ],
+   [
+    62.2,
+    -105.6
+   ],
+   [
+    52.5,
+    -120.7
+   ],
+   [
+    4.0,
+    -126.6
+   ],
+   [
+    -35.7,
+    -133.6
+   ],
+   [
+    -44.4,
+    -107.4
+   ],
+   [
+    -52.7,
+    -83.0
+   ],
+   [
+    -60.1,
+    -47.2
+   ],
+   [
+    -65.4,
+    0.8
+   ],
+   [
+    -68.1,
+    42.6
+   ],
+   [
+    -64.4,
+    91.4
+   ],
+   [
+    -54.7,
+    93.8
+   ]
+  ]
+ ],
+ "features": [
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "2",
+    "lit": "no",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "shoulder": "both",
+    "surface": "concrete",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -44.1,
+     725.2
+    ],
+    [
+     -63.2,
+     459.8
+    ],
+    [
+     -77.7,
+     269.3
+    ],
+    [
+     -80.6,
+     233.8
+    ],
+    [
+     -83.3,
+     201.1
+    ],
+    [
+     -85.9,
+     168.6
+    ],
+    [
+     -86.7,
+     158.8
+    ]
+   ]
+  },
+  {
+   "kind": "building",
+   "name": "Nice Tollgate",
+   "tags": {
+    "addr:city": "Bengaluru",
+    "addr:postcode": "560085",
+    "addr:street": "Dwaraka Nagar, Hosakerehalli",
+    "building": "roof",
+    "layer": "1",
+    "name": "Nice Tollgate",
+    "operator": "NICE"
+   },
+   "pts": [
+    [
+     -26.5,
+     -187.9
+    ],
+    [
+     -24.6,
+     -199.2
+    ],
+    [
+     -47.2,
+     -202.9
+    ],
+    [
+     -104.7,
+     -212.2
+    ],
+    [
+     -137.9,
+     -217.6
+    ],
+    [
+     -139.8,
+     -206.4
+    ],
+    [
+     -106.5,
+     -201.0
+    ],
+    [
+     -49.0,
+     -191.6
+    ],
+    [
+     -26.5,
+     -187.9
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "M Srinivas Road",
+   "tags": {
+    "flood_prone": "yes",
+    "highway": "tertiary",
+    "name": "M Srinivas Road",
+    "name:kn": "\u0cb6\u0ccd\u0cb0\u0cc0\u0ca8\u0cbf\u0cb5\u0cbe\u0cb8 \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6"
+   },
+   "pts": [
+    [
+     63.9,
+     110.6
+    ],
+    [
+     60.5,
+     122.9
+    ],
+    [
+     56.6,
+     130.2
+    ],
+    [
+     48.0,
+     141.3
+    ],
+    [
+     40.5,
+     146.7
+    ],
+    [
+     34.7,
+     149.5
+    ],
+    [
+     29.5,
+     150.8
+    ],
+    [
+     25.0,
+     151.2
+    ],
+    [
+     21.4,
+     151.2
+    ],
+    [
+     13.6,
+     150.0
+    ],
+    [
+     9.0,
+     148.7
+    ],
+    [
+     -0.7,
+     144.9
+    ],
+    [
+     -39.2,
+     133.3
+    ],
+    [
+     -50.6,
+     130.3
+    ],
+    [
+     -61.3,
+     128.7
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "M Srinivas Road",
+   "tags": {
+    "alt_name": "Kerekodi Main Road",
+    "highway": "tertiary",
+    "name": "M Srinivas Road",
+    "name:kn": "\u0cb6\u0ccd\u0cb0\u0cc0\u0ca8\u0cbf\u0cb5\u0cbe\u0cb8 \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "smoothness": "bad"
+   },
+   "pts": [
+    [
+     127.0,
+     -386.2
+    ],
+    [
+     99.5,
+     -359.4
+    ],
+    [
+     79.3,
+     -338.2
+    ],
+    [
+     74.6,
+     -333.1
+    ],
+    [
+     62.1,
+     -313.0
+    ],
+    [
+     58.2,
+     -306.2
+    ],
+    [
+     51.4,
+     -288.5
+    ],
+    [
+     46.6,
+     -276.7
+    ],
+    [
+     42.6,
+     -264.5
+    ],
+    [
+     39.4,
+     -252.2
+    ],
+    [
+     37.1,
+     -239.6
+    ],
+    [
+     35.7,
+     -227.0
+    ],
+    [
+     35.1,
+     -214.2
+    ],
+    [
+     35.4,
+     -201.2
+    ],
+    [
+     36.7,
+     -188.2
+    ],
+    [
+     38.8,
+     -175.3
+    ],
+    [
+     41.8,
+     -162.6
+    ],
+    [
+     62.5,
+     -115.4
+    ],
+    [
+     65.1,
+     -109.5
+    ],
+    [
+     70.2,
+     -83.2
+    ],
+    [
+     68.8,
+     -45.6
+    ],
+    [
+     67.9,
+     -19.4
+    ],
+    [
+     67.5,
+     81.2
+    ],
+    [
+     65.6,
+     96.3
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "Swamy Vivekananda Road",
+   "tags": {
+    "highway": "tertiary",
+    "name": "Swamy Vivekananda Road",
+    "name:etymology:wikidata": "Q47478",
+    "name:kn": "\u0cb8\u0ccd\u0cb5\u0cbe\u0cae\u0cbf \u0cb5\u0cbf\u0cb5\u0cc7\u0c95\u0cbe\u0ca8\u0c82\u0ca6 \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6"
+   },
+   "pts": [
+    [
+     -105.5,
+     129.3
+    ],
+    [
+     -124.5,
+     130.9
+    ],
+    [
+     -132.6,
+     131.3
+    ],
+    [
+     -143.6,
+     131.5
+    ],
+    [
+     -155.0,
+     130.5
+    ],
+    [
+     -179.7,
+     126.9
+    ],
+    [
+     -226.7,
+     116.0
+    ],
+    [
+     -242.2,
+     113.2
+    ],
+    [
+     -255.0,
+     111.2
+    ],
+    [
+     -270.0,
+     109.9
+    ],
+    [
+     -315.0,
+     107.1
+    ],
+    [
+     -342.5,
+     105.2
+    ],
+    [
+     -350.9,
+     104.8
+    ],
+    [
+     -376.6,
+     103.5
+    ],
+    [
+     -390.1,
+     102.8
+    ],
+    [
+     -404.7,
+     102.4
+    ],
+    [
+     -409.2,
+     103.1
+    ],
+    [
+     -413.2,
+     104.8
+    ],
+    [
+     -416.1,
+     107.4
+    ],
+    [
+     -417.2,
+     110.9
+    ],
+    [
+     -416.7,
+     162.7
+    ],
+    [
+     -416.2,
+     220.3
+    ],
+    [
+     -415.5,
+     247.5
+    ],
+    [
+     -414.2,
+     298.8
+    ],
+    [
+     -413.4,
+     329.8
+    ],
+    [
+     -413.3,
+     334.0
+    ],
+    [
+     -412.6,
+     358.1
+    ],
+    [
+     -412.3,
+     364.7
+    ],
+    [
+     -412.2,
+     367.1
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "tertiary"
+   },
+   "pts": [
+    [
+     -61.3,
+     128.7
+    ],
+    [
+     -105.5,
+     129.3
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "motorway",
+    "lanes": "2",
+    "lit": "no",
+    "maxspeed": "120",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "oneway": "yes",
+    "surface": "concrete",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -83.4,
+     6.9
+    ],
+    [
+     -82.3,
+     27.9
+    ],
+    [
+     -79.1,
+     88.6
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "3",
+    "lit": "yes",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "asphalt",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     77.5,
+     -589.3
+    ],
+    [
+     56.7,
+     -556.8
+    ],
+    [
+     11.7,
+     -470.9
+    ],
+    [
+     1.1,
+     -445.8
+    ],
+    [
+     -16.3,
+     -406.7
+    ],
+    [
+     -30.3,
+     -365.8
+    ],
+    [
+     -32.9,
+     -356.3
+    ],
+    [
+     -38.4,
+     -336.1
+    ],
+    [
+     -43.0,
+     -242.2
+    ],
+    [
+     -47.2,
+     -202.9
+    ]
+   ]
+  },
+  {
+   "kind": "building",
+   "name": "Mechanical Lab Complex",
+   "tags": {
+    "addr:city": "Bengaluru",
+    "addr:housename": "PES University",
+    "addr:postcode": "560083",
+    "addr:street": "100 Feet Outer Ring Road",
+    "building": "yes",
+    "name": "Mechanical Lab Complex",
+    "source": "Bing"
+   },
+   "pts": [
+    [
+     124.7,
+     55.6
+    ],
+    [
+     124.9,
+     63.6
+    ],
+    [
+     75.1,
+     70.0
+    ],
+    [
+     74.4,
+     1.6
+    ],
+    [
+     83.5,
+     0.7
+    ],
+    [
+     91.6,
+     -0.1
+    ],
+    [
+     96.2,
+     48.5
+    ],
+    [
+     97.0,
+     56.8
+    ],
+    [
+     124.7,
+     55.6
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "access": "private",
+    "highway": "service",
+    "oneway": "no"
+   },
+   "pts": [
+    [
+     134.6,
+     50.5
+    ],
+    [
+     159.3,
+     71.9
+    ],
+    [
+     167.6,
+     84.1
+    ],
+    [
+     177.5,
+     112.9
+    ],
+    [
+     202.5,
+     110.2
+    ],
+    [
+     215.3,
+     109.6
+    ],
+    [
+     221.5,
+     109.1
+    ],
+    [
+     244.9,
+     107.8
+    ],
+    [
+     258.2,
+     107.0
+    ]
+   ]
+  },
+  {
+   "kind": "building",
+   "name": "Cafe Down The Alley",
+   "tags": {
+    "addr:city": "Bengaluru",
+    "addr:district": "Bengaluru Urban",
+    "addr:postcode": "560083",
+    "amenity": "cafe",
+    "building": "yes",
+    "cuisine": "italian",
+    "name": "Cafe Down The Alley",
+    "outdoor_seating": "no"
+   },
+   "pts": [
+    [
+     76.2,
+     -76.5
+    ],
+    [
+     89.2,
+     -75.9
+    ],
+    [
+     88.4,
+     -60.4
+    ],
+    [
+     104.0,
+     -59.6
+    ],
+    [
+     103.3,
+     -46.7
+    ],
+    [
+     74.8,
+     -48.1
+    ],
+    [
+     76.2,
+     -76.5
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "4",
+    "lit": "yes",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "concrete",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -49.0,
+     -191.6
+    ],
+    [
+     -63.9,
+     -100.6
+    ],
+    [
+     -83.4,
+     6.9
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "covered": "yes",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "4",
+    "lit": "yes",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "asphalt",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -47.2,
+     -202.9
+    ],
+    [
+     -48.2,
+     -196.3
+    ],
+    [
+     -49.0,
+     -191.6
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "covered": "yes",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "4",
+    "lit": "yes",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "asphalt",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -106.5,
+     -201.0
+    ],
+    [
+     -106.0,
+     -205.9
+    ],
+    [
+     -104.7,
+     -212.2
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "4",
+    "lit": "yes",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "concrete",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -95.7,
+     5.8
+    ],
+    [
+     -108.9,
+     -175.0
+    ],
+    [
+     -106.5,
+     -201.0
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "access": "private",
+    "highway": "service",
+    "oneway": "yes"
+   },
+   "pts": [
+    [
+     198.5,
+     -16.1
+    ],
+    [
+     184.1,
+     -15.4
+    ],
+    [
+     103.8,
+     -18.3
+    ],
+    [
+     97.0,
+     -18.2
+    ],
+    [
+     83.9,
+     -18.1
+    ],
+    [
+     73.9,
+     -18.9
+    ],
+    [
+     67.9,
+     -19.4
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "PES University Cricket Ground",
+   "tags": {
+    "landuse": "recreation_ground",
+    "name": "PES University Cricket Ground",
+    "name:kn": "\u0caa\u0cbf\u0c87\u0c8e\u0cb8\u0ccd \u0cb5\u0cbf\u0cb6\u0ccd\u0cb5\u0cb5\u0cbf\u0ca6\u0ccd\u0caf\u0cbe\u0cb2\u0caf \u0c95\u0ccd\u0cb0\u0cbf\u0c95\u0cc6\u0c9f\u0ccd \u0cae\u0cc8\u0ca6\u0cbe\u0ca8"
+   },
+   "pts": [
+    [
+     -57.6,
+     39.5
+    ],
+    [
+     -58.1,
+     9.5
+    ],
+    [
+     -48.7,
+     -6.0
+    ],
+    [
+     -31.1,
+     -17.8
+    ],
+    [
+     -12.1,
+     -24.0
+    ],
+    [
+     7.4,
+     -23.5
+    ],
+    [
+     28.4,
+     -14.2
+    ],
+    [
+     45.9,
+     -0.3
+    ],
+    [
+     50.5,
+     6.2
+    ],
+    [
+     48.2,
+     64.8
+    ],
+    [
+     40.7,
+     78.2
+    ],
+    [
+     30.3,
+     85.9
+    ],
+    [
+     13.6,
+     94.7
+    ],
+    [
+     1.2,
+     97.3
+    ],
+    [
+     -12.1,
+     96.5
+    ],
+    [
+     -23.8,
+     93.2
+    ],
+    [
+     -34.4,
+     89.5
+    ],
+    [
+     -44.1,
+     82.3
+    ],
+    [
+     -50.8,
+     73.8
+    ],
+    [
+     -55.0,
+     67.9
+    ],
+    [
+     -57.6,
+     39.5
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "landuse": "construction"
+   },
+   "pts": [
+    [
+     197.7,
+     43.0
+    ],
+    [
+     199.0,
+     107.1
+    ],
+    [
+     185.7,
+     107.1
+    ],
+    [
+     175.9,
+     84.6
+    ],
+    [
+     167.4,
+     73.1
+    ],
+    [
+     138.5,
+     47.7
+    ],
+    [
+     127.8,
+     47.6
+    ],
+    [
+     125.9,
+     -15.8
+    ],
+    [
+     183.0,
+     -13.3
+    ],
+    [
+     195.8,
+     -7.3
+    ],
+    [
+     197.7,
+     43.0
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "amenity": "parking",
+    "operator": "PES Student Parking Lot"
+   },
+   "pts": [
+    [
+     51.6,
+     -34.9
+    ],
+    [
+     42.4,
+     -35.8
+    ],
+    [
+     -21.7,
+     -42.1
+    ],
+    [
+     -18.9,
+     -69.8
+    ],
+    [
+     -14.3,
+     -116.0
+    ],
+    [
+     58.9,
+     -108.9
+    ],
+    [
+     51.6,
+     -34.9
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "Cricket Pitches",
+   "tags": {
+    "leisure": "pitch",
+    "name": "Cricket Pitches",
+    "name:kn": "\u0c95\u0ccd\u0cb0\u0cbf\u0c95\u0cc6\u0c9f\u0ccd \u0c86\u0c9f\u0ca6 \u0cae\u0cc8\u0ca6\u0cbe\u0ca8"
+   },
+   "pts": [
+    [
+     -56.2,
+     -46.7
+    ],
+    [
+     -21.7,
+     -42.1
+    ],
+    [
+     -18.9,
+     -69.8
+    ],
+    [
+     -53.4,
+     -74.6
+    ],
+    [
+     -56.2,
+     -46.7
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "PES University",
+   "tags": {
+    "amenity": "university",
+    "name": "PES University",
+    "name:kn": "\u0caa\u0cbf\u0c87\u0c8e\u0cb8\u0ccd \u0cb5\u0cbf\u0cb6\u0ccd\u0cb5\u0cb5\u0cbf\u0ca6\u0ccd\u0caf\u0cbe\u0cb2\u0caf"
+   },
+   "pts": [
+    [
+     -54.7,
+     93.8
+    ],
+    [
+     25.6,
+     116.7
+    ],
+    [
+     50.5,
+     104.6
+    ],
+    [
+     58.8,
+     99.6
+    ],
+    [
+     60.5,
+     63.2
+    ],
+    [
+     60.5,
+     42.0
+    ],
+    [
+     62.7,
+     -5.7
+    ],
+    [
+     62.8,
+     -18.7
+    ],
+    [
+     62.2,
+     -105.6
+    ],
+    [
+     52.5,
+     -120.7
+    ],
+    [
+     4.0,
+     -126.6
+    ],
+    [
+     -35.7,
+     -133.6
+    ],
+    [
+     -44.4,
+     -107.4
+    ],
+    [
+     -52.7,
+     -83.0
+    ],
+    [
+     -60.1,
+     -47.2
+    ],
+    [
+     -65.4,
+     0.8
+    ],
+    [
+     -68.1,
+     42.6
+    ],
+    [
+     -64.4,
+     91.4
+    ],
+    [
+     -54.7,
+     93.8
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "M Srinivas Road",
+   "tags": {
+    "flood_prone": "yes",
+    "highway": "tertiary",
+    "name": "M Srinivas Road",
+    "name:kn": "\u0cb6\u0ccd\u0cb0\u0cc0\u0ca8\u0cbf\u0cb5\u0cbe\u0cb8 \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6"
+   },
+   "pts": [
+    [
+     29.5,
+     150.8
+    ],
+    [
+     28.1,
+     154.1
+    ],
+    [
+     27.2,
+     156.2
+    ],
+    [
+     14.8,
+     182.8
+    ],
+    [
+     13.3,
+     187.3
+    ],
+    [
+     11.8,
+     192.2
+    ],
+    [
+     10.7,
+     198.8
+    ],
+    [
+     10.0,
+     205.4
+    ],
+    [
+     9.8,
+     212.6
+    ],
+    [
+     10.1,
+     218.2
+    ],
+    [
+     11.9,
+     232.7
+    ],
+    [
+     19.6,
+     262.7
+    ],
+    [
+     26.6,
+     281.3
+    ],
+    [
+     29.4,
+     287.7
+    ],
+    [
+     35.6,
+     296.2
+    ],
+    [
+     37.7,
+     298.3
+    ],
+    [
+     43.5,
+     301.1
+    ],
+    [
+     48.8,
+     303.0
+    ],
+    [
+     73.6,
+     306.1
+    ],
+    [
+     87.1,
+     307.5
+    ],
+    [
+     95.5,
+     308.7
+    ],
+    [
+     103.0,
+     310.5
+    ],
+    [
+     110.2,
+     314.5
+    ],
+    [
+     114.3,
+     319.7
+    ],
+    [
+     116.5,
+     323.0
+    ],
+    [
+     121.0,
+     338.2
+    ],
+    [
+     131.1,
+     366.3
+    ],
+    [
+     133.9,
+     375.0
+    ],
+    [
+     142.9,
+     399.6
+    ],
+    [
+     146.4,
+     407.4
+    ],
+    [
+     156.2,
+     427.2
+    ],
+    [
+     160.7,
+     433.6
+    ],
+    [
+     170.0,
+     445.7
+    ],
+    [
+     183.1,
+     461.8
+    ],
+    [
+     204.6,
+     486.9
+    ],
+    [
+     226.7,
+     504.0
+    ],
+    [
+     231.2,
+     508.3
+    ],
+    [
+     248.2,
+     534.3
+    ],
+    [
+     265.3,
+     560.5
+    ],
+    [
+     276.9,
+     577.7
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "M Srinivas Road",
+   "tags": {
+    "bridge": "yes",
+    "highway": "tertiary",
+    "layer": "1",
+    "name": "M Srinivas Road",
+    "name:kn": "\u0cb6\u0ccd\u0cb0\u0cc0\u0ca8\u0cbf\u0cb5\u0cbe\u0cb8 \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6"
+   },
+   "pts": [
+    [
+     65.6,
+     96.3
+    ],
+    [
+     63.9,
+     110.6
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "highway": "motorway",
+    "lanes": "2",
+    "lit": "no",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "shoulder": "both",
+    "surface": "concrete",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -73.9,
+     157.9
+    ],
+    [
+     -66.3,
+     268.9
+    ],
+    [
+     -62.2,
+     316.0
+    ],
+    [
+     -51.7,
+     459.1
+    ],
+    [
+     -32.5,
+     722.6
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "bridge": "yes",
+    "highway": "motorway",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "no",
+    "maxspeed": "80",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "concrete",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -79.1,
+     88.6
+    ],
+    [
+     -73.9,
+     157.9
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "2",
+    "lit": "no",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "concrete",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -91.6,
+     90.5
+    ],
+    [
+     -95.7,
+     5.8
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "bridge": "yes",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "2",
+    "layer": "1",
+    "lit": "no",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "concrete",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -86.7,
+     158.8
+    ],
+    [
+     -88.0,
+     140.5
+    ],
+    [
+     -90.0,
+     113.1
+    ],
+    [
+     -91.6,
+     90.5
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "footway"
+   },
+   "pts": [
+    [
+     100.0,
+     48.5
+    ],
+    [
+     96.2,
+     48.5
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "access": "private",
+    "highway": "service"
+   },
+   "pts": [
+    [
+     83.5,
+     0.7
+    ],
+    [
+     83.5,
+     -4.0
+    ],
+    [
+     83.5,
+     -11.2
+    ],
+    [
+     83.9,
+     -18.1
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "path"
+   },
+   "pts": [
+    [
+     103.8,
+     -18.3
+    ],
+    [
+     103.9,
+     -16.1
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "service",
+    "service": "driveway"
+   },
+   "pts": [
+    [
+     67.9,
+     -19.4
+    ],
+    [
+     62.8,
+     -18.7
+    ],
+    [
+     55.5,
+     -19.1
+    ],
+    [
+     46.7,
+     -23.1
+    ],
+    [
+     44.4,
+     -29.1
+    ],
+    [
+     43.3,
+     -33.3
+    ],
+    [
+     42.4,
+     -35.8
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "digitalglobe"
+   },
+   "pts": [
+    [
+     11.9,
+     232.7
+    ],
+    [
+     -28.7,
+     234.6
+    ],
+    [
+     -30.0,
+     236.8
+    ],
+    [
+     -30.3,
+     240.2
+    ],
+    [
+     -25.7,
+     269.3
+    ],
+    [
+     -23.7,
+     296.0
+    ],
+    [
+     -26.7,
+     311.1
+    ],
+    [
+     -21.9,
+     346.7
+    ],
+    [
+     -19.9,
+     355.2
+    ],
+    [
+     -16.4,
+     365.6
+    ],
+    [
+     -9.5,
+     383.0
+    ],
+    [
+     -5.9,
+     391.1
+    ],
+    [
+     -3.3,
+     401.3
+    ],
+    [
+     0.5,
+     420.9
+    ],
+    [
+     5.7,
+     447.6
+    ],
+    [
+     12.3,
+     478.7
+    ],
+    [
+     17.1,
+     506.2
+    ],
+    [
+     21.3,
+     530.4
+    ],
+    [
+     25.5,
+     536.8
+    ],
+    [
+     32.0,
+     537.3
+    ],
+    [
+     108.6,
+     523.1
+    ],
+    [
+     226.7,
+     504.0
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "digitalglobe"
+   },
+   "pts": [
+    [
+     168.8,
+     159.2
+    ],
+    [
+     113.0,
+     160.4
+    ],
+    [
+     109.6,
+     164.8
+    ],
+    [
+     109.0,
+     168.8
+    ],
+    [
+     107.6,
+     191.1
+    ],
+    [
+     108.1,
+     221.7
+    ],
+    [
+     111.2,
+     254.5
+    ],
+    [
+     116.8,
+     312.6
+    ],
+    [
+     114.3,
+     319.7
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "digitalglobe"
+   },
+   "pts": [
+    [
+     82.5,
+     257.7
+    ],
+    [
+     69.9,
+     156.3
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "digitalglobe"
+   },
+   "pts": [
+    [
+     52.6,
+     259.6
+    ],
+    [
+     47.7,
+     179.7
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "digitalglobe"
+   },
+   "pts": [
+    [
+     107.6,
+     191.1
+    ],
+    [
+     186.3,
+     188.6
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "digitalglobe"
+   },
+   "pts": [
+    [
+     153.6,
+     125.5
+    ],
+    [
+     116.5,
+     125.2
+    ],
+    [
+     70.0,
+     123.9
+    ],
+    [
+     60.5,
+     122.9
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "digitalglobe"
+   },
+   "pts": [
+    [
+     68.8,
+     -45.6
+    ],
+    [
+     159.9,
+     -39.8
+    ],
+    [
+     160.7,
+     -40.0
+    ],
+    [
+     161.3,
+     -40.4
+    ],
+    [
+     161.8,
+     -41.1
+    ],
+    [
+     164.5,
+     -73.2
+    ],
+    [
+     70.2,
+     -83.2
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential"
+   },
+   "pts": [
+    [
+     69.9,
+     156.3
+    ],
+    [
+     75.8,
+     153.3
+    ],
+    [
+     104.8,
+     151.3
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential"
+   },
+   "pts": [
+    [
+     69.9,
+     156.3
+    ],
+    [
+     41.3,
+     159.7
+    ],
+    [
+     38.3,
+     158.9
+    ],
+    [
+     34.1,
+     157.3
+    ],
+    [
+     28.1,
+     154.1
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "access": "private",
+    "highway": "service"
+   },
+   "pts": [
+    [
+     14.8,
+     182.8
+    ],
+    [
+     11.8,
+     182.9
+    ],
+    [
+     10.8,
+     182.6
+    ],
+    [
+     6.1,
+     181.3
+    ],
+    [
+     -11.2,
+     169.2
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "access": "private",
+    "highway": "service"
+   },
+   "pts": [
+    [
+     6.1,
+     181.3
+    ],
+    [
+     2.0,
+     189.7
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential"
+   },
+   "pts": [
+    [
+     70.0,
+     123.9
+    ],
+    [
+     88.3,
+     96.8
+    ],
+    [
+     147.9,
+     96.1
+    ],
+    [
+     153.6,
+     125.5
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential"
+   },
+   "pts": [
+    [
+     67.5,
+     81.2
+    ],
+    [
+     139.0,
+     74.0
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "maxar"
+   },
+   "pts": [
+    [
+     104.8,
+     151.3
+    ],
+    [
+     109.8,
+     155.7
+    ],
+    [
+     113.0,
+     160.4
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "service"
+   },
+   "pts": [
+    [
+     62.1,
+     -313.0
+    ],
+    [
+     72.0,
+     -303.0
+    ],
+    [
+     78.0,
+     -291.5
+    ],
+    [
+     81.7,
+     -281.9
+    ],
+    [
+     67.4,
+     -224.4
+    ],
+    [
+     61.8,
+     -208.3
+    ],
+    [
+     59.9,
+     -192.7
+    ],
+    [
+     68.1,
+     -157.8
+    ],
+    [
+     79.0,
+     -140.6
+    ],
+    [
+     82.9,
+     -131.7
+    ],
+    [
+     82.7,
+     -126.7
+    ],
+    [
+     80.4,
+     -122.5
+    ],
+    [
+     62.5,
+     -115.4
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "access": "emergency",
+    "highway": "motorway_link",
+    "motorcycle:conditional": "no @ (22:00-05:00)"
+   },
+   "pts": [
+    [
+     -43.0,
+     -242.2
+    ],
+    [
+     -97.1,
+     -252.5
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "access": "private",
+    "highway": "service",
+    "oneway": "no"
+   },
+   "pts": [
+    [
+     97.0,
+     -18.2
+    ],
+    [
+     100.0,
+     48.5
+    ],
+    [
+     100.2,
+     52.7
+    ],
+    [
+     134.6,
+     50.5
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "former football ground",
+   "tags": {
+    "landuse": "construction",
+    "name": "former football ground",
+    "name:kn": "\u0cab\u0cc1\u0c9f\u0ccd\u0cac\u0cbe\u0cb2\u0ccd \u0c86\u0c9f\u0ca6 \u0cae\u0cc8\u0ca6\u0cbe\u0ca8"
+   },
+   "pts": [
+    [
+     125.9,
+     -15.8
+    ],
+    [
+     101.2,
+     -15.1
+    ],
+    [
+     103.2,
+     48.3
+    ],
+    [
+     127.8,
+     47.6
+    ],
+    [
+     125.9,
+     -15.8
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential",
+    "source": "digitalglobe"
+   },
+   "pts": [
+    [
+     69.9,
+     156.3
+    ],
+    [
+     70.0,
+     143.2
+    ],
+    [
+     69.5,
+     136.5
+    ],
+    [
+     64.9,
+     132.7
+    ],
+    [
+     56.6,
+     130.2
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "Sobha Royal Crest (u/c)",
+   "tags": {
+    "construction": "residential",
+    "landuse": "construction",
+    "name": "Sobha Royal Crest (u/c)"
+   },
+   "pts": [
+    [
+     -116.0,
+     144.2
+    ],
+    [
+     -200.6,
+     137.5
+    ],
+    [
+     -221.6,
+     250.3
+    ],
+    [
+     -209.8,
+     252.7
+    ],
+    [
+     -219.7,
+     313.6
+    ],
+    [
+     -173.0,
+     332.9
+    ],
+    [
+     -180.2,
+     358.7
+    ],
+    [
+     -156.1,
+     367.3
+    ],
+    [
+     -116.2,
+     395.7
+    ],
+    [
+     -130.2,
+     415.9
+    ],
+    [
+     -114.7,
+     428.6
+    ],
+    [
+     -102.8,
+     424.6
+    ],
+    [
+     -116.0,
+     144.2
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "NICE Expressway",
+   "tags": {
+    "access": "yes",
+    "bicycle": "no",
+    "foot": "no",
+    "highway": "motorway",
+    "lanes": "4",
+    "lit": "yes",
+    "maxspeed": "80",
+    "motor_vehicle": "yes",
+    "motorcycle:conditional": "no @ (22:00-05:00)",
+    "name": "NICE Expressway",
+    "name:kn": "\u0ca8\u0cc8\u0cb8\u0ccd \u0cb0\u0cb8\u0ccd\u0ca4\u0cc6",
+    "oneway": "yes",
+    "surface": "asphalt",
+    "toll": "yes"
+   },
+   "pts": [
+    [
+     -104.7,
+     -212.2
+    ],
+    [
+     -97.1,
+     -252.5
+    ],
+    [
+     -85.8,
+     -290.6
+    ],
+    [
+     -50.9,
+     -364.1
+    ],
+    [
+     -45.6,
+     -377.2
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "barrier": "guard_rail",
+    "material": "metal"
+   },
+   "pts": [
+    [
+     -56.5,
+     -87.8
+    ],
+    [
+     -66.3,
+     -56.9
+    ],
+    [
+     -77.7,
+     -5.7
+    ],
+    [
+     -78.6,
+     0.8
+    ],
+    [
+     -72.7,
+     89.5
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "barrier": "guard_rail",
+    "material": "metal"
+   },
+   "pts": [
+    [
+     -98.5,
+     89.6
+    ],
+    [
+     -104.0,
+     -20.1
+    ],
+    [
+     -113.0,
+     -54.5
+    ],
+    [
+     -128.3,
+     -113.0
+    ],
+    [
+     -137.1,
+     -182.7
+    ],
+    [
+     -137.7,
+     -202.4
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "barrier": "jersey_barrier",
+    "material": "concrete"
+   },
+   "pts": [
+    [
+     -93.1,
+     150.5
+    ],
+    [
+     -98.5,
+     89.6
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "barrier": "guard_rail",
+    "material": "metal"
+   },
+   "pts": [
+    [
+     -49.9,
+     733.2
+    ],
+    [
+     -60.1,
+     593.4
+    ],
+    [
+     -70.2,
+     457.4
+    ],
+    [
+     -84.6,
+     259.3
+    ],
+    [
+     -93.1,
+     150.5
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "barrier": "jersey_barrier",
+    "material": "concrete"
+   },
+   "pts": [
+    [
+     -72.7,
+     89.5
+    ],
+    [
+     -71.2,
+     109.2
+    ],
+    [
+     -68.9,
+     140.5
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "barrier": "guard_rail",
+    "material": "metal"
+   },
+   "pts": [
+    [
+     -68.9,
+     140.5
+    ],
+    [
+     -58.6,
+     283.7
+    ],
+    [
+     -33.5,
+     621.4
+    ],
+    [
+     -25.0,
+     731.4
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "barrier": "fence",
+    "fence_type": "chain_link"
+   },
+   "pts": [
+    [
+     -60.8,
+     -61.1
+    ],
+    [
+     -45.8,
+     -114.1
+    ],
+    [
+     -29.5,
+     -160.8
+    ],
+    [
+     -26.6,
+     -169.1
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "residential"
+   },
+   "pts": [
+    [
+     164.5,
+     -73.2
+    ],
+    [
+     167.3,
+     -93.6
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "",
+   "tags": {
+    "highway": "service"
+   },
+   "pts": [
+    [
+     -105.5,
+     129.3
+    ],
+    [
+     -112.7,
+     134.4
+    ],
+    [
+     -115.1,
+     137.0
+    ],
+    [
+     -117.0,
+     140.2
+    ],
+    [
+     -118.0,
+     143.1
+    ],
+    [
+     -118.7,
+     147.0
+    ],
+    [
+     -119.2,
+     154.5
+    ],
+    [
+     -118.6,
+     161.9
+    ],
+    [
+     -116.2,
+     168.3
+    ],
+    [
+     -115.4,
+     173.6
+    ],
+    [
+     -98.1,
+     403.8
+    ],
+    [
+     -97.3,
+     410.2
+    ],
+    [
+     -95.8,
+     415.6
+    ],
+    [
+     -94.8,
+     420.7
+    ],
+    [
+     -94.5,
+     425.3
+    ],
+    [
+     -94.8,
+     430.4
+    ],
+    [
+     -96.1,
+     434.5
+    ],
+    [
+     -97.3,
+     436.1
+    ],
+    [
+     -99.4,
+     437.5
+    ],
+    [
+     -103.3,
+     438.2
+    ],
+    [
+     -107.8,
+     437.9
+    ],
+    [
+     -112.3,
+     435.5
+    ],
+    [
+     -115.7,
+     432.7
+    ],
+    [
+     -119.2,
+     430.7
+    ],
+    [
+     -124.7,
+     428.8
+    ],
+    [
+     -127.2,
+     428.8
+    ],
+    [
+     -137.1,
+     428.7
+    ],
+    [
+     -144.4,
+     426.7
+    ],
+    [
+     -152.1,
+     422.8
+    ],
+    [
+     -186.8,
+     397.0
+    ],
+    [
+     -195.6,
+     389.2
+    ],
+    [
+     -203.9,
+     384.7
+    ],
+    [
+     -216.4,
+     378.2
+    ],
+    [
+     -219.9,
+     375.0
+    ],
+    [
+     -221.6,
+     371.4
+    ],
+    [
+     -222.8,
+     364.7
+    ],
+    [
+     -222.9,
+     355.5
+    ],
+    [
+     -220.6,
+     329.5
+    ],
+    [
+     -217.6,
+     321.7
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "Pase Sports Arena",
+   "tags": {
+    "leisure": "sports_centre",
+    "name": "Pase Sports Arena"
+   },
+   "pts": [
+    [
+     -136.3,
+     -131.9
+    ],
+    [
+     -278.0,
+     -141.4
+    ],
+    [
+     -254.4,
+     -251.5
+    ],
+    [
+     -215.4,
+     -264.0
+    ],
+    [
+     -225.0,
+     -365.4
+    ],
+    [
+     -52.1,
+     -395.3
+    ],
+    [
+     -54.5,
+     -384.7
+    ],
+    [
+     -85.3,
+     -330.2
+    ],
+    [
+     -138.6,
+     -228.1
+    ],
+    [
+     -140.9,
+     -188.2
+    ],
+    [
+     -136.3,
+     -131.9
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "Kerekodi Road",
+   "tags": {
+    "highway": "proposed",
+    "name": "Kerekodi Road",
+    "note": "Approximate alignment",
+    "operator": "BSMILE",
+    "proposed": "tertiary",
+    "source": "https://erajyapatra.karnataka.gov.in/WriteReadData/2025/8480.pdf"
+   },
+   "pts": [
+    [
+     -61.3,
+     128.7
+    ],
+    [
+     -105.4,
+     117.8
+    ],
+    [
+     -184.8,
+     119.4
+    ],
+    [
+     -274.1,
+     97.3
+    ],
+    [
+     -402.5,
+     90.9
+    ],
+    [
+     -450.1,
+     100.9
+    ],
+    [
+     -493.2,
+     78.4
+    ],
+    [
+     -528.6,
+     47.7
+    ],
+    [
+     -535.6,
+     34.6
+    ],
+    [
+     -556.9,
+     -5.3
+    ],
+    [
+     -588.8,
+     -64.8
+    ],
+    [
+     -597.5,
+     -85.0
+    ],
+    [
+     -663.2,
+     -142.2
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "name": "Kerekodi Road",
+   "tags": {
+    "highway": "proposed",
+    "name": "Kerekodi Road",
+    "note": "Approximate alignment",
+    "operator": "BSMILE",
+    "proposed": "tertiary",
+    "source": "https://erajyapatra.karnataka.gov.in/WriteReadData/2025/8480.pdf"
+   },
+   "pts": [
+    [
+     -105.4,
+     117.8
+    ],
+    [
+     -76.6,
+     698.0
+    ],
+    [
+     -62.9,
+     783.2
+    ]
+   ]
+  },
+  {
+   "kind": "area",
+   "name": "",
+   "tags": {
+    "landuse": "garages"
+   },
+   "pts": [
+    [
+     102.9,
+     -101.2
+    ],
+    [
+     78.5,
+     -102.1
+    ],
+    [
+     52.3,
+     -164.5
+    ],
+    [
+     44.1,
+     -212.5
+    ],
+    [
+     66.3,
+     -297.5
+    ],
+    [
+     95.4,
+     -334.5
+    ],
+    [
+     121.1,
+     -293.3
+    ],
+    [
+     91.5,
+     -252.6
+    ],
+    [
+     75.3,
+     -185.3
+    ],
+    [
+     98.5,
+     -123.7
+    ],
+    [
+     105.8,
+     -124.6
+    ],
+    [
+     102.9,
+     -101.2
+    ]
+   ]
+  }
+ ]
+}

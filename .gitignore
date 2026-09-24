@@ -1,0 +1,18 @@
+node_modules/
+dist/
+dist-snapshot/
+.DS_Store
+*.blend1
+__pycache__/
+*.pyc
+
+# large / third-party source material (not redistributed)
+reference/video/
+reference/frames/
+reference/tiles/
+reference/sat_*
+tools/blender/_downloads/
+tools/blender/_renders/
+
+# local tooling
+.claude/

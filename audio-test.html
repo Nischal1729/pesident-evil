@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pesident Evil — Audio Lab</title>
+    <style>
+      :root {
+        --bg: #0f1113;
+        --panel: #181b1f;
+        --line: #2a2f36;
+        --text: #d9dde2;
+        --dim: #8a929c;
+        --accent: #e0b43a;
+        --blood: #c8412f;
+        --ok: #58b36b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px 20px;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--line);
+        position: sticky;
+        top: 0;
+        background: rgba(15, 17, 19, 0.96);
+        z-index: 5;
+      }
+      header h1 { font-size: 16px; margin: 0; letter-spacing: 0.02em; }
+      header h1 span { color: var(--accent); }
+      main {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+        gap: 14px;
+        padding: 14px 20px 40px;
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+        min-width: 0;
+      }
+      section.wide { grid-column: 1 / -1; }
+      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin: 0 0 10px; }
+      h3 { font-size: 12px; color: var(--accent); margin: 10px 0 6px; font-weight: 600; }
+      button {
+        background: #22272d;
+        color: var(--text);
+        border: 1px solid #333a42;
+        border-radius: 5px;
+        padding: 5px 9px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover { background: #2b3139; border-color: #4a525c; }
+      button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+      button.on { background: var(--blood); border-color: var(--blood); color: #fff; }
+      button:disabled { opacity: 0.4; cursor: default; }
+      .grid { display: flex; flex-wrap: wrap; gap: 5px; }
+      .row { display: flex; align-items: center; gap: 10px; margin: 5px 0; flex-wrap: wrap; }
+      .row label { min-width: 110px; color: var(--dim); }
+      .row input[type='range'] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+      .row output { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+      select { background: #22272d; color: var(--text); border: 1px solid #333a42; border-radius: 5px; padding: 4px; font: inherit; }
+      .progress { width: 220px; height: 8px; background: #22272d; border-radius: 4px; overflow: hidden; }
+      .progress > div { height: 100%; width: 0; background: var(--accent); transition: width 0.1s; }
+      .status { color: var(--dim); font-variant-numeric: tabular-nums; }
+      canvas { display: block; max-width: 100%; background: #0b0d0f; border: 1px solid var(--line); border-radius: 6px; }
+      table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+      th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      th { color: var(--dim); font-weight: 500; }
+      td.bad { color: var(--blood); }
+      td.good { color: var(--ok); }
+      .scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+      .note { color: var(--dim); font-size: 12px; margin: 6px 0; }
+      .voices { font-size: 12px; color: var(--dim); max-height: 120px; overflow: auto; }
+      .voices b { color: var(--ok); font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/audio/test.ts"></script>
+  </body>
+</html>
