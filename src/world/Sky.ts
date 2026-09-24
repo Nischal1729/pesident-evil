@@ -351,11 +351,14 @@ float cloudDensity(vec3 p, bool detail) {
   if (hn < 0.0 || hn > 1.0) return 0.0;
   float d2 = coverageAt(p.xz);
   if (d2 <= 0.0) return 0.0;
-  float top = pow(d2, 0.42);                              // taller towers where the field is dense
-  float dens = smoothstep(0.0, 0.06, hn) * smoothstep(0.0, 0.3, top - hn) * (0.35 + 0.65 * d2);
-  if (detail) {
-    float det = texture2D(uNoise, (p.xz + WIND * uTime * 1.4) * 0.42 + p.y * 0.1).b;
-    float ero = det * mix(0.26, 0.16, hn);
+  // cumulus towers with flat bases; the horizontal taper turns the extruded sides into soft gradients instead of walls
+  float top = pow(d2, 0.5);
+  float dens = smoothstep(0.0, 0.06, hn) * smoothstep(0.0, 0.3, top - hn) * (0.35 + 0.65 * d2) * smoothstep(0.0, 0.18, d2);
+  if (detail && dens > 0.0) {
+    // detail varies with height too (not columns), eroding the tops into billows more than the bases
+    vec2 dq = (p.xz + WIND * uTime * 1.4) * 0.42 + vec2(p.y * 0.83, -p.y * 0.61);
+    float det = texture2D(uNoise, dq).b * 0.65 + texture2D(uNoise, dq * 2.3 + 0.5).b * 0.35;
+    float ero = det * mix(0.2, 0.32, hn);
     dens = clamp((dens - ero) / (1.0 - ero), 0.0, 1.0);
   }
   return dens;
@@ -368,10 +371,13 @@ vec4 cumulus(vec3 rd, float dither, vec3 sunAtCloud, vec3 ambTop, vec3 ambBot, o
   vec3 ro = vec3(0.0, rg + uCamKm.y, 0.0);
   float t0 = raySphere(ro, rd, rg + CL_BOT);
   float t1 = raySphere(ro, rd, rg + CL_TOP);
-  if (t0 < 0.0 || t0 > 80.0) return vec4(0.0);
-  t1 = min(t1, t0 + 4.5);                                  // long grazing paths near the horizon: keep steps fine
+  if (t0 < 0.0 || t0 > 55.0) return vec4(0.0);
+  t1 = min(t1, t0 + 3.0);                                  // long grazing paths near the horizon: keep steps fine
   dist = t0;
-  float dt = (t1 - t0) / float(CLOUD_STEPS);
+  // step count follows the path length through the layer (~110 m per sample): steep rays stay cheap, grazing rays near
+  // the horizon get up to 3× more samples instead of showing slices
+  int nSteps = int(clamp((t1 - t0) / 0.11, float(CLOUD_STEPS), float(CLOUD_STEPS * 3)));
+  float dt = (t1 - t0) / float(nSteps);
   float cosL = dot(rd, uLightDir);
   // multiple-scattering octaves (Wrenninge): each octave is less attenuated but also less forward-peaked, so thick
   // backlit clouds go grey with bright thin edges instead of glowing all over
@@ -384,7 +390,8 @@ vec4 cumulus(vec3 rd, float dither, vec3 sunAtCloud, vec3 ambTop, vec3 ambBot, o
   vec3 L = vec3(0.0);
   const float SIGMA = 18.0;                               // extinction per km at density 1
   const float SIGMA_L = 6.0;                              // effective extinction towards the light (multiple scattering)
-  for (int i = 0; i < CLOUD_STEPS; i++) {
+  for (int i = 0; i < CLOUD_STEPS * 3; i++) {
+    if (i >= nSteps) break;
     float t = t0 + dt * (float(i) + dither);
     vec3 pw = ro + rd * t;
     float alt = length(pw) - rg;
@@ -494,12 +501,16 @@ vec4 skyBase(vec3 d, vec2 fragCoord) {
       trans *= 1.0 - ci;
     }
   }
-  float dither = fract(52.9829189 * fract(dot(fragCoord, vec2(0.06711056, 0.00583715))));
+  // white-noise jitter (no directional structure, so the upsample turns it into soft grain rather than streaks)
+  float dither = hash13(vec3(fragCoord, 17.0));
   float dist;
-  vec4 cl = cumulus(d, 0.5 + (dither - 0.5) * 0.12, sunAtCloud, ambTop, ambBot, dist);
+  // full per-pixel jitter of the march start: removes slice banding; the half-res upsample smooths the residue
+  vec4 cl = cumulus(d, dither, sunAtCloud, ambTop, ambBot, dist);
   // aerial perspective: distant clouds dissolve into the haze
-  float haze = 1.0 - exp(-dist / 24.0);
-  vec3 clCol = mix(cl.rgb, sky * cl.a, haze * 0.85);
+  float haze = 1.0 - exp(-dist / 16.0);
+  vec3 clCol = mix(cl.rgb, sky * cl.a, haze * 0.92);
+  float farFade = 1.0 - smoothstep(30.0, 55.0, dist);   // the farthest clouds dissolve completely into the horizon haze
+  cl *= farFade; clCol *= farFade;
   return vec4(back * (1.0 - cl.a) + clCol, trans * (1.0 - cl.a));
 }
 

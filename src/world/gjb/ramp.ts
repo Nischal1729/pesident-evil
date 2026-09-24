@@ -30,7 +30,7 @@ export function buildFrontRamp(kit: WorldKit, signs: SignUVs): void {
     const n = new THREE.Vector3(ya - yb, xa - xb, 0).normalize();
     const i0 = b.vert(xa, ya, z1, n.x, n.y, n.z, xa, z1, buff), i1 = b.vert(xa, ya, z0, n.x, n.y, n.z, xa, z0, buff);
     const i2 = b.vert(xb, yb, z0, n.x, n.y, n.z, xb, z0, buff), i3 = b.vert(xb, yb, z1, n.x, n.y, n.z, xb, z1, buff);
-    b.quad(i0, i3, i2, i1);
+    b.quad(i0, i1, i2, i3); // counter-clockwise seen from above → faces up
     for (const [z, s] of [[z0 - 0.15, -1], [z1 + 0.15, 1]] as [number, number][]) {
       const t0 = b.vert(xa, 0, z, 0, 0, s, xa, 0, side), t1 = b.vert(xb, 0, z, 0, 0, s, xb, 0, side);
       const t2 = b.vert(xb, yb + 1.1, z, 0, 0, s, xb, 1, parapet), t3 = b.vert(xa, ya + 1.1, z, 0, 0, s, xa, 1, parapet);
