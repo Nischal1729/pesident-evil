@@ -214,15 +214,15 @@ export const PARKING = {
   /** vehicle lane to the -1 floor: branches left (east) off the yard and runs south along the back wall, down from
    * road level at z0 to the -1 floor at rampZ, in the middle of the parking (x laneX … x1) */
   laneX: 134, rampZ: -72,
-  /** pedestrian stair between the floors along the lawn-side screen: -1 floor at stairZ0 → ground floor at stairZ1 */
-  stairX: 122.8, stairZ0: -49, stairZ1: -60,
   /** walk-in doors from the lawn into the -1 floor (z ranges in the corten screen) */
   westDoors: [[-92, -88], [-66, -62]] as V2[],
   /**
-   * PES Innovation Lab block across the ground floor's south end: the PIL in the west half (door on its east side), a
-   * lobby in the north-east quarter that opens onto the parking, and the Huawei innovation lab south of the lobby.
+   * PES Innovation Lab block across the ground floor's south end (the user's sketch, 2026-09-25): the PIL along the west
+   * half (z0 … z1), the Huawei innovation lab in the south-east (huaZ0 … z1), and between the Huawei lab and the parking
+   * a lobby (xMid … lobbyX1) opening north onto the parking, with the PIL door in its west wall and the Huawei door in
+   * its south wall, and the stair down to the -1 floor east of it (lobbyX1 … x1).
    */
-  labs: { z0: -47.5, xMid: 128.75, lobbyZ1: -39 },
+  labs: { z0: -49.5, xMid: 128.75, lobbyX1: 133.5, huaZ0: -42.4 },
   /** reflecting pool at the north end of the east lawn, under the entry walkway's tall grey retaining wall */
   pool: { x0: 105, x1: 117.5, z0: -108.4, z1: -105.4 },
   retainingWall: { x0: 104, x1: 119.6, z: -110.4, h: 2.4 },

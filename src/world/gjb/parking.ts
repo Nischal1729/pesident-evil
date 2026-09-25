@@ -11,10 +11,12 @@ import { GroupKit, rect, segPoly } from './util';
  * with the east lawn between it and GJBC, running from the entry walkway (north) to the food court (south). The campus
  * falls from the main gate towards GJB, so:
  *  - the -1 floor (PARKING.low) is at GJB / lawn level: two walk-in doors in the lawn-side corten + green-mesh screen,
- *    open south end by the food court, a pedestrian stair up to the ground floor along the screen;
+ *    open south end by the food court;
  *  - the ground floor (PARKING.road) is at the level of the entry walkway: an open-air yard at the north end straight
  *    off the walkway, then the covered floor under a white fascia; the PES Innovation Lab block fills its south end
- *    (PIL west, lobby north-east opening onto the parking, Huawei innovation lab south of the lobby);
+ *    (the user's sketch: PIL along the west half, Huawei lab south-east, a lobby between them opening onto the parking,
+ *    and east of the lobby a straight stair down to the -1 level, where a corridor runs west under the labs to an exit
+ *    in the lawn-side screen);
  *  - vehicles for the -1 floor turn left (east) off the yard into a lane that runs down along the back wall between a
  *    grey parapet and the green-painted back wall to the middle of the parking (0:43–0:45, the "17" post);
  *  - the roof over the covered floor (PARKING.roof) is an empty terrace with no access.
@@ -35,10 +37,17 @@ const ROW_W = X0 + 1.25, ROW_MW = MID_X - 0.95, ROW_ME = MID_X + 0.95, ROW_LANE 
  */
 const FLAT_CAMPUS_ACCESS = true;
 const ACCESS_Z = -117.5;
-/** PIL door (lobby → PIL, in the dividing wall) and the Huawei lab door (lobby → Huawei, in the lobby's south wall) */
-const PIL_DOOR: V2 = [-46.3, -44.5];
-const HUAWEI_DOOR: V2 = [132.2, 134.0];
-const LOBBY_OPENING: V2 = [131.9, 134.3];
+/** PIL door (lobby → PIL, z range in the dividing wall) and Huawei lab door (lobby → Huawei, x range in its north wall) */
+const PIL_DOOR: V2 = [-48.9, -47.1];
+const HUAWEI_DOOR: V2 = [130.1, 131.9];
+/**
+ * Straight stair east of the lobby (the user: "walking straight down the stairs, there is an exit towards west ... below
+ * PIL"): a landing at road level off the lobby (z0 … zLand), one flight south down to the -1 level (zLand … z1), then a
+ * corridor west under the labs (z1 … corrZ1) to an exit door in the lawn-side screen.
+ */
+const ST = { x0: P.labs.lobbyX1, x1: X1, z0: P.labs.z0, zLand: P.labs.z0 + 2.0, z1: P.labs.huaZ0, corrZ1: P.labs.huaZ0 + 2.8 };
+/** the corridor's exit door in the lawn-side screen (z range) */
+const LAB_EXIT: V2 = [ST.z1 + 0.5, ST.z1 + 2.3];
 /** interior detail is culled beyond this distance from the lab block */
 const LAB_CULL = 55;
 
@@ -52,7 +61,6 @@ export function parkingSlots(): ParkingSlot[] {
   const out: ParkingSlot[] = [];
   const near = (z: number, list: number[], r: number) => list.some((c) => Math.abs(z - c) < r);
   const inDoor = (z: number) => P.westDoors.some(([a, b]) => z > a - 1.2 && z < b + 1.2);
-  const inStair = (z: number) => z > P.stairZ1 - 1.4 && z < P.stairZ0 + 1.4;
   const fillAt = (z: number, y: number, x: number) => {
     const north = (z - Z1) / (Z0 - Z1); // 1 at the walkway end
     const cluster = hash2(Math.floor(z / 7) * 3.1 + x, y + 5.7); // 7 m clusters
@@ -66,16 +74,17 @@ export function parkingSlots(): ParkingSlot[] {
     }
   };
   const colSkip = (z: number) => near(z, COLS_Z, 0.75);
-  // -1 floor: west row nosed to the screen (clear of the doors and the stair), a back-to-back double row on the column
-  // line, and a row along the back wall south of the lane (the lane itself stays clear)
-  row(ROW_W, Z0 + 2.5, Z1 - 2, -Math.PI / 2, LOW, (z) => inDoor(z) || inStair(z));
-  row(ROW_MW, Z0 + 3, Z1 - 2, -Math.PI / 2, LOW, colSkip);
-  row(ROW_ME, Z0 + 3, Z1 - 2, Math.PI / 2, LOW, colSkip);
-  row(ROW_E, P.rampZ + 4, Z1 - 2, Math.PI / 2, LOW);
+  // -1 floor (north of the lab block's closed-off lower level): west row nosed to the screen (clear of the doors), a
+  // back-to-back double row on the column line, and a row along the back wall south of the lane (the lane stays clear)
+  const lEnd = L.z0 - 1.5;
+  row(ROW_W, Z0 + 2.5, lEnd, -Math.PI / 2, LOW, inDoor);
+  row(ROW_MW, Z0 + 3, lEnd, -Math.PI / 2, LOW, colSkip);
+  row(ROW_ME, Z0 + 3, lEnd, Math.PI / 2, LOW, colSkip);
+  row(ROW_E, P.rampZ + 4, lEnd, Math.PI / 2, LOW);
   // ground floor (yard + covered floor, north of the labs): west row, double row, and an east row nosed to the lane
   // parapet (north) or the back wall (over the -1 lane, south)
-  const gEnd = L.z0 - 2.5;
-  row(ROW_W, Z0 + 1.5, gEnd, -Math.PI / 2, ROAD, inStair);
+  const gEnd = L.z0 - 3.5; // a clear strip in front of the lab block (the lobby opening, the PIL wall)
+  row(ROW_W, Z0 + 1.5, gEnd, -Math.PI / 2, ROAD);
   row(ROW_MW, Z0 + 1.5, gEnd, -Math.PI / 2, ROAD, colSkip);
   row(ROW_ME, Z0 + 1.5, gEnd, Math.PI / 2, ROAD, colSkip);
   row(ROW_LANE, Z0 + 1.5, P.rampZ - 1, Math.PI / 2, ROAD);
@@ -90,8 +99,8 @@ export function buildParking(kit: WorldKit): void {
   const scrTop = ROOF + 1.0; // the lawn-side screen runs up to the roof parapet over the covered floor
   const yardTop = ROAD + 1.1; // ... and doubles as the yard's parapet at the north end
 
-  // --- ground-floor slab at road level: everything but the lane trench (north-east) and the stairwell (south-west)
-  const slab: V2[] = [[X0, Z0], [P.laneX, Z0], [P.laneX, P.rampZ], [X1, P.rampZ], [X1, Z1], [X0, Z1], [X0, P.stairZ0], [P.stairX, P.stairZ0], [P.stairX, P.stairZ1], [X0, P.stairZ1]];
+  // --- ground-floor slab at road level: everything but the lane trench (north-east) and the lab stairwell (south-east)
+  const slab: V2[] = [[X0, Z0], [P.laneX, Z0], [P.laneX, P.rampZ], [X1, P.rampZ], [X1, ST.z0], [ST.x0, ST.z0], [ST.x0, ST.z1], [X1, ST.z1], [X1, Z1], [X0, Z1]];
   kit.buf('concrete', MID_X, -70).flatPoly(slab, ROAD, slabTop, 3);
   kit.buf('concrete', MID_X, -70).flatPoly(slab, ROAD - T, slabUnder, 3, true);
   c.addPolygon(slab, T, 'concrete', 'deck', ROAD - T);
@@ -104,10 +113,9 @@ export function buildParking(kit: WorldKit): void {
   kit.box('paint', MID_X, (ROAD + 2.35 + scrTop) / 2, P.yardZ + 0.15, X1 - X0, scrTop - ROAD - 2.35, 0.3, 0, white, 0.5);
   c.addPolygon(rect(X0, P.yardZ, X1, P.yardZ + 0.3), scrTop - ROAD - 2.35, 'concrete', 'fascia', ROAD + 2.35);
 
-  // painted white bay lines on both floors (not on the lane body, in the stairwell or in the lab block)
+  // painted white bay lines on both floors (not on the lane body or in the lab block)
   for (let z = Z0 + 1.5; z < Z1 - 0.5; z += 2) for (const [x, y] of [[X0 + 2.6, ROAD], [MID_X - 2.4, ROAD], [MID_X + 2.4, ROAD], [X0 + 2.6, LOW], [MID_X - 2.4, LOW], [MID_X + 2.4, LOW]] as V2[]) {
     if (y === ROAD && z > L.z0 - 0.5) continue;
-    if (x < P.stairX + 1 && z > P.stairZ1 - 0.5 && z < P.stairZ0 + 0.5) continue;
     kit.box('stone', x, y + (y === LOW ? 0.052 : 0.012), z, 1.6, 0.01, 0.06, 0, col('#e8e8e2')); // over the -1 floor's paving (y 0.04)
   }
 
@@ -115,7 +123,7 @@ export function buildParking(kit: WorldKit): void {
   for (const z of COLS_Z) {
     kit.box('concrete', MID_X, (ROAD - T) / 2, z, 0.42, ROAD - T, 0.42, 0, concrete, 0.5);
     c.addCircle(MID_X, z, 0.3, ROAD - T, 'concrete', 'column');
-    if (z > P.yardZ + 0.5 && z < L.z0) {
+    if (z > P.yardZ + 0.5 && z < L.z0 - 1.5) { // none right in front of the lab block: it would split its front strip
       kit.box('concrete', MID_X, (ROAD + ROOF - T) / 2, z, 0.42, ROOF - T - ROAD, 0.42, 0, concrete, 0.5);
       c.addCircle(MID_X, z, 0.3, ROOF - T - ROAD, 'concrete', 'column', ROAD);
     }
@@ -124,15 +132,16 @@ export function buildParking(kit: WorldKit): void {
   // --- lawn-side (west) face: corten + green-mesh screen from the lawn up to the roof parapet (the tall screen along
   // the path by the pool, 1:10), two walk-in doors into the -1 floor (lintels above)
   const uv = 3.2 / 4.4; // one texture repeat (rust panel + green panel) per 4.4 m, as before
+  const doors: V2[] = [...P.westDoors, LAB_EXIT];
   const runs: V2[] = [];
   let a = Z0;
-  for (const [d0, d1] of P.westDoors) { runs.push([a, d0]); a = d1; }
+  for (const [d0, d1] of doors) { runs.push([a, d0]); a = d1; }
   runs.push([a, Z1]);
   for (const [r0, r1] of runs) {
     kit.segBox('corten', [X0, r0], [X0, r1], 0, yardTop, 0.24, col('#ffffff'), 0, 0, uv);
     c.addPolygon(rect(X0 - 0.15, r0, X0 + 0.15, r1), yardTop, 'metal', 'wall');
   }
-  for (const [d0, d1] of P.westDoors) {
+  for (const [d0, d1] of doors) {
     kit.segBox('corten', [X0, d0], [X0, d1], 2.5, yardTop, 0.24, col('#ffffff'), 0, 0, uv);
     kit.segBox('metal', [X0 - 0.16, d0], [X0 - 0.16, d1], 2.45, 2.55, 0.06, col('#2a211b'));
     c.addPolygon(rect(X0 - 0.15, d0, X0 + 0.15, d1), yardTop - 2.5, 'metal', 'lintel', 2.5);
@@ -186,22 +195,6 @@ export function buildParking(kit: WorldKit): void {
   kit.box('dark', lx1 - 0.49, ROAD + 1.45, Z0 + 1.0, 0.02, 0.35, 0.4, 0, col('#c0392b'));
   c.addPolygon(rect(lx1 - 0.48, Z0 + 0.7, lx1 - 0.22, Z0 + 1.3), 2.0, 'concrete', 'post', ROAD);
 
-  // --- pedestrian stair between the floors along the screen, north of the labs (rises north onto the ground floor)
-  const steps = 20, run = (P.stairZ1 - P.stairZ0) / steps, rise = (ROAD - LOW) / steps; // run < 0 (northward)
-  for (let k = 0; k < steps; k++) {
-    const za = P.stairZ0 + k * run, h = (k + 1) * rise;
-    kit.box('granite', (X0 + P.stairX) / 2, LOW + h / 2, za + run / 2, P.stairX - X0 - 0.1, h, Math.abs(run) + 0.01, 0, col('#b3aea6'), 0.5);
-  }
-  kit.buf('metal', P.stairX, (P.stairZ0 + P.stairZ1) / 2).beam([P.stairX - 0.05, LOW + 1.0, P.stairZ0], [P.stairX - 0.05, ROAD + 1.0, P.stairZ1], 0.06, 0.06, col('#8d9398'));
-  c.addRamp(rect(X0, P.stairZ1, P.stairX, P.stairZ0), [(X0 + P.stairX) / 2, P.stairZ0], [(X0 + P.stairX) / 2, P.stairZ1], LOW, ROAD, 'concrete', 'stair');
-  // stairwell parapets on the ground floor (east side and south end; the stair tops out at its north end)
-  const par = (p0: V2, p1: V2) => {
-    kit.segBox('concrete', p0, p1, ROAD - T, ROAD + 1.0, 0.22, parapet, 0, 0.1, 0.5);
-    c.addPolygon(segPoly(p0, p1, 0.22), T + 1.0, 'concrete', 'parapet', ROAD - T);
-  };
-  par([P.stairX + 0.11, P.stairZ1], [P.stairX + 0.11, P.stairZ0]);
-  par([X0, P.stairZ0 + 0.11], [P.stairX + 0.22, P.stairZ0 + 0.11]);
-
   // --- temporary access from the flat walkway up to the yard (see FLAT_CAMPUS_ACCESS)
   if (FLAT_CAMPUS_ACCESS) {
     const ab = kit.buf('concrete', MID_X, (ACCESS_Z + Z0) / 2);
@@ -229,8 +222,8 @@ export function buildParking(kit: WorldKit): void {
 
   // ground-floor bike-row collision (base = road level; the -1 floor bikes get their own prop collision in Props.ts)
   for (const [xa, xb, za, zb] of [
-    [X0 + 0.2, X0 + 2.2, Z0 + 1, P.stairZ1 - 1.4], [MID_X - 1.95, MID_X + 1.95, Z0 + 1, L.z0 - 2],
-    [P.laneX - 2.2, P.laneX - 0.3, Z0 + 1, P.rampZ - 0.5], [X1 - 2.2, X1 - 0.2, P.rampZ + 1, L.z0 - 2],
+    [X0 + 0.2, X0 + 2.2, Z0 + 1, L.z0 - 3], [MID_X - 1.95, MID_X + 1.95, Z0 + 1, L.z0 - 3],
+    [P.laneX - 2.2, P.laneX - 0.3, Z0 + 1, P.rampZ - 0.5], [X1 - 2.2, X1 - 0.2, P.rampZ + 1, L.z0 - 3],
   ] as number[][]) c.addPolygon(rect(xa, za, xb, zb), 1.1, 'metal', 'prop', ROAD);
 
   // --- corten screens with a leaf cut-out marking the entrances (the yard's lane corner, the -1 floor's south end)
@@ -262,126 +255,157 @@ export function buildParking(kit: WorldKit): void {
 }
 
 /**
- * The PES Innovation Lab block across the ground floor's south end (the user's description): the square south end is
- * split into a west half, the PES Innovation Lab (PIL), entered by a door in its east wall, and an east half whose
- * north part is a lobby opening onto the parking and whose south part is the Huawei innovation lab, entered from the
- * lobby through its south wall. Shell (walls, fronts, windows) is always drawn; furniture, linings, ceilings, lights and
- * signs sit in a distance-culled group.
+ * The PES Innovation Lab block across the ground floor's south end, laid out from the user's sketch:
+ *  - the PIL along the west half (x0 … xMid, z0 … z1), entered through a door in its east wall from the lobby;
+ *  - the Huawei innovation lab in the south-east (xMid … x1, huaZ0 … z1), entered from the lobby through its north wall;
+ *  - the lobby between them (xMid … lobbyX1, z0 … huaZ0), open on its north side to the parking;
+ *  - east of the lobby a straight stair: a landing off the lobby, one flight south down to the -1 level, and a corridor
+ *    running west under the labs to an exit door in the lawn-side screen. The rest of the level under the labs is
+ *    closed off from the parking.
+ * The shell (walls, stair, windows) is always drawn; furniture, linings, ceilings, lights and signs sit in a
+ * distance-culled group. Reference for the PIL's look: reference/PARKING_PIL_NOTES.md (black laminate desks, desktop
+ * PCs with dual monitors, an orange task chair, a drone build on a workbench, cream plaster, whiteboard).
  */
 function buildLabs(kit: WorldKit): void {
   const c = kit.collision;
   const ceil = ROOF - T; // the rooms run up to the roof slab
+  const low = ROAD - T; // the lower level runs up to the ground-floor slab
   const wallH = ceil - ROAD;
-  const cream = col('#ebe7df'), frame = col('#2b2f33'), white = col('#f4f3ef');
-  const wall = (p0: V2, p1: V2, gaps: V2[] = [], alongZ = false, color = cream) => {
-    // a straight interior/exterior wall from p0 to p1 with door gaps (ranges along its length axis) and lintels
+  const cream = col('#ebe2cf'), frame = col('#2b2f33'), white = col('#f4f3ef'), grey = col('#cfcac2');
+  // a straight wall from p0 to p1 (axis-aligned) between y0 and y1, with door gaps (ranges along its length) and lintels
+  const wall = (p0: V2, p1: V2, gaps: V2[] = [], y0 = ROAD, y1 = ceil, color = cream) => {
+    const alongZ = p0[0] === p1[0];
     let s = alongZ ? p0[1] : p0[0];
     const e = alongZ ? p1[1] : p1[0];
     const at = (u: number): V2 => (alongZ ? [p0[0], u] : [u, p0[1]]);
-    const lintel = ROAD + 2.2;
+    const lintel = y0 + 2.2;
     for (const [g0, g1] of [...gaps, [e, e] as V2]) {
       if (g0 > s + 0.01) {
-        kit.segBox('plaster', at(s), at(g0), ROAD, ceil, 0.2, color, 0, 0, 0.5);
-        c.addPolygon(segPoly(at(s), at(g0), 0.2), wallH, 'concrete', 'wall', ROAD);
+        kit.segBox('plaster', at(s), at(g0), y0, y1, 0.2, color, 0, 0, 0.5);
+        c.addPolygon(segPoly(at(s), at(g0), 0.2), y1 - y0, 'concrete', 'wall', y0);
       }
       if (g1 > g0) {
-        kit.segBox('plaster', at(g0), at(g1), lintel, ceil, 0.2, color, 0, 0, 0.5);
-        c.addPolygon(segPoly(at(g0), at(g1), 0.2), ceil - lintel, 'concrete', 'lintel', lintel);
-        // dark metal door frame
-        for (const u of [g0, g1]) kit.box('metal', at(u)[0], ROAD + 1.1, at(u)[1], alongZ ? 0.24 : 0.08, 2.2, alongZ ? 0.08 : 0.24, 0, frame);
+        kit.segBox('plaster', at(g0), at(g1), lintel, y1, 0.2, color, 0, 0, 0.5);
+        c.addPolygon(segPoly(at(g0), at(g1), 0.2), y1 - lintel, 'concrete', 'lintel', lintel);
+        for (const u of [g0, g1]) kit.box('metal', at(u)[0], y0 + 1.1, at(u)[1], alongZ ? 0.24 : 0.08, 2.2, alongZ ? 0.08 : 0.24, 0, frame);
       }
       s = g1;
     }
   };
-  // PIL north wall (solid, facing the parking), the dividing wall with the PIL door, the lobby / Huawei wall
+  // --- ground floor: PIL north wall (facing the parking), PIL / lobby + Huawei wall with the PIL door, Huawei north
+  // wall with its door (the part east of the lobby is the stairwell's south wall), lobby / stairwell wall open at the
+  // landing, stairwell north wall
   wall([X0 + 0.15, L.z0], [L.xMid, L.z0]);
-  wall([L.xMid, L.z0], [L.xMid, Z1], [PIL_DOOR], true);
-  wall([L.xMid, L.lobbyZ1], [X1, L.lobbyZ1], [HUAWEI_DOOR]);
-  // lobby front onto the parking: glazing on dark mullions with a wide opening
-  const fz = L.z0;
-  const lobbyGlass: V2[] = [[L.xMid + 0.1, LOBBY_OPENING[0]], [LOBBY_OPENING[1], X1]];
-  for (const [u0, u1] of lobbyGlass) {
-    for (let u = u0; u <= u1 + 0.01; u += (u1 - u0) / Math.max(1, Math.round((u1 - u0) / 1.3))) kit.box('metal', u, ROAD + 1.3, fz, 0.07, 2.6, 0.1, 0, frame);
-    c.addPolygon(rect(u0, fz - 0.06, u1, fz + 0.06), 2.6, 'metal', 'glass', ROAD);
-  }
-  kit.box('plaster', (L.xMid + X1) / 2, (ROAD + 2.6 + ceil) / 2, fz, X1 - L.xMid, ceil - ROAD - 2.6, 0.2, 0, cream, 0.5);
-  c.addPolygon(rect(L.xMid, fz - 0.1, X1, fz + 0.1), ceil - ROAD - 2.6, 'concrete', 'lintel', ROAD + 2.6);
-  // south wall: the building's south face, up to the roof parapet, with a band of dark windows to each lab
+  wall([L.xMid, L.z0], [L.xMid, Z1], [PIL_DOOR]);
+  wall([L.xMid, L.huaZ0], [X1, L.huaZ0], [HUAWEI_DOOR]);
+  wall([L.lobbyX1, L.z0], [L.lobbyX1, L.huaZ0], [[ST.z0 + 0.1, ST.zLand - 0.1]]);
+  wall([L.lobbyX1, L.z0], [X1, L.z0], [], LOW, ceil);
+  // lobby opening onto the parking: a lintel band over the full width
+  kit.box('plaster', (L.xMid + L.lobbyX1) / 2, (ROAD + 2.6 + ceil) / 2, L.z0, L.lobbyX1 - L.xMid, ceil - ROAD - 2.6, 0.2, 0, cream, 0.5);
+  c.addPolygon(rect(L.xMid, L.z0 - 0.1, L.lobbyX1, L.z0 + 0.1), ceil - ROAD - 2.6, 'concrete', 'lintel', ROAD + 2.6);
+  // south face of the building, up to the roof parapet, with a band of dark windows to each lab
   kit.segBox('plaster', [X0, Z1], [X1, Z1], ROAD - T, ROOF + 1.0, 0.3, white, 0.15, 0, 0.5);
   c.addPolygon(rect(X0, Z1, X1, Z1 + 0.3), ROOF + 1.0 - (ROAD - T), 'concrete', 'wall', ROAD - T);
   for (let x = X0 + 1.2; x < X1 - 1.4; x += 2.1) {
     if (Math.abs(x + 0.8 - L.xMid) < 0.9) continue;
     kit.box('glass', x + 0.8, ROAD + 1.6, Z1 + 0.31, 1.6, 1.5, 0.04, 0, col('#26323a'));
   }
+  // --- stair: landing at road level off the lobby, one flight south down to the corridor
+  const sx0 = ST.x0 + 0.1, sx1 = ST.x1 - 0.05;
+  kit.box('granite', (sx0 + sx1) / 2, LOW + (ROAD - LOW) / 2, (ST.z0 + ST.zLand) / 2 + 0.05, sx1 - sx0, ROAD - LOW, ST.zLand - ST.z0 - 0.1, 0, col('#b3aea6'), 0.5);
+  c.addPolygon(rect(sx0, ST.z0 + 0.1, sx1, ST.zLand), ROAD - LOW, 'concrete', 'landing', LOW);
+  const steps = 18, run = (ST.z1 - ST.zLand) / steps, rise = (ROAD - LOW) / steps;
+  for (let k = 0; k < steps; k++) {
+    const za = ST.zLand + k * run, h = ROAD - LOW - (k + 1) * rise;
+    if (h > 0.001) kit.box('granite', (sx0 + sx1) / 2, LOW + h / 2, za + run / 2, sx1 - sx0, h, run + 0.01, 0, col(k % 2 ? '#b3aea6' : '#a7a29a'), 0.5);
+  }
+  c.addRamp(rect(sx0, ST.zLand, sx1, ST.z1), [(sx0 + sx1) / 2, ST.zLand], [(sx0 + sx1) / 2, ST.z1], ROAD, LOW, 'concrete', 'stair');
+  // a steel handrail down the middle of the flight (the stem of the sketch's T)
+  const hxm = (sx0 + sx1) / 2;
+  kit.buf('metal', hxm, (ST.zLand + ST.z1) / 2).beam([hxm, ROAD + 0.95, ST.zLand], [hxm, LOW + 0.95, ST.z1], 0.05, 0.05, col('#8d9398'));
+  for (const z of [ST.zLand + 0.3, (ST.zLand + ST.z1) / 2, ST.z1 - 0.3]) {
+    const y = ROAD + ((LOW - ROAD) * (z - ST.zLand)) / (ST.z1 - ST.zLand);
+    kit.box('metal', hxm, y + 0.47, z, 0.04, 0.95, 0.04, 0, col('#8d9398'));
+  }
+  // --- lower level under the labs: closed off from the parking; a corridor from the stair foot west to the lawn exit
+  wall([X0 + 0.15, L.z0], [L.lobbyX1, L.z0], [], LOW, low, grey);
+  wall([X0 + 0.15, ST.z1], [L.lobbyX1, ST.z1], [], LOW, low, grey);
+  wall([X0 + 0.15, ST.corrZ1], [X1, ST.corrZ1], [], LOW, low, grey);
+  for (let x = X0 + 3; x < X1 - 1; x += 3.5) kit.box('emissive', x, low - 0.03, (ST.z1 + ST.corrZ1) / 2, 1.2, 0.05, 0.1, 0, col('#ffffff'));
+  // a green exit sign over the lawn door, inside
+  kit.box('paint', X0 + 0.2, LOW + 2.5, (LAB_EXIT[0] + LAB_EXIT[1]) / 2, 0.04, 0.2, 0.5, 0, col('#1f9d55'));
 
   // ------------------------------------------------------------------ culled interior detail
   const g = new GroupKit(kit);
-  const floorPIL = col('#c9ccce'), floorLobby = col('#d8d2c6'), floorHuawei = col('#6f7479');
+  const floorPIL = col('#d8d0bf'), floorLobby = col('#d8d2c6'), floorHuawei = col('#6f7479');
   const pil = rect(X0 + 0.15, L.z0 + 0.1, L.xMid - 0.1, Z1);
-  const lobby = rect(L.xMid + 0.1, L.z0 + 0.1, X1, L.lobbyZ1 - 0.1);
-  const hua = rect(L.xMid + 0.1, L.lobbyZ1 + 0.1, X1, Z1);
-  g.b('polished').flatPoly(pil, ROAD + 0.012, floorPIL, 2);
+  const lobby = rect(L.xMid + 0.1, L.z0 + 0.1, L.lobbyX1 - 0.1, L.huaZ0 - 0.1);
+  const hua = rect(L.xMid + 0.1, L.huaZ0 + 0.1, X1, Z1);
+  g.b('polished').flatPoly(pil, ROAD + 0.012, floorPIL, 1.6); // pale terrazzo
   g.b('polished').flatPoly(lobby, ROAD + 0.012, floorLobby, 1.2);
   g.b('concrete').flatPoly(hua, ROAD + 0.012, floorHuawei, 1);
   // false ceilings with light panels
   for (const r of [pil, lobby, hua]) g.b('plaster').flatPoly(r, ceil - 0.25, white, 2, true);
   for (let z = L.z0 + 2; z < Z1 - 1; z += 2.6) {
     for (const x of [X0 + 2.5, X0 + 6]) g.light(x, ceil - 0.27, z, 1.2, 0.03, 0.3);
-    if (z > L.lobbyZ1 + 0.5) for (const x of [L.xMid + 2.5, L.xMid + 6.2]) g.light(x, ceil - 0.27, z, 1.2, 0.03, 0.3);
+    if (z > L.huaZ0 + 0.5) for (const x of [L.xMid + 2.5, L.xMid + 6.2]) g.light(x, ceil - 0.27, z, 1.2, 0.03, 0.3);
   }
-  g.light(L.xMid + 4.4, ceil - 0.27, (L.z0 + L.lobbyZ1) / 2, 2.4, 0.03, 0.6);
-  // the lobby's glazing onto the parking (see-through; the mullions and lintel are in the always-drawn shell)
-  for (const [u0, u1] of lobbyGlass) g.pane([u0, L.z0], [u1, L.z0], ROAD, ROAD + 2.6);
-  // inner linings over the corten screen (PIL) and the back wall (lobby, Huawei)
-  g.box('plaster', X0 + 0.14, (ROAD + ceil) / 2, (L.z0 + Z1) / 2, 0.04, wallH, Z1 - L.z0, 0, white, 0.5);
-  g.box('plaster', X1 - 0.02, (ROAD + ceil) / 2, (L.z0 + Z1) / 2, 0.04, wallH, Z1 - L.z0, 0, white, 0.5);
+  g.light((L.xMid + L.lobbyX1) / 2, ceil - 0.27, (L.z0 + L.huaZ0) / 2, 2.0, 0.03, 0.6);
+  // inner linings over the corten screen (PIL) and the back wall (Huawei)
+  g.box('plaster', X0 + 0.14, (ROAD + ceil) / 2, (L.z0 + Z1) / 2, 0.04, wallH, Z1 - L.z0, 0, cream, 0.5);
+  g.box('plaster', X1 - 0.02, (ROAD + ceil) / 2, (L.huaZ0 + Z1) / 2, 0.04, wallH, Z1 - L.huaZ0, 0, white, 0.5);
 
-  // PES Innovation Lab: two long workbenches with monitors and stools, a component rack along the screen, a 3D printer
-  // bay by the south windows, whiteboard + project wall on the north wall, blue accent wall behind the door
-  const benchCol = col('#e2dccf'), benchTop = col('#8a6a48'), dark = col('#1c1f22'), blue = col('#1f5fa8');
-  for (const bz of [L.z0 + 5.0, L.z0 + 10.0]) {
-    const bx0 = X0 + 2.4, bx1 = L.xMid - 2.2, bw = 1.4; // ≥ 1.5 m aisles at both ends (1 m nav grid, radius 0.38)
-    g.box('wood', (bx0 + bx1) / 2, ROAD + 0.88, bz, bx1 - bx0, 0.06, bw, 0, benchTop);
-    g.box('metal', (bx0 + bx1) / 2, ROAD + 0.44, bz, bx1 - bx0 - 0.2, 0.82, bw - 0.3, 0, benchCol);
-    c.addPolygon(rect(bx0, bz - bw / 2, bx1, bz + bw / 2), 0.92, 'wood', 'prop', ROAD);
-    for (let x = bx0 + 0.6; x < bx1 - 0.3; x += 1.2) for (const s of [-1, 1]) {
-      g.box('dark', x, ROAD + 1.12, bz + s * 0.25, 0.55, 0.34, 0.03, 0, dark); // monitor
-      g.box('metal', x, ROAD + 0.93, bz + s * 0.25, 0.08, 0.1, 0.08, 0, dark);
-      g.box('metal', x, ROAD + 0.5, bz + s * 1.05, 0.34, 0.05, 0.34, 0, dark); // stool
-      g.box('metal', x, ROAD + 0.25, bz + s * 1.05, 0.05, 0.5, 0.05, 0, col('#80868b'));
+  // PES Innovation Lab: two rows of black desks with desktop PCs and dual monitors and orange chairs, a drone build on
+  // a workbench by the north wall, a component rack along the screen, whiteboard + project posters
+  const black = col('#1e1f21'), dark = col('#1c1f22'), orange = col('#e2701f'), tower = col('#2a2c30');
+  const deskRow = (bz: number, bw: number) => {
+    const bx0 = X0 + 2.4, bx1 = L.xMid - 2.2; // ≥ 1.5 m aisles at both ends (1 m nav grid, radius 0.38)
+    g.box('wood', (bx0 + bx1) / 2, ROAD + 0.75, bz, bx1 - bx0, 0.04, bw, 0, black);
+    g.box('metal', (bx0 + bx1) / 2, ROAD + 0.37, bz, bx1 - bx0 - 0.2, 0.72, 0.05, 0, col('#3a3c40'));
+    c.addPolygon(rect(bx0, bz - bw / 2, bx1, bz + bw / 2), 0.8, 'wood', 'prop', ROAD);
+    for (let x = bx0 + 0.65; x < bx1 - 0.4; x += 1.3) for (const sd of [-1, 1]) {
+      const fz = bz + sd * (bw / 2 - 0.3); // monitors along the desk's centre, users either side
+      for (const o of [-0.26, 0.26]) g.box('dark', x + o, ROAD + 0.98, fz - sd * 0.12, 0.48, 0.3, 0.03, 0, dark);
+      g.box('metal', x + 0.55, ROAD + 0.98, fz - sd * 0.05, 0.18, 0.42, 0.4, 0, tower);
+      g.box('paint', x, ROAD + 0.47, bz + sd * (bw / 2 + 0.45), 0.44, 0.07, 0.44, 0, orange); // chair seat
+      g.box('paint', x, ROAD + 0.8, bz + sd * (bw / 2 + 0.66), 0.42, 0.55, 0.05, 0, orange); // chair back
+      g.box('metal', x, ROAD + 0.23, bz + sd * (bw / 2 + 0.45), 0.05, 0.45, 0.05, 0, dark);
     }
+  };
+  deskRow(L.z0 + 7.0, 1.4);
+  deskRow(L.z0 + 12.0, 1.4);
+  // drone workbench by the north wall
+  const dbx = (X0 + L.xMid) / 2 + 0.6, dbz = L.z0 + 1.2;
+  g.box('wood', dbx, ROAD + 0.88, dbz, 3.2, 0.05, 0.9, 0, black);
+  g.box('metal', dbx, ROAD + 0.43, dbz, 3.0, 0.82, 0.8, 0, col('#3a3c40'));
+  c.addPolygon(rect(dbx - 1.6, dbz - 0.45, dbx + 1.6, dbz + 0.45), 0.92, 'wood', 'prop', ROAD);
+  g.box('metal', dbx - 0.4, ROAD + 0.98, dbz, 0.3, 0.12, 0.3, 0, col('#d9d9d6')); // drone body
+  for (const [ox, oz] of [[-0.62, -0.22], [-0.18, -0.22], [-0.62, 0.22], [-0.18, 0.22]]) {
+    g.box('dark', dbx + ox, ROAD + 1.0, dbz + oz, 0.34, 0.01, 0.04, 0.3, dark); // rotors
   }
+  g.box('dark', dbx + 0.9, ROAD + 1.12, dbz, 0.55, 0.36, 0.04, 0, dark); // laptop screen
   // component rack along the screen
-  for (let z = L.z0 + 1.2; z < Z1 - 1.5; z += 2.2) {
+  for (let z = L.z0 + 2.6; z < Z1 - 1.5; z += 2.2) {
     g.box('metal', X0 + 0.55, ROAD + 1.0, z, 0.6, 2.0, 2.0, 0, col('#5b6168'));
     for (let k = 0; k < 4; k++) g.box('plaster', X0 + 0.62, ROAD + 0.35 + k * 0.45, z, 0.5, 0.04, 1.9, 0, col('#d9dde0'));
   }
-  c.addPolygon(rect(X0 + 0.2, L.z0 + 0.2, X0 + 0.9, Z1 - 0.4), 2.0, 'metal', 'shelf', ROAD);
-  // 3D printers on a table by the south wall
-  g.box('wood', (X0 + L.xMid) / 2, ROAD + 0.75, Z1 - 0.8, 5.5, 0.05, 0.9, 0, benchTop);
-  g.box('metal', (X0 + L.xMid) / 2, ROAD + 0.37, Z1 - 0.8, 5.3, 0.72, 0.8, 0, benchCol);
-  for (let k = 0; k < 3; k++) {
-    const x = X0 + 2.2 + k * 1.8;
-    g.box('metal', x, ROAD + 1.05, Z1 - 0.8, 0.5, 0.55, 0.5, 0, dark);
-    g.box('glass', x, ROAD + 1.08, Z1 - 1.06, 0.4, 0.4, 0.02, 0, col('#9fb5c2'));
-  }
-  c.addPolygon(rect(X0 + 1.1, Z1 - 1.3, L.xMid - 1.1, Z1 - 0.25), 0.8, 'wood', 'prop', ROAD);
-  // whiteboard + pinned project posters on the PIL north wall, blue accent on the dividing wall
-  g.box('plaster', X0 + 3.4, ROAD + 1.45, L.z0 + 0.13, 3.2, 1.2, 0.03, 0, col('#fbfbf8'));
-  g.box('metal', X0 + 3.4, ROAD + 0.83, L.z0 + 0.17, 3.2, 0.04, 0.08, 0, col('#9aa0a6'));
-  for (let k = 0; k < 4; k++) g.box('paint', X0 + 5.6 + k * 0.7, ROAD + 1.6, L.z0 + 0.13, 0.55, 0.78, 0.02, 0, col(['#f2b233', '#e5484d', '#3fa7d6', '#6cc070'][k]));
-  g.box('paint', L.xMid - 0.12, ROAD + 1.4, (L.lobbyZ1 + Z1) / 2 - 1, 0.03, 2.8, 6, 0, blue);
+  c.addPolygon(rect(X0 + 0.2, L.z0 + 1.6, X0 + 0.9, Z1 - 0.4), 2.0, 'metal', 'shelf', ROAD);
+  // whiteboard + project posters on the PIL's east (lobby) wall, south of its door
+  g.box('plaster', L.xMid - 0.13, ROAD + 1.45, L.z0 + 7.5, 0.03, 1.2, 3.2, 0, col('#fbfbf8'));
+  g.box('metal', L.xMid - 0.17, ROAD + 0.83, L.z0 + 7.5, 0.08, 0.04, 3.2, 0, col('#9aa0a6'));
+  for (let k = 0; k < 4; k++) g.box('paint', L.xMid - 0.13, ROAD + 1.6, L.z0 + 10.6 + k * 0.7, 0.02, 0.78, 0.55, 0, col(['#f2b233', '#e5484d', '#3fa7d6', '#6cc070'][k]));
 
-  // lobby: a bench and a notice board, the lab signs over the two doors
-  g.box('wood', X1 - 0.6, ROAD + 0.42, (L.z0 + L.lobbyZ1) / 2, 0.5, 0.06, 2.8, 0, benchTop);
-  g.box('metal', X1 - 0.6, ROAD + 0.2, (L.z0 + L.lobbyZ1) / 2, 0.4, 0.4, 2.6, 0, dark);
-  c.addPolygon(rect(X1 - 0.9, (L.z0 + L.lobbyZ1) / 2 - 1.4, X1 - 0.3, (L.z0 + L.lobbyZ1) / 2 + 1.4), 0.46, 'wood', 'prop', ROAD);
-  g.box('wood', X1 - 0.05, ROAD + 1.5, (L.z0 + L.lobbyZ1) / 2 - 2.9, 0.03, 1.0, 1.4, 0, col('#9c7a52'));
+  // lobby: a bench and a notice board on its stairwell wall
+  const lbx = L.lobbyX1 - 0.45, lbz = (ST.zLand + L.huaZ0) / 2;
+  g.box('wood', lbx, ROAD + 0.42, lbz, 0.45, 0.06, 2.4, 0, col('#8a6a48'));
+  g.box('metal', lbx, ROAD + 0.2, lbz, 0.35, 0.4, 2.2, 0, dark);
+  c.addPolygon(rect(lbx - 0.25, lbz - 1.2, lbx + 0.25, lbz + 1.2), 0.46, 'wood', 'prop', ROAD);
+  g.box('wood', L.lobbyX1 - 0.13, ROAD + 1.55, lbz, 0.03, 0.9, 1.6, 0, col('#9c7a52'));
 
-  // Huawei innovation lab: rows of desks with PCs facing a red accent wall and a screen
+  // Huawei innovation lab: rows of desks with PCs facing a red accent wall and a screen on the back wall
   const red = col('#cf0a2c');
-  for (let r = 0; r < 3; r++) {
-    const dz = L.lobbyZ1 + 2.2 + r * 2.2;
+  for (let r = 0; r < 4; r++) {
+    const dz = L.huaZ0 + 2.2 + r * 2.2;
     const dx0 = L.xMid + 1.7, dx1 = X1 - 1.6; // walkable aisles at both ends of every row
     g.box('wood', (dx0 + dx1) / 2, ROAD + 0.74, dz, dx1 - dx0, 0.04, 0.75, 0, col('#e9e6df'));
     g.box('metal', (dx0 + dx1) / 2, ROAD + 0.37, dz, dx1 - dx0 - 0.2, 0.7, 0.05, 0, col('#80868b'));
@@ -391,8 +415,8 @@ function buildLabs(kit: WorldKit): void {
       g.box('metal', x, ROAD + 0.47, dz + 0.65, 0.42, 0.06, 0.42, 0, dark); // chair
     }
   }
-  g.box('paint', X1 - 0.06, ROAD + 1.4, (L.lobbyZ1 + Z1) / 2, 0.02, 2.8, Z1 - L.lobbyZ1 - 0.4, 0, red); // clear of the lining (X1 − 0.04)
-  g.box('dark', X1 - 0.09, ROAD + 1.55, (L.lobbyZ1 + Z1) / 2, 0.03, 1.1, 2.0, 0, dark);
+  g.box('paint', X1 - 0.06, ROAD + 1.4, (L.huaZ0 + Z1) / 2, 0.02, 2.8, Z1 - L.huaZ0 - 0.4, 0, red); // clear of the lining (X1 − 0.04)
+  g.box('dark', X1 - 0.09, ROAD + 1.55, (L.huaZ0 + Z1) / 2, 0.03, 1.1, 2.0, 0, dark);
 
   const lod = g.build('interior:parking_labs', [(X0 + X1) / 2, (L.z0 + Z1) / 2], LAB_CULL);
   // lab signs (a small canvas texture): over the PIL door in the lobby and over the Huawei door
@@ -423,7 +447,7 @@ function labSigns(): THREE.Mesh {
   const quad = (p: [number, number, number][], v0: number, v1: number) => {
     const b = pos.length / 3;
     for (const q of p) pos.push(q[0], q[1], q[2]);
-    uv.push(0, v1, 1, v1, 1, v0, 0, v0);
+    uv.push(0, v0, 1, v0, 1, v1, 0, v1); // CanvasTexture flips Y: v0 (bottom of the band) at the bottom edge
     idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
   };
   const y0 = ROAD + 2.3, y1 = ROAD + 2.7;
@@ -431,7 +455,7 @@ function labSigns(): THREE.Mesh {
   const pz = (PIL_DOOR[0] + PIL_DOOR[1]) / 2, sx = L.xMid + 0.11;
   quad([[sx, y0, pz + 0.8], [sx, y0, pz - 0.8], [sx, y1, pz - 0.8], [sx, y1, pz + 0.8]], 0.5, 1);
   // Huawei sign on the lobby face of the lobby's south wall, above the Huawei door (facing −z)
-  const hx = (HUAWEI_DOOR[0] + HUAWEI_DOOR[1]) / 2, sz = L.lobbyZ1 - 0.11;
+  const hx = (HUAWEI_DOOR[0] + HUAWEI_DOOR[1]) / 2, sz = L.huaZ0 - 0.11;
   quad([[hx + 0.8, y0, sz], [hx - 0.8, y0, sz], [hx - 0.8, y1, sz], [hx + 0.8, y1, sz]], 0, 0.5);
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
