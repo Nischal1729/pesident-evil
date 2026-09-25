@@ -464,12 +464,21 @@ function walkPathZ(pts: V2[], x: number): number {
 function shelters(kit: WorldKit): void {
   const white = col('#f1f1ee'), steel = col('#6f757b');
   // (the old single-storey bike canopy is replaced by the 2-level 2-wheeler parking, src/world/gjb/parking.ts)
-  // steel mesh shelter on a raised plinth near the gate walkway
+  // steel mesh shelter on a raised plinth near the gate walkway (2026 tour 1920, GJB tour 2:02): a light cage of white
+  // square-tube posts and rails with chain-link panels, a flat sheet roof with a white fascia
   {
     const x0 = 145.5, x1 = 155.3, z0 = -117.2, z1 = -111.2, h = 3.2;
+    const frame = col('#dcdedf');
     kit.box('stone', (x0 + x1) / 2, 0.25, (z0 + z1) / 2, x1 - x0, 0.5, z1 - z0, 0, col('#b3aea6'));
-    kit.box('metal', (x0 + x1) / 2, h + 0.05, (z0 + z1) / 2, x1 - x0 + 0.6, 0.12, z1 - z0 + 0.6, 0, col('#9ea3a7'));
-    for (const x of [x0, (x0 + x1) / 2, x1]) for (const z of [z0, z1]) kit.box('metal', x, h / 2 + 0.25, z, 0.12, h - 0.5, 0.12, 0, steel);
+    kit.box('metal', (x0 + x1) / 2, h + 0.03, (z0 + z1) / 2, x1 - x0 + 0.6, 0.06, z1 - z0 + 0.6, 0, col('#b9bdc0'));
+    for (const z of [z0 - 0.3, z1 + 0.3]) kit.box('metal', (x0 + x1) / 2, h - 0.05, z, x1 - x0 + 0.6, 0.22, 0.05, 0, frame);
+    for (const x of [x0 - 0.3, x1 + 0.3]) kit.box('metal', x, h - 0.05, (z0 + z1) / 2, 0.05, 0.22, z1 - z0 + 0.6, 0, frame);
+    for (let x = x0; x <= x1 + 0.01; x += (x1 - x0) / 4) for (const z of [z0, z1]) kit.box('metal', x, h / 2 + 0.25, z, 0.08, h - 0.5, 0.08, 0, frame);
+    for (const z of [(z0 + z1) / 2]) kit.box('metal', x0, h / 2 + 0.25, z, 0.08, h - 0.5, 0.08, 0, frame);
+    for (const y of [0.55, 1.6, h - 0.12]) {
+      for (const z of [z0, z1]) kit.box('metal', (x0 + x1) / 2, y, z, x1 - x0, 0.05, 0.05, 0, frame);
+      kit.box('metal', x0, y, (z0 + z1) / 2, 0.05, 0.05, z1 - z0, 0, frame);
+    }
     const mesh = kit.instSet('chainLink', () => {
       const g = new THREE.PlaneGeometry(1, 1);
       const tex = chainLinkTexture();
@@ -529,7 +538,7 @@ function chainLinkTexture(): THREE.CanvasTexture {
   c.width = c.height = S;
   const g = c.getContext('2d')!;
   g.clearRect(0, 0, S, S);
-  g.strokeStyle = 'rgba(200,205,210,1)'; g.lineWidth = 2;
+  g.strokeStyle = 'rgba(214,218,222,1)'; g.lineWidth = 1.2;
   for (let k = -S; k < S * 2; k += 8) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + S, S); g.stroke(); g.beginPath(); g.moveTo(k + S, 0); g.lineTo(k, S); g.stroke(); }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;

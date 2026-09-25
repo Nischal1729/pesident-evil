@@ -107,7 +107,7 @@ generic styling for these.
 | Globe "on a lawn in front of the main building" | It is on a **dark green-grey stone plinth at the end of a planted bed** at the east plaza, beside a short stair and white wall, across the road from MRD's east entrance | H |
 | "Navy fascia band with PES logo" main building | That is **MRD's navy entrance canopy** (with the Doreswamy name) and the **PES signboard skybridge**. GJBC uses dark-grey fascia bands, not navy | H |
 | Food court: red chairs under a white tensile canopy | Not seen. Red plastic chairs appear in the **MRD atrium**. The GJBC cafeteria uses grey chairs. The **South Thindies food point** is a white curved-roof shed (seen from above) | M |
-| Main gate at (88,−62) in the old frame | = **(176,−131)** in the new frame (OSM entry road end) | H |
+| Main gate at (88,−62) in the old frame | = (176,−131) in the new frame (OSM entry road end). **Superseded 2026-09-25: the portal is at x ≈ 164** (§10) | H |
 
 ---
 
@@ -255,7 +255,7 @@ ceiling, a brick-red wall.
 
 ### 3.6 Main gate + mural building (OSM "Admission Enquiry")
 *Key frames: 0020, 0022, 1160 (1920), 1946, 1952.*
-* **Portal (gate centre ≈(176,−131), facing E towards the ORR service road):**
+* **Portal (gate centre ≈(164,−131), facing E towards the ORR service road; was (176,−131) before §10):**
   * White plastered **beam** ≈26 m span, ≈2.6 m deep (vertical), ≈4 m thick (E–W). Underside at ≈8 m, top at
     ≈10.6 m. The underside is light grey.
   * **South pillar:** a white box ≈4 × 4 m, merged with the mural building's NE corner. It carries **vertical
@@ -382,8 +382,8 @@ motorcycle_parking strips x 95…144, z −127…−119).
 
 | Spot | Why | Where |
 |---|---|---|
-| **Main gate** | 2 lanes, ≈7 m each, between the mural building and the north pillar. The natural horde entry point. The median island and guard cabin make a last-stand spot. Sliding gates can be closed or breached | (176,−131) |
-| **Entry road kill-zone** | A straight 90 m road lined with buses, barricades and grass beds. Promenade on one side, walkway and shelters on the other | x 83…176, z −124 |
+| **Main gate** | 2 lanes, ≈7 m each, between the mural building and the north pillar. The natural horde entry point. The median island and guard cabin make a last-stand spot. Sliding gates can be closed or breached | (164,−131) |
+| **Entry road kill-zone** | A straight 80 m road lined with buses, barricades and grass beds. Promenade on one side, walkway and shelters on the other | x 83…164, z −124 |
 | **East plaza + globe** | An open paved arena with planters, a ramp (high ground) and the PES skybridge overhead | x 85…115, z −150…−128 |
 | **MRD grand steps + scaffolding** | Wide stairs as high ground; scaffolding is a climbable vertical route and a sniper nest | (72,−148) |
 | **GJBC drive-through** | A long covered road under the north wing. A tunnel chokepoint with bad light | x 20…82, z −118 |
@@ -687,3 +687,46 @@ Conventions: `poly` = array of `[x, z]` (metres, +X east, +Z south, origin = GJB
 | key_1928_view_west_hedge_gjbc_bblock | Skyline W: GJBC, PES skybridge, B-Block |
 | key_1946_gate_compass_mural_building | **Inner mural** (compass + graduates), granite wall, portal |
 | key_1952_entry_road_from_gate_inside | Entry road W from the gate |
+
+---
+
+## 10. Campus-wide layout review (2026-09-25)
+
+A second pass over everything outside the buildings, comparing matching in-game viewpoints with the frames on
+every pass. Before/after screenshots: `media/shots/campus/` (gitignored).
+
+**New sources**
+
+| Source | Where | Use |
+|---|---|---|
+| Google satellite tiles, z19–z21 (stitched and georeferenced to this frame by `.claude`-local tooling) | `reference/frames/campus/gsat_{gate,gate21,plaza21,east,west,nw,south}.jpg` + `.json` extents | Positions of the gate portal, the mural tower, the entry-road band, the PES Lawn canopy and paths |
+| User's Google Maps screenshot | `reference/sat_user_parking_gmaps.webp` (a jpg copy is in `reference/frames/campus/`) | Gate pin at x ≈ 157–163 (scale from GJBC's east face and the parking) |
+| GJB tour 0:00–0:36, 1:36–2:08 (`reference/frames/gjb/sheets`) | existing | The walk from outside the gate through the south-pillar door; the pool opposite MRD |
+| 2026 tour sheets 1:04, 2:08, 2:40 and `mrd26_*` | existing | Promenade planting, the east-plaza stair, the frangipani garden, the loop-road kerb planting |
+| "PES University CAMPUS TOUR 2021 Part 1" (`5bxHqmfj7bE`), "Quick campus tour" (`9sKwG8IcfE0`, 2021 drone at dusk) | `reference/video/campus_*.mp4`, frames in `reference/frames/campus/<id>/` | Construction-era context, the OAT mural stage. Mostly superseded by the 2026 material |
+| `soQwdkL9G0w` ("Walking Through PES University", 2026) | sheets only | **Not the Ring Road campus** (EC campus: lake, hospital block). Do not use |
+| `WOe504a-pt8` | – | Talking head, no campus footage |
+| Wikimedia Commons `Category:PES_University` | `reference/frames/campus/photos/` + `SOURCES.txt` | Pre-2013 "PESIT" era, historical only |
+
+**Findings and what changed in the game**
+
+| Area | Finding | Evidence | Conf. |
+|---|---|---|---|
+| Main gate | The portal is at **x ≈ 164**, at the west end of the "Admission Enquiry" block. Its south pillar merges with the NE corner of the 4-storey mural tower (satellite roof x ≈ 155–168, z −122…−114). The block's outer (north) face east of the pillar carries the Community Development mural (the key_0020 camera stands beside it); the blue pixel mural wraps the tower's campus-side faces (north face along the walkway and west face). Now `MAIN_GATE_X` in layout.ts; everything gate-relative follows it | satellite N–S portal structure x 160–167; curved white planter wall outside at x 170–178; Google Maps pin; GJB tour 0:02–0:30 | H (x), M (exact z span) |
+| Entry road | One undivided carriageway with black/white kerbs, **no lane divider and no scooter rows**. Buses wait at the south kerb | 0022, 0530, 1952, GJB 0:24 | H |
+| Entry road band | The satellite band suggests ≈10 m and ≈3 m further south near the gate than the game's road (not changed) | gsat_gate | L |
+| South walkway | Fountain grass with maroon / purple-heart clumps between the kerb and the walkway, and on the other side a raised grey concrete trough (charcoal coping) of fountain grass. The mesh shelter is a light white-framed chain-link cage | 1920, GJB 2:02 | H |
+| East plaza | Open paving. A ≈6 m granite stair climbs **north** from the plaza between white cheek walls to a raised terrace with a white pavilion; the satellite's paved strip continues north from there as the PES Lawn path. The trench drain runs N–S across the promenade just east of the ramp foot | 0216, sheet 2:08, gsat_plaza21 | M (terrace size and height L) |
+| Reflecting pool | A black-granite pool in the garden east of the MRD loop road, facing MRD's steps, with a planted bed between it and the kerb | GJB 1:44–1:52, OSM amenity=fountain | M |
+| Globe | Stands on a raised drum in its ring bed beside the white stair tower of the front-ramp landing (the "white wall" in 0216 / 0401) | 0216, 0401, mrd26_0240 | M |
+| Loop road east kerb | Dense colourful planting band along the frangipani garden | mrd26_0240 | H |
+| PES Lawn | A **garden grove under a near-closed canopy**, not an open lawn. There is no fountain in it (the only mapped fountain is at Pie R Cube, now at its OSM position (13.5, 26.5)) | gsat_gate, gsat_plaza21 | H |
+| East lawn | The lawn meets the promenade's lawn-side kerb. Saplings stand in square soil pits. The lamps stand on the lawn side | 1506, 1654, 1808 | H |
+| OAT | More mature rain trees on the terrace and in the verge by PES University Rd | 0636, satellite canopy | M |
+
+**Still open**
+* The terrain: the garden east of the loop road rises towards the plaza (0401), and the parking is sunk below the
+  walkway. The game stays flat there (the parking is being rebuilt separately).
+* The exact z extent of the gate portal and whether both lanes run through it (the satellite shows planting inside
+  the northern half).
+* The OSM `amenity=parking` under trees at x 82–103, z −174…−148, along the loop road, is not modelled.

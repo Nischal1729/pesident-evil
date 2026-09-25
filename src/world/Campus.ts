@@ -677,7 +677,7 @@ export class CampusBuilder {
         || (Math.abs(x - 105.5) < 3.5 && z < T.zN)
         || prom.pts.some((_, i) => i > 0 && distToSegment(x, z, prom.pts[i - 1][0], prom.pts[i - 1][1], prom.pts[i][0], prom.pts[i][1]) < 5.2)
         || !this.clearForTree(x, z, 1.4) || !pointInPoly(x, z, CAMPUS_GROUND);
-      const pick = (): TreeSpecies => { const v = r(); return v < 0.32 ? 'rain' : v < 0.52 ? 'copperpod' : v < 0.66 ? 'gulmohar' : v < 0.82 ? 'ashoka' : v < 0.92 ? 'frangipani' : 'palm'; };
+      const pick = (): TreeSpecies => { const v = r(); return v < 0.28 ? 'rain' : v < 0.4 ? 'copperpod' : v < 0.55 ? 'gulmohar' : v < 0.8 ? 'ashoka' : v < 0.92 ? 'frangipani' : 'palm'; };
       for (const [x, z] of scatterInPolygon(pes.poly, 60, 4.8, 91, avoid)) this.addTree(pick(), x, z, 0.72 + r() * 0.33);
     }
     // tiered "cloud" trees along the entry walkway (south side) and at the PES Lawn promenade
