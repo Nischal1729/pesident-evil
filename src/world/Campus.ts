@@ -373,7 +373,9 @@ export class CampusBuilder {
       if (b.style === 'hostel') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.45, 0.22, ledge, FACADE_STYLES.hostel.band, 2, exposed);
       else if (b.style === 'fWing') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.55, 0.18, ledge, col('#e2d4b8'), 2, exposed);
       else if (b.style === 'oldCream') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.5, 0.15, ledge, col('#e6e1d8'), 2, exposed);
-      if (b.style === 'fTower' || b.style === 'fPodium' || b.style === 'fWing') addLedgesAt(b.poly, [top + 0.2], 0.8, 0.7, ledge, b.style === 'fWing' ? col('#b8604a') : col('#9e4a38'), 2, exposed);
+      // (the wings' band 1 cm higher: where it meets a terracotta block's band at the same roof height, the overlapping
+      // corners z-fought)
+      if (b.style === 'fTower' || b.style === 'fPodium' || b.style === 'fWing') addLedgesAt(b.poly, [top + (b.style === 'fWing' ? 0.21 : 0.2)], 0.8, 0.7, ledge, b.style === 'fWing' ? col('#b8604a') : col('#9e4a38'), 2, exposed);
       if (b.style === 'mrd') addLedgesAt(b.poly, [top + 0.1], 1.0, 0.45, ledge, col('#1f2b45'), 3, exposed);
       if (b.roof && (base === 0 || b.roof.tanks)) roofClutter(b.poly, top, seed, b.roof, tanks, solar, cabins.get('cabin', c[0], c[1]), col('#e2ddd2'));
       if (b.roof?.skylights) {
@@ -428,7 +430,10 @@ export class CampusBuilder {
     const soffitMats: Record<string, THREE.Material> = {
       wood: pbrMaterial(t.plaster, { color: 0x6b4a36, roughness: 0.6, normalScale: 0.2 }),
       red: pbrMaterial(t.plaster, { color: 0x7e4a34, roughness: 0.6, normalScale: 0.2 }),
-      grey: pbrMaterial(t.concrete, { color: 0xbab8b2, roughness: 0.8 }),
+      // board-formed concrete, no AO map, with a cool boost: a soffit faces down, so it only sees the warm ground half
+      // of the hemisphere light (0.50, 0.42, 0.33) and the brown env ground; on the stained roof concrete
+      // (concrete_floor_02, its ARM map as AO) that read dark brown (the Law terrace canopy). Reads light grey now.
+      grey: pbrMaterial({ ...t.concreteWall, arm: null }, { color: new THREE.Color(1.9, 2.3, 3.6), roughness: 0.85, normalScale: 0.4 }),
     };
     soffits.build(this.group, (k) => soffitMats[k] ?? soffitMats.grey, { cast: false, receive: true });
     cabins.build(this.group, () => { const m = pbrMaterial(t.plaster, { roughness: 0.9 }); m.vertexColors = true; return m; }, { cast: true, receive: true });

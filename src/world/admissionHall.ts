@@ -33,7 +33,9 @@ export function buildAdmissionHall(kit: WorldKit): void {
   k.fflat('polished', [[0.3, 0.12], [17.4, 0.12], [17.4, 13.2], [0.3, 13.2]], 0.06, col('#d3d0c8'), 2);
   k.fflat('polished', [[0.3, 0.12], [17.4, 0.12], [17.4, 0.6], [0.3, 0.6]], 0.065, col('#3e4143'), 2);
   const wallY = (s0: number, t0: number, s1: number, t1: number, c: THREE.Color) => { k.fbox('plaster', s0, 0, t0, s1, CEIL, t1, c, 0.5); C.addPolygon(R(s0, t0, s1, t1), H, 'concrete', 'adm:wall'); };
-  wallY(0, 0, 0.3, 13.9, white); // west (the blue mosaic mural is on its outside face)
+  // west (the blue mosaic mural is on its outside face); drawn from 3 cm inside the outline, whose face the ground-floor
+  // shell already draws (the two coplanar faces flickered)
+  k.fbox('plaster', 0.03, 0, 0, 0.3, CEIL, 13.9, white, 0.5); C.addPolygon(R(0, 0, 0.3, 13.9), H, 'concrete', 'adm:wall');
   wallY(17.4, 0, 17.7, 13.9, white); // east: the red feature wall is a panel on its inner face
   C.addPolygon(F.poly([[0.3, 13.2], [17.4, 13.2], [17.4, 13.5], [0.3, 13.9]]), H, 'concrete', 'adm:wall');
   k.fbox('plaster', 0.3, 0, 13.2, 17.4, CEIL, 13.35, white, 0.5);

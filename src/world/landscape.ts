@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { hash2, pointInPoly, polylineToStrip, rng, samplePolyline, scatterInPolygon } from './geom';
+import { distToSegment, hash2, pointInPoly, polylineToStrip, rng, samplePolyline, scatterInPolygon } from './geom';
 import { col, type DetailKey, type WorldKit } from './kit';
-import { AREAS, GLOBE_POS, GLOBE_Y, LOW_WALLS, MRD_POOL, PATHS, PLAZA_TERRACE, ROADS, type V2 } from './layout';
+import { AREAS, BUILDINGS, GLOBE_POS, GLOBE_Y, LOW_WALLS, MRD_POOL, PATHS, PLAZA_TERRACE, ROADS, type V2 } from './layout';
 import type { TreeSpecies } from './trees';
 import { foliageMaterial, fountainGrassGeometry, frondShrubGeometry, hedgeCardGeometry, leafyShrubGeometry } from './vegetation/shrubs';
 
@@ -240,7 +240,8 @@ export function buildLandscape(kit: WorldKit): void {
       const ring: V2[] = [];
       for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; ring.push([x + Math.cos(a) * rr * 1.3, z + Math.sin(a) * rr]); }
       const purple = r() < 0.6;
-      kit.buf('stone', x, z).flatPoly(ring, 0.07, purple ? col('#4f2744') : col('#6b1f2e'), 2);
+      // each bed 4 mm above the previous one: the random beds overlap, and at one height they z-fought
+      kit.buf('stone', x, z).flatPoly(ring, 0.07 + i * 0.004, purple ? col('#4f2744') : col('#6b1f2e'), 2);
       // low purple-heart / maroon ground cover filling the bed
       const pr = rng(i * 97 + 13);
       for (let k = 0; k < rr * rr * 3.2; k++) {
@@ -277,15 +278,32 @@ export function buildLandscape(kit: WorldKit): void {
     kit.collision.addCircle(gx, gz, 1.55, 3.2, 'metal', 'globe', GLOBE_Y);
   }
 
-  // terraced garden (below the Law terrace): stepped granite planter boxes with charcoal coping
-  for (const [x, z, w, d, h] of [[66, 49, 7, 2.2, 0.6], [74, 47, 8, 2.2, 0.9], [83, 46, 7, 2.2, 0.6], [70, 55, 6, 2.0, 0.6], [80, 53, 7, 2.0, 0.9], [89, 50, 5, 2.0, 0.6], [75, 60, 5, 1.8, 0.45]] as number[][]) {
-    kit.box('stone', x, h / 2, z, w, h, d, 0.12, col('#8f8d88'));
-    kit.box('stone', x, h + 0.04, z, w + 0.12, 0.08, d + 0.12, 0.12, col('#2e3032'));
-    kit.box('stone', x, h + 0.09, z, w - 0.3, 0.04, d - 0.3, 0.12, col('#3d3226'));
-    for (let k = 0; k < w / 1.2; k++) cycad(kit, x - w / 2 + 0.6 + k * 1.2, h + 0.1, z, 1.2);
-    const cs = Math.cos(0.12), sn = Math.sin(0.12);
-    const c = (lx: number, lz: number): V2 => [x + lx * cs + lz * sn, z - lx * sn + lz * cs];
-    kit.collision.addPolygon([c(-w / 2, -d / 2), c(w / 2, -d / 2), c(w / 2, d / 2), c(-w / 2, d / 2)], h, 'concrete', 'planter');
+  // terraced garden (below the Law terrace): stepped granite planter boxes with charcoal coping, in the strip between
+  // GJBC's south faces (gjb_south vertices (86,47) → (78,52) → (58,40)) and the F-Block service road that bends round
+  // them. The boxes used to sit at fixed world spots: five stood in the road and two inside GJBC. They are laid out
+  // along the faces now, and a box that would reach a road or a building is dropped. They stand 0.3 m off the wall (no
+  // body fits behind them) with a ≥ 1.3 m footway left to the road.
+  {
+    const faces: [V2, V2][] = [[[86, 47], [78, 52]], [[78, 52], [58, 40]]];
+    const boxes: [number, number, number, number, number, number][] = [ // face, along, out (from the face), length, depth, height
+      [0, -2.6, 1.2, 4.4, 1.8, 0.9], [0, 4.7, 1.2, 6.4, 1.8, 0.6],
+      [1, 4.6, 1.3, 5.0, 2.0, 0.9], [1, 11.6, 1.2, 5.6, 1.8, 0.6], [1, 17.8, 1.2, 5.0, 1.8, 0.9],
+    ];
+    const clear = ([x, z]: V2) => ROADS.every((r) => r.pts.every((p, i) => i === 0 || distToSegment(x, z, r.pts[i - 1][0], r.pts[i - 1][1], p[0], p[1]) > r.width / 2 + 0.5))
+      && !BUILDINGS.some((b) => !b.base && pointInPoly(x, z, b.poly));
+    for (const [fi, along, out, w, d, h] of boxes) {
+      const [a, b] = faces[fi];
+      const l = Math.hypot(b[0] - a[0], b[1] - a[1]), u: V2 = [(b[0] - a[0]) / l, (b[1] - a[1]) / l], n: V2 = [u[1], -u[0]]; // n: away from GJBC
+      const at = (s: number, o: number): V2 => [a[0] + u[0] * s + n[0] * o, a[1] + u[1] * s + n[1] * o];
+      const corners = [at(along - w / 2, out - d / 2), at(along + w / 2, out - d / 2), at(along + w / 2, out + d / 2), at(along - w / 2, out + d / 2)];
+      if (!corners.every(clear)) continue;
+      const [x, z] = at(along, out), rot = Math.atan2(-u[1], u[0]);
+      kit.box('stone', x, h / 2, z, w, h, d, rot, col('#8f8d88'));
+      kit.box('stone', x, h + 0.04, z, w + 0.12, 0.08, d + 0.12, rot, col('#2e3032'));
+      kit.box('stone', x, h + 0.09, z, w - 0.3, 0.04, d - 0.3, rot, col('#3d3226'));
+      for (let k = 0; k < w / 1.2; k++) { const p = at(along - w / 2 + 0.6 + k * 1.2, out); cycad(kit, p[0], h + 0.1, p[1], 1.2); }
+      kit.collision.addPolygon(corners, h, 'concrete', 'planter');
+    }
   }
 
   // east lawn: low grey concrete kerb along the promenade edge
