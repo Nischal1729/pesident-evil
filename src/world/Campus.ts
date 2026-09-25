@@ -428,7 +428,10 @@ export class CampusBuilder {
     const soffitMats: Record<string, THREE.Material> = {
       wood: pbrMaterial(t.plaster, { color: 0x6b4a36, roughness: 0.6, normalScale: 0.2 }),
       red: pbrMaterial(t.plaster, { color: 0x7e4a34, roughness: 0.6, normalScale: 0.2 }),
-      grey: pbrMaterial(t.concrete, { color: 0xbab8b2, roughness: 0.8 }),
+      // board-formed concrete, no AO map, with a cool boost: a soffit faces down, so it only sees the warm ground half
+      // of the hemisphere light (0.50, 0.42, 0.33) and the brown env ground; on the stained roof concrete
+      // (concrete_floor_02, its ARM map as AO) that read dark brown (the Law terrace canopy). Reads light grey now.
+      grey: pbrMaterial({ ...t.concreteWall, arm: null }, { color: new THREE.Color(1.9, 2.3, 3.6), roughness: 0.85, normalScale: 0.4 }),
     };
     soffits.build(this.group, (k) => soffitMats[k] ?? soffitMats.grey, { cast: false, receive: true });
     cabins.build(this.group, () => { const m = pbrMaterial(t.plaster, { roughness: 0.9 }); m.vertexColors = true; return m; }, { cast: true, receive: true });
