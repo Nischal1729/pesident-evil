@@ -40,8 +40,9 @@ block courtyard (not GJBC).
 * The Quad is **not** at the level of the road or the east forecourt. You reach it from the ramp landing through the
   porch and the covered plaza (2:06 → 2:30), or by the internal stairs. From 2:22 there are 2 granite steps up into
   the covered-plaza floor. H.
-* Under the Quad and the covered plaza is the ground floor (G). In the game this is a solid podium; only its
-  outward faces are modelled (§6).
+* Under the Quad and the covered plaza is the ground floor (G). In the game the east half of it is an enterable
+  wing (corridors, classrooms, labs, a faculty room, a stair core up to the covered plaza) and the rest is closed
+  podium; every face that shows outside is modelled (§10).
 * Floor-to-floor above L1 ≈4.2–4.5 m. The Quad colonnade is double height (≈8.5 m on L1), with 2–3 cream floors
   plus a glass top band above it. M.
 
@@ -111,9 +112,11 @@ E–W strip along the north edge of the lawn) was wrong.
 
 | Interior | Level | Size | Look (frames) | Built |
 |---|---|---|---|---|
-| **East entrance lobby** | G | ≈24 × 8 m, 5.9 m ceiling | glass front and doors; light granite floor with a charcoal border; **walnut vertical-slat wall + gold PES compass**; white granite reception desk with a maroon top; lift doors; granite stair up to L1; timber-slat ceiling with linear LEDs (old 0546/0552/5:52, new admission/lobby look) | yes |
+| **East entrance lobby** | G | ≈24 × 8 m, 5.5 m ceiling | glass front and doors; light granite floor with a charcoal border; **walnut vertical-slat wall + gold PES compass**; white granite reception desk with a maroon top; lift doors; the grand stair up to L1 through the atrium void, white solid balustrade, red wall; timber-slat ceiling with linear LEDs (old 0546/0552/5:52, new admission/lobby look); door west into the ground-floor wing | yes |
 | **Cafeteria** | G (under the Law terrace) | ≈19 × 32 m, 4.5 m ceiling | full glass wall to the promenade/lawn; long light-oak tables; grey chairs; **square LED ring lights**; exposed black ceiling; brick-red wall (old 1636) | yes |
-| Admission counters + atrium void | L1 | ≈30 × 15 m | oak-panelled counters with blue "ADMISSION" plates, timber-slat ceiling, granite floor, red wall + gold sculpture, stair down to G (7:00–7:30) | later (L1) |
+| Admission counters + atrium void | L1 | ≈24 × 8 m in the game (≈30 × 15 m real) | oak-panelled counters with blue "ADMISSION" plates, timber-slat ceiling, granite floor with white inlay lines, red wall + gold tree sculpture, white parapet + dark steel rail round the void, stair down to G (7:00–7:30; uxqjCJBCP_g 7:03, 7:30) | yes (over the lobby, eastblock.ts) |
+| L2 lounge + classroom 2-01 + faculty room 2-02 | L2 (L1 + 4.3) | 24 × 8 m + two rooms ≈10 × 9 m | study tables, glazing to the Quad colonnade; classroom windows onto the colonnade (plausible layout, §10) | yes |
+| Ground-floor wing: corridors A/B, G-01 computer lab, G-02 classroom, G-03 faculty room, G-04 seminar hall, G-05 electronics lab, stair core S1 | G | ≈31 × 43 m | corridors from the assessment-centre walk (8:32–9:10), classrooms from 11:10 (plausible layout, §10) | yes (ground.ts) |
 | Indoor sports hall | G/L1 double height | ≈30 × 60 m | maple floor with court lines, white walls with door fins, dark steel roof beams, spectator galleries on both long sides (8:02–8:30) | later |
 | L1 halls behind the porte-cochère | L1 | ≈20 × 12 m | peacock metal sculpture on a stone wall, big east window over the entry road and gate (3:04–3:18); "museum" lobby with carved temple pillars, checker floor and oak panels (3:44–4:10) | later |
 | Central Library, gym, assessment centre, food hall, classrooms | L1–L3 | – | 4:10, 9:10, 8:32, 10:10, 11:10 | no |
@@ -195,10 +198,58 @@ Everything below is already registered "the way it physically is" (see the multi
   pergola posts and desks are prisms/circles on it; parapets on the L1 edges are prisms with base = L1.
 * `ramp` (addRamp 0 → L1, x 110 → 86): the **front ramp**. Then the `landing` slab (base 5.5, top L1), the NE porch
   `deck` (base 5.5, top L1), the porch roof (base 11.2), the glazed MRD `bridge` (base 5.4) and the sign `canopy`.
-* Lobby `stair` (addRamp 0 → L1) plus its top `landing`: G lobby → L1 (the arcade above needs an opening when
-  levels land).
+* Lobby `stair` (addRamp 0 → L1) plus its top `landing`: G lobby → the L1 admission hall (slab with the atrium
+  void), then the L1 → L2 `stair` flight and the L2 slab (eastblock.ts). The east wing `gjb_e1` has `collide: false`;
+  its collision is registered by hand (solid except the two L2 rooms).
+* Ground-floor wing (ground.ts): `GJB_PODIUM_PARTS` (solid 0 → L1), the L1 `slab` over the wing (soffit L1 − 0.4),
+  `wall` prisms up to the soffit with lintels over the doors, desks as `prop` / `desk` / `dais`, and stair core S1
+  (two `stair` ramps solid to the ground, a mid `landing` block, a top landing `slab`).
 * Parking: vehicle `ramp` at the NE (0 → 3.2) and `stair` at the SW (0 → 3.2) up to the **upper deck** (`deck` slab,
   base 2.85, top 3.2), with parapets, bay posts and deck bike rows (base 3.2).
 * Law terrace `stair` (now an addRamp 0 → 8).
 * Props lifted to L1 (Quad benches, bins, coolers) are decor for now and need collision at L1 then (TODO in
   Props.ts `courtyard()`).
+
+## 10. 2026-09 revision: ground storey, east entrance block, Quad (new sources)
+
+**Why:** the user reported "GJB has a weird ground floor where you can see the first floor floating". The podium was
+one solid prism and only its north and south faces were drawn. The corner under the NE porch (x 55→59) and the stub
+under the north arcade (x = 20) had no faces, so from the drive-through and PES University Rd you looked into an empty
+box: the L1 floors only face up, so the colonnades and the covered plaza stood on nothing.
+
+**New sources** (downloaded by the research pass to `reference/video/gjbx_*.mp4`, contact sheets and key frames in
+`reference/frames/gjb/extra/<id>/`):
+
+| id | video | GJB content used |
+|---|---|---|
+| `TbxCjSdhUVk` | PES University campus tour 2022, part 2 (new block, 7:26) | construction shell of the Quad (0:48, 4:54), classrooms with boards + TV (6:48), woodwork door frames (6:30) |
+| `uxqjCJBCP_g` | PES University campus tour 2026, blocks (20:07) | **admission atrium: orange-red wall, gold tree, white parapet + dark steel rail, stair down (7:03)**, admission counters (7:30), the Quad with black cone pendants (11:33, 11:57) |
+| `cFQAKKwyeWY` | PES University Bangalore campus tour 2026 (12:11) | ramp landing, founders' statue, terracotta porte-cochère canopy (2:39, 2:51), L1 plaza with timber columns (9:15) |
+| `ZyeLAVjgiYk` | PES University 2024 full campus tour (27:52) | porte-cochère + planter band + drive-through from the ramp (10:39), PES Society entrance (11:00), **Quad checkerboard floor and single planter row (12:27)**, gallery corridor (17:27) |
+| `HH4ZEc_M1dE` | PES University library walkthrough (6:30) | library floors (not modelled) |
+| `SmHnHHxbpaE` | (existing `mrdbe_` file) PES University Bangalore campus tour, 21:07 | Quad colonnade (3:00), L1 plaza with timber columns over a stair (4:00), single-loaded corridor with white parapet + steel rail (7:27), **white service face with AC louvre grilles and a navy service door (19:36)** |
+| `cWKYL-ruQ_E` | (existing `mrdbe_` file) full campus tour | GJB under construction, massing only (9:55) |
+| `soQwdkL9G0w`, `rYvZomXiFkI` | walk videos | no GJB content |
+
+Plus the GJB tour's own interior sheets: corridors 8:32–9:10 (polished grey granite, white walls with a grey dado,
+light-oak door frames with vision panels, linear LED panels), classrooms 11:10 (long oak bench-desks in rows, green
+chalkboard + whiteboard on an oak panel, fans, white panel ceilings), gym stairs 9:36 (granite treads, dark steel mesh
+balustrades).
+
+**Findings and what changed** (confidence as in the header):
+
+| Topic | Finding | Change |
+|---|---|---|
+| Ground storey | H: G is a real storey under the Quad; its road face is a white wall with slot windows, red fire cabinets and, on the service side, big AC louvre grilles (SmHnHHxbpaE 19:36, old 0540). L: the actual room layout under the Quad (the sports hall, gym and food hall are somewhere below L1, not placed) | podium split into closed parts + an enterable wing (GJB_G); all exposed faces drawn (road face with a glass door + canopy + louvres, the corner under the porch, the north-arcade stub, the inner-court south face); plausible Indian-college interiors |
+| East entrance | H: the white portal frames a two-storey glazed volume above the ground-floor entrance (key_0105); the L1 admission atrium has the void and the stair down to G (7:03–7:30) | breezeway prism starts at the arcade soffit; L1 admission hall + L2 lounge hand-built behind two-storey glazing; portal raised to frame it; the lobby stair now lands in the hall (it used to end in the ceiling) |
+| Quad east colonnade | M: the colonnade runs the full length of the Quad | it now runs through under the east entrance block |
+| Quad floor | H: a checkerboard strip of dark/light granite down the axis, wide dark bands across (key_1150, ZyeLAVjgiYk 12:27, key_0606) | replaced the two bands + diamonds |
+| Quad planters | H: one row of black cube planters beside the axis strip (key_1150, key_1133, key_0300) | two rows along the colonnades → one row |
+| Gallery over the colonnades | M: the white beam on the columns carries an open gallery behind a dark railing; the upper floors stand back (key_1150, uxqjCJBCP_g 11:33) | arcade strips set back `GJB_GALLERY` = 1.8 m; gallery slab, terracotta soffit, perforated-metal railing; the old balcony at L1 + 13 m removed |
+| Drive-through soffit | H: dark grey with downlights (old 0540) | wood → dark grey |
+| L1 colliders | – | Quad and plaza columns, pergola posts, plaza desks and L1 planters registered from L1 up (they used to be pillars from the ground, which now matters under the Quad) |
+
+**Not modelled / open:** the sports hall, gym, food hall, library interiors; the covered plaza's pendants read as
+black cones in uxqjCJBCP_g 11:33 but white/tan elsewhere (kept); the raised colonnade walkway with two or three steps
+along the column bases (key_1150) is still a 0.16 m lip; the NE corner of the east wing reads as a white wall with a
+few windows at G in ZyeLAVjgiYk 10:39 (kept as the colonnade).
