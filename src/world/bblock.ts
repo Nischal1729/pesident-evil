@@ -357,6 +357,12 @@ function lampMaterial(): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(1.5, 1.45, 1.36), toneMapped: true });
 }
 
+/** Set the largest bold font (≤ size) at which `text` fits in maxW. */
+function fitFont(g: CanvasRenderingContext2D, text: string, maxW: number, size: number, weight: string, family: string): void {
+  g.font = `${weight} ${size}px ${family}`;
+  while (g.measureText(text).width > maxW && size > 8) { size -= 2; g.font = `${weight} ${size}px ${family}`; }
+}
+
 /** Canvas decals for the interior (frieze, department sign, notice boards, room plates, floor numbers). */
 function decalTexture(): { tex: THREE.CanvasTexture; uv: Record<string, [number, number, number, number]> } {
   const W = 1024, H = 512;
@@ -373,7 +379,7 @@ function decalTexture(): { tex: THREE.CanvasTexture; uv: Record<string, [number,
     let seed = 7;
     const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     g.strokeStyle = '#6d6d70'; g.lineWidth = 2; g.lineCap = 'round';
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 24; i++) {
       const x = 20 + i * 27 + r() * 8, base = 116, hh = 58 + r() * 26;
       g.beginPath(); g.arc(x, base - hh, 6, 0, Math.PI * 2); g.stroke(); // head
       g.beginPath(); g.moveTo(x, base - hh + 6); g.lineTo(x + (r() - 0.5) * 6, base - hh * 0.45); g.stroke(); // body
@@ -381,15 +387,16 @@ function decalTexture(): { tex: THREE.CanvasTexture; uv: Record<string, [number,
       g.beginPath(); g.moveTo(x, base - hh * 0.8); g.lineTo(x + 10, base - hh * 0.55 - r() * 10); g.stroke(); // arm / staff
       if (i % 4 === 1) { g.beginPath(); g.moveTo(x + 10, base - hh * 0.62); g.lineTo(x + 12, base); g.stroke(); }
     }
-    const cx = 790, cy = 64;
+    const cx = 752, cy = 64;
     g.strokeStyle = '#ff9933'; g.lineWidth = 9; g.beginPath(); g.arc(cx - 30, cy + 70, 95, -1.9, -0.9); g.stroke();
     g.strokeStyle = '#138808'; g.beginPath(); g.arc(cx - 30, cy + 90, 95, -1.7, -0.8); g.stroke();
     g.strokeStyle = '#1b2a7a'; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 34, 0, Math.PI * 2); g.stroke();
     for (let k = 0; k < 24; k++) { const a = (k / 24) * Math.PI * 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * 34, cy + Math.sin(a) * 34); g.stroke(); }
     g.fillStyle = '#2b2b2e'; g.textBaseline = 'middle'; g.textAlign = 'left';
-    g.font = `800 40px ${SANS}`; g.fillText('MAHATMA', 850, 44);
-    g.fillText('GANDHI', 850, 88);
-    g.font = `700 22px ${SANS}`; g.fillText('150', 850, 16);
+    const tx = 806, tw = W - tx - 12;
+    fitFont(g, 'MAHATMA', tw, 40, '800', SANS); g.fillText('MAHATMA', tx, 46);
+    g.fillText('GANDHI', tx, 90);
+    g.font = `700 22px ${SANS}`; g.fillText('150', tx, 16);
     reg('frieze', 0, 0, W, 128);
   }
   // Department of Computer Science and Engineering (red plate, white Kannada + English)
@@ -398,7 +405,7 @@ function decalTexture(): { tex: THREE.CanvasTexture; uv: Record<string, [number,
     g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = `600 24px ${KN}`; g.fillText('ಗಣಕ ವಿಜ್ಞಾನ ಮತ್ತು ಇಂಜಿನಿಯರಿಂಗ್ ವಿಭಾಗ', 256, 156);
     g.font = `700 30px ${SANS}`; g.fillText('Department of', 256, 196);
-    g.fillText('Computer Science and Engineering', 256, 232);
+    fitFont(g, 'Computer Science and Engineering', 488, 30, '700', SANS); g.fillText('Computer Science and Engineering', 256, 232);
     reg('cse', 0, 128, 512, 128);
   }
   // pin board: maroon felt with student posters
