@@ -187,9 +187,11 @@ export class LayeredNav {
       return best;
     };
     // a climb between nodes lo (lower) and up: the upper surface is climbable and a boundary top is entered from the
-    // inside (the down edge follows the same rule, so nothing leads off a wall or gate to the outside)
+    // inside (the down edge follows the same rule, so nothing leads off a wall or gate to the outside). No climb starts
+    // on a gate node: the link from outside the gate line onto a stack tier inside it would cross a closed gate, and a
+    // zombie steering along it presses on the bars instead of bashing them.
     const climbOk = (lo: number, up: number): boolean => {
-      if (!nodeClimb[up] || nodeY[up] - nodeY[lo] > CLIMB_MAX + 0.01) return false;
+      if (!nodeClimb[up] || nodeGate[lo] >= 0 || nodeY[up] - nodeY[lo] > CLIMB_MAX + 0.01) return false;
       const L = nodeSrc[up] >= 0 ? col.prisms[nodeSrc[up]].lip : null;
       return !L || (nodeX[up] - nodeX[lo]) * L.nx + (nodeZ[up] - nodeZ[lo]) * L.nz > 0;
     };
