@@ -6,6 +6,7 @@ import { distToSegment, rng } from '../world/geom';
 import { CAM, cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
 import { Survivor, Zombie, type Look, type ZombieType } from './actors';
 import { STEP_UP, type StaticCollision } from './Collision';
+import { INF } from './flowfield';
 import { LayeredNav } from './LayeredNav';
 import { NavGrid, type Nav } from './NavGrid';
 import { newSlot, WEAPONS, type WeaponDef, type WeaponId } from './weapons';
@@ -55,6 +56,7 @@ export interface NpcBrain {
   barkCd: Record<string, number>;
   strafeT: number;
   strafeDir: number;
+  trailing: boolean;
 }
 
 export interface InteractPrompt { text: string; progress: number; cost: number; canAfford: boolean }
@@ -67,8 +69,16 @@ const _camDir = new THREE.Vector3();
 const _dir2 = { x: 0, z: 0 };
 const _hitRes = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground' as SurfaceKind, tag: '' };
 
-/** AI allies deal reduced damage so the player stays the main damage dealer. */
-const NPC_DAMAGE = 0.65;
+// Follow-mode trail: an NPC stands its ground until it falls too far behind, then walks to its formation slot.
+const TRAIL_REPATH = 10; // m: start walking to the slot once this far from the player
+const TRAIL_STOP = 6; // m: stop trailing once back within this range
+const TRAIL_ARRIVE = 1.5; // m: or once the slot itself is reached
+// Squad only engages what the player can plausibly see fighting near them (measured from the player).
+const NPC_ENGAGE_RANGE = 30;
+const NPC_SELF_DEFENSE = 6; // m: always fight back against a zombie this close to the NPC itself (hold mode far from the player)
+// Keep NPCs out of the player's crosshair: push sideways out of a corridor along the camera's forward ray.
+const AIM_CLEAR_LEN = 30;
+const AIM_CLEAR_R = 1.1;
 
 export interface WorldOptions {
   maxZombies: number;
@@ -161,12 +171,11 @@ export class World {
     n.infiniteReserve = true;
     n.snapshotPrev();
     this.survivors.push(n);
-    const angle = [-2.3, 2.3, 3.14][spawnIndex % 3];
-    const dist = [3.2, 3.2, 4.2][spawnIndex % 3];
+    const [right, back] = [[-2.3, 5.0], [2.3, 5.0], [0, 7.5]][spawnIndex % 3];
     this.brains.set(n.id, {
-      mode: 'follow', holdPos: n.pos.clone(), formation: new THREE.Vector2(Math.sin(angle) * dist, Math.cos(angle) * dist),
+      mode: 'follow', holdPos: n.pos.clone(), formation: new THREE.Vector2(right, back),
       thinkT: this.rand() * 0.2, targetId: 0, reviveId: 0, accuracy, reaction: 0.25 + this.rand() * 0.2, burst: 0,
-      barkCd: {}, strafeT: 0, strafeDir: 1,
+      barkCd: {}, strafeT: 0, strafeDir: 1, trailing: false,
     });
     return n;
   }
@@ -709,7 +718,7 @@ export class World {
     const moving = Math.hypot(s.vel.x, s.vel.z) > 0.8;
     let spread = aiming ? d.spreadAim : d.spreadHip;
     spread *= (moving ? 1.5 : 1) * (1 + s.bloom) * (s.grounded ? 1 : 2);
-    if (s.kind === 'npc') spread = spread * 1.2 + (1 - (this.brains.get(s.id)?.accuracy ?? 0.7)) * 0.05;
+    if (s.kind === 'npc') spread = spread * 1.2 + (1 - (this.brains.get(s.id)?.accuracy ?? 0.7)) * 0.05 + npcSkill(this.wave).spread;
     const dir = _fireDir.copy(target).sub(origin);
     const dist = dir.length();
     if (dist < 0.01) dir.set(-Math.sin(s.yaw), 0, -Math.cos(s.yaw));
@@ -746,7 +755,7 @@ export class World {
     for (const h of _hits) {
       if (pen <= 0) break;
       const fall = h.t > d.falloffStart ? Math.max(0.45, 1 - (h.t - d.falloffStart) / (d.range - d.falloffStart)) : 1;
-      const dmg = d.damage * (h.head ? d.headMult : 1) * fall * (pen < d.penetration + 1 ? 0.7 : 1) * (s.kind === 'npc' ? NPC_DAMAGE : 1);
+      const dmg = d.damage * (h.head ? d.headMult : 1) * fall * (pen < d.penetration + 1 ? 0.7 : 1) * (s.kind === 'npc' ? npcSkill(this.wave).dmg : 1);
       const point = _hitPoint.copy(origin).addScaledVector(dir, h.t);
       this.damageZombie(h.z, dmg, s, point, dir, h.head, d);
       pen--;
@@ -772,7 +781,8 @@ export class World {
       hits++;
       const head = this.rand() < 0.3;
       const point = _v.set(z.pos.x, z.pos.y + 1.3 * z.scale, z.pos.z);
-      this.damageZombie(z, d.damage * (head ? d.headMult : 1), s, point, _v3.set(dx / (dist || 1), 0, dz / (dist || 1)), head, d);
+      const dmg = d.damage * (head ? d.headMult : 1) * (s.kind === 'npc' ? npcSkill(this.wave).dmg : 1);
+      this.damageZombie(z, dmg, s, point, _v3.set(dx / (dist || 1), 0, dz / (dist || 1)), head, d);
     });
     if (hits === 0) {
       // bash the gate or nothing
@@ -1261,8 +1271,11 @@ export class World {
         if (!z.alive) continue;
         const d = Math.hypot(z.pos.x - n.pos.x, z.pos.z - n.pos.z);
         if (d > 75) continue;
+        // the squad only engages what's near the player, not whatever an NPC can see 75 m off on its own
+        const dp = p ? Math.hypot(z.pos.x - p.pos.x, z.pos.z - p.pos.z) : 0;
+        if (p && dp > NPC_ENGAGE_RANGE && d > NPC_SELF_DEFENSE) continue;
         let score = d;
-        if (p && Math.hypot(z.pos.x - p.pos.x, z.pos.z - p.pos.z) < 4) score *= 0.5;
+        if (p && dp < 4) score *= 0.5;
         cands.push({ z, d: score });
       }
       cands.sort((x, y) => x.d - y.d);
@@ -1290,15 +1303,30 @@ export class World {
     // decide where to go
     const goal = _v.copy(n.pos);
     let urgent = false;
+    let closing = false;
     const reviveT = b.reviveId ? this.findSurvivor(b.reviveId) : undefined;
     if (reviveT && reviveT.downed) {
       goal.copy(reviveT.pos);
       urgent = true;
     } else if (b.mode === 'follow' && p && p.alive) {
-      const c = Math.cos(p.yaw), s = Math.sin(p.yaw);
-      // formation offset rotated by player facing (x right, y back)
-      goal.set(p.pos.x + c * b.formation.x + s * b.formation.y, p.pos.y, p.pos.z - s * b.formation.x + c * b.formation.y);
-      if (this.nav.isBlocked(goal.x, goal.z, goal.y)) goal.copy(p.pos);
+      // trail, don't shadow: stand put until too far behind, then walk to the slot; stop once close again.
+      // Distance is along the player field, so a player up on a landing or podium is far from an NPC below it.
+      // INF means the NPC is off the graph (hugging a wall or tree): use the straight line instead.
+      const cost = this.nav.cost('player', n.pos.x, n.pos.z, n.pos.y);
+      const distP = cost === INF ? Math.hypot(p.pos.x - n.pos.x, p.pos.z - n.pos.z) : cost / 10;
+      if (!b.trailing && distP > TRAIL_REPATH) b.trailing = true;
+      if (b.trailing) {
+        const c = Math.cos(p.aimYaw), s = Math.sin(p.aimYaw);
+        // formation offset rotated by camera yaw (x right, y back), so "behind" means behind the view
+        goal.set(p.pos.x + c * b.formation.x + s * b.formation.y, p.pos.y, p.pos.z - s * b.formation.x + c * b.formation.y);
+        if (this.nav.isBlocked(goal.x, goal.z, goal.y)) goal.copy(p.pos);
+        if (Math.hypot(goal.x - n.pos.x, goal.z - n.pos.z) < TRAIL_ARRIVE || distP < TRAIL_STOP) b.trailing = false;
+      } else if (!target) {
+        // not trailing: the NPC holds its ground (goal stays n.pos) while still fighting and kiting below, unless the
+        // player is under attack by something this NPC can't see; then it closes in until it has line of sight
+        this.forZombiesNear(p.pos.x, p.pos.z, 3.5, (z) => { if (z.alive) closing = true; });
+        if (closing) goal.copy(p.pos);
+      }
     } else {
       goal.copy(b.holdPos);
     }
@@ -1317,18 +1345,39 @@ export class World {
         if (!this.nav.isBlocked(want.x, want.z, want.y)) goal.copy(want);
       }
     }
+    // stay out of the player's crosshair: if standing in the aim corridor ahead of the camera, sidestep out of it.
+    // Not while closing in on an unseen attacker: its path to the player may cross the corridor, and the sidestep
+    // would push it back every tick.
+    let aimClear = false;
+    if (!urgent && !closing && p && p.alive) {
+      const ox = p.aimOrigin.x, oz = p.aimOrigin.z;
+      const fx = -Math.sin(p.aimYaw), fz = -Math.cos(p.aimYaw);
+      const nx = n.pos.x - ox, nz = n.pos.z - oz;
+      if (nx * fx + nz * fz > 0) {
+        const d = distToSegment(n.pos.x, n.pos.z, ox, oz, ox + fx * AIM_CLEAR_LEN, oz + fz * AIM_CLEAR_LEN);
+        if (d < AIM_CLEAR_R) {
+          const side = fx * nz - fz * nx >= 0 ? 1 : -1;
+          const m = (AIM_CLEAR_R + 0.8 - d) * side;
+          goal.set(n.pos.x - fz * m, n.pos.y, n.pos.z + fx * m);
+          // hold mode: move the hold spot to the sidestep goal (not by it, which would drift every tick in the corridor)
+          if (b.mode === 'hold') b.holdPos.set(goal.x, b.holdPos.y, goal.z);
+          aimClear = true;
+        }
+      }
+    }
     let mx = 0, mz = 0, speed = 0;
     const gdx = goal.x - n.pos.x, gdz = goal.z - n.pos.z;
     const gdist = Math.hypot(gdx, gdz);
     const followingPlayer = !urgent && b.mode === 'follow' && p && p.alive;
     const stopDist = urgent ? 1.1 : followingPlayer ? 1.4 : 0.8;
-    if (gdist > stopDist) {
+    if (gdist > stopDist || aimClear) {
       speed = gdist > 9 || urgent ? 4.6 : gdist > 4 ? 3.4 : 2.2;
       const direct = gdist < 10 && Math.abs(goal.y - n.pos.y) < 0.6 && this.collision.los(n.pos.x, n.pos.y + 1.0, n.pos.z, goal.x, goal.y + 1.0, goal.z);
       if (direct) { mx = gdx / gdist; mz = gdz / gdist; }
-      else if (followingPlayer && this.nav.descend('player', n.pos.x, n.pos.z, _dir2, n.pos.y) >= -1 && (_dir2.x || _dir2.z)) { mx = _dir2.x; mz = _dir2.z; }
+      else if ((followingPlayer || (urgent && reviveT === p)) && this.nav.descend('player', n.pos.x, n.pos.z, _dir2, n.pos.y) >= -1 && (_dir2.x || _dir2.z)) { mx = _dir2.x; mz = _dir2.z; }
       else { mx = gdx / gdist; mz = gdz / gdist; }
     }
+    if (aimClear) speed = Math.max(speed, 3.0);
     // kite away from close zombies
     let threatX = 0, threatZ = 0, threat = false;
     this.forZombiesNear(n.pos.x, n.pos.z, 3.6, (z) => {
@@ -1362,7 +1411,7 @@ export class World {
     this.collideWalker(n, dt);
 
     // revive
-    if (reviveT && reviveT.downed && Math.hypot(reviveT.pos.x - n.pos.x, reviveT.pos.z - n.pos.z) < 1.6) {
+    if (reviveT && reviveT.downed && Math.hypot(reviveT.pos.x - n.pos.x, reviveT.pos.z - n.pos.z) < 1.6 && Math.abs(reviveT.pos.y - n.pos.y) < 1.5) {
       n.vel.multiplyScalar(0.1);
       n.anim.reviving = true;
       reviveT.reviveProgress += dt / 3.5;
@@ -1376,7 +1425,8 @@ export class World {
     // facing + shooting
     let faceYaw = n.yaw;
     if (target) {
-      const aimY = target.type === 'crawler' ? 0.4 : (b.accuracy > 0.8 && this.rand() < 0.35 ? 1.55 : 1.2) * target.scale;
+      const skill = npcSkill(this.wave);
+      const aimY = target.type === 'crawler' ? 0.4 : (skill.head && b.accuracy > 0.8 && this.rand() < 0.35 ? 1.55 : 1.2) * target.scale;
       const tx = target.pos.x - n.pos.x, tz = target.pos.z - n.pos.z;
       faceYaw = Math.atan2(-tx, -tz);
       n.yaw = turnToward(n.yaw, faceYaw, 9 * dt);
@@ -1384,7 +1434,10 @@ export class World {
       n.anim.aimPitch = Math.atan2(target.pos.y + aimY - (n.pos.y + 1.45), Math.hypot(tx, tz));
       const aligned = Math.abs(angleDiff(n.yaw, faceYaw)) < 0.2;
       const d = n.def;
-      const inRange = Math.hypot(target.pos.x - n.pos.x, target.pos.z - n.pos.z) <= effectiveRange(d) + 4;
+      // the player-radius cap is also applied at fire time: knockback can carry a target past it between thinks
+      const tdist = Math.hypot(target.pos.x - n.pos.x, target.pos.z - n.pos.z);
+      const inRange = tdist <= effectiveRange(d) + 4
+        && (!p || tdist <= NPC_SELF_DEFENSE || Math.hypot(target.pos.x - p.pos.x, target.pos.z - p.pos.z) <= NPC_ENGAGE_RANGE);
       if (d.kind === 'gun' && aligned && inRange && n.fireCd <= 0 && n.reloadT < 0 && n.switchT < 0) {
         if (n.slot.mag <= 0) this.startReload(n);
         else {
@@ -1394,7 +1447,7 @@ export class World {
           const lead = _v3.set(target.pos.x + target.vel.x * 0.1, target.pos.y + aimY, target.pos.z + target.vel.z * 0.1);
           this.fire(n, muzzle, lead, true);
           b.burst--;
-          if (b.burst <= 0) n.fireCd = Math.max(n.fireCd, b.reaction + this.rand() * 0.25 + (d.auto ? 0.15 : 0.2));
+          if (b.burst <= 0) n.fireCd = Math.max(n.fireCd, b.reaction + skill.reaction + this.rand() * 0.25 + (d.auto ? 0.15 : 0.2));
           else n.fireCd = Math.max(n.fireCd, 60 / d.rpm * 1.25);
         }
       }
@@ -1429,6 +1482,13 @@ const _hits: { z: Zombie; t: number; head: boolean }[] = [];
 /** Distance an NPC is willing to engage at with a weapon. */
 export function effectiveRange(d: WeaponDef): number {
   return d.kind === 'melee' ? 2 : Math.min(70, d.pellets > 1 ? d.range * 0.8 : d.range * 0.75);
+}
+
+/** Squad skill scales with wave: weak and spread-happy early, full effectiveness (the old flat 0.65 damage) by wave 5. */
+function npcSkill(wave: number): { dmg: number; spread: number; reaction: number; head: boolean } {
+  if (wave <= 2) return { dmg: 0.40, spread: 0.035, reaction: 0.30, head: false };
+  if (wave <= 4) return { dmg: 0.55, spread: 0.015, reaction: 0.10, head: true };
+  return { dmg: 0.65, spread: 0, reaction: 0, head: true };
 }
 
 export function angleDiff(a: number, b: number): number {
