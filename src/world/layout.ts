@@ -116,27 +116,76 @@ const L1 = GJB_L1;
 const ARC = GJB_ARCADE_TOP;
 
 /**
- * The solid L1 podium under the Quad + its colonnades, the covered plaza and the inner court (collision prism 0 → L1,
- * top = the L1 granite floor). The wings around it are regular BUILDINGS; only its north face (PES Univ Rd), its south
- * face (Pie R Cube) and the east-lobby end wall are exposed at ground level.
+ * Outline of the L1 podium: everything under the Quad + its colonnades, the covered plaza and the inner court. Its top is
+ * the L1 granite floor. The wings around it are regular BUILDINGS; its north face (PES Univ Rd, and under the NE porch),
+ * its south face (Pie R Cube) and the stub under the north arcade are exposed at ground level (gjbc.ts podiumFaces).
  */
 export const GJB_PODIUM: V2[] = [
   [20, plazaParapetZ(20)], [38, plazaParapetZ(38)], [55, plazaParapetZ(55)], [59, FS(59)], [59, -15], [20, -15], [20, -10],
   [19, -10], [18.5, 16], [18.6, 17.25], [-8, 17.6], [-8, -24], [16, -24], [16, -95], [20, -95],
 ];
-/** L1 granite floors (drawn at GJB_L1 by gjbc.ts). */
+/**
+ * The enterable ground-floor wing under the east half of the Quad and the covered plaza (src/world/gjb/ground.ts). Rects
+ * are [x0, z0, x1, z1]. Corridor A runs west from a door in the east lobby's west wall; corridor B runs north from it to a
+ * glass door in the podium's north face on PES University Rd; stair core S1 rises from corridor B to the covered plaza.
+ * The rest of the podium stays solid (GJB_PODIUM_PARTS); the wing is roofed by the L1 slab `slabPoly`.
+ */
+const PPZ = plazaParapetZ;
+export const GJB_G = {
+  /** L1 slab thickness over the wing (soffit at GJB_L1 − slab) */
+  slab: 0.4,
+  corridorA: [28, -83.6, 59, -80.8] as [number, number, number, number],
+  corridorB: [51.2, -113.6, 54, -83.6] as [number, number, number, number],
+  rooms: {
+    g01: [40, -95, 51.2, -83.6] as [number, number, number, number], // computer lab
+    g02: [40, -106.5, 51.2, -95] as [number, number, number, number], // classroom
+    g03: [54, -97.5, 59, -83.6] as [number, number, number, number], // faculty room
+    g04: [40, -80.8, 59, -70.8] as [number, number, number, number], // seminar hall
+    g05: [28, -95, 40, -83.6] as [number, number, number, number], // electronics lab
+  },
+  /** door centres: along corridor A (x) / corridor B (z) */
+  doors: { g01: 46.8, g05: 36, g04a: 43, g04b: 56, g02: -100.5, g03: -86.5 },
+  /** stair core S1 (outer rect; its west wall is corridor B's east wall), G → L1 */
+  core: [54, -107.5, 59, -97.5] as [number, number, number, number],
+  coreDoor: [-99.7, -97.7] as V2,
+  coreLanding: 2.2,
+  coreRun: 5.0,
+  coreTop: GJB_L1 + 8.5,
+  /** lobby door in the lobby's west wall (x = 59), z range */
+  lobbyDoor: [-83.4, -81.0] as V2,
+  /** z of the podium's north face at x (the road door is at corridor B) */
+  northDoorZ: (x: number): number => PPZ(x),
+  bounds: [28, -113.6, 59, -70.8] as [number, number, number, number],
+  /** L1 slab over the wing (the stair core is open above its landings) */
+  slabPoly: [[59, -70.8], [40, -70.8], [40, -80.8], [28, -80.8], [28, -95], [40, -95], [40, -106.5], [51.2, -106.5], [51.2, PPZ(51.2)], [54, PPZ(54)], [54, -97.5], [59, -97.5]] as V2[],
+};
+/** The closed parts of the podium (solid 0 → L1): everything except the ground-floor wing, and the NE island it cuts off. */
+export const GJB_PODIUM_PARTS: V2[][] = [
+  [
+    [20, PPZ(20)], [38, PPZ(38)], [51.2, PPZ(51.2)], [51.2, -106.5], [40, -106.5], [40, -95], [28, -95], [28, -80.8], [40, -80.8], [40, -70.8],
+    [59, -70.8], [59, -15], [20, -15], [20, -10], [19, -10], [18.5, 16], [18.6, 17.25], [-8, 17.6], [-8, -24], [16, -24], [16, -95], [20, -95],
+  ],
+  [[54, PPZ(54)], [55, PPZ(55)], [59, FS(59)], [59, -107.5], [54, -107.5]],
+];
+/** L1 granite floors (drawn at GJB_L1 by gjbc.ts). The covered plaza is notched round stair core S1. */
 export const GJB_L1_FLOORS: { id: string; poly: V2[] }[] = [
   { id: 'quad', poly: [[16, -95], [59, -95], [59, -15], [16, -15]] },
-  { id: 'covered_plaza', poly: [[20, plazaParapetZ(20)], [38, plazaParapetZ(38)], [55, plazaParapetZ(55)], [59, FS(59)], [59, -95], [20, -95]] },
+  { id: 'covered_plaza', poly: [[20, PPZ(20)], [38, PPZ(38)], [55, PPZ(55)], [59, FS(59)], [59, -107.5], [54, -107.5], [54, -97.5], [59, -97.5], [59, -95], [20, -95]] },
   { id: 'inner_court', poly: [[-8, -24], [16, -24], [16, -15], [20, -15], [20, -10], [19, -10], [18.5, 16], [18.6, 17.25], [-8, 17.6]] },
 ];
+/** GJBC 2nd floor (L2) in the east entrance block and the east wing (gjb/eastblock.ts): floor level and slab thickness. */
+export const GJB_L2 = GJB_L1 + 4.3;
 /**
- * Enterable ground-floor interiors (playable now; y = 0). Rect bounds; `front` = x of the glazed east front.
- * lobby: GJBC east entrance lobby (reception, walnut slat wall, stair to L1). cafe: GJBC cafeteria under the Law terrace.
+ * Enterable GJBC interiors. Rect bounds; `front` = x of the glazed east front.
+ * lobby: GJBC east entrance lobby (G; reception, walnut slat wall, the grand stair up into the L1 admission hall).
+ * cafe: GJBC cafeteria under the Law terrace (G).
+ * east: the east entrance block over the lobby (gjb/eastblock.ts): L1 admission hall + L2 floor (x0 … front, z0 … z1),
+ *   and the L2 classrooms carved into the east wing (gjb_e1) north of it (`l2Rooms`).
  */
 export const GJB_INTERIORS = {
-  lobby: { x0: 59, x1: gjbcEastX(-80) - 2.5, z0: -84, z1: -76, ceil: GJB_L1 - 0.05 },
+  lobby: { x0: 59, x1: gjbcEastX(-80) - 2.5, z0: -84, z1: -76, ceil: GJB_L1 - 0.45 },
   cafe: { x0: 72, z0: -10, z1: 22, ceil: 4.45 },
+  east: { x0: 59, z0: -84, z1: -76, l2Rooms: [59, -93.2, 80.6, -84] as [number, number, number, number] },
 };
 /**
  * 2-wheeler parking (reference/GJB_NOTES.md §4; user's Google Maps + reference/sat_east_grid.jpg): a long 2-level
@@ -204,10 +253,13 @@ export const BUILDINGS: BuildingDef[] = [
   { id: 'gjb_plaza_roof', name: 'GJBC Covered Plaza (upper floors)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: COVERED_PLAZA.roofY, top: GJ_H, soffit: 'wood', poly: [[20, -104.3], [38, -106.7], [55, -109.4], [55, -95], [20, -95]] },
   // (the north-east porch over the drive-through — L1 deck, roof and porte-cochère — is custom geometry in gjbc.ts)
   // east wing (inset ground blocks + arcade / colonnade strips at +9 m)
-  { id: 'gjb_e1', name: 'GJBC East Wing (north)', style: 'gjbc', floors: 6, floorH: 4.4, poly: [[59, FS(59)], [80, FS(80)], [E(-84) - 2.5, -84], [59, -84]], roof: { tanks: 2 } },
+  // collision is registered by gjb/eastblock.ts (solid except the L2 classrooms carved out of its south end)
+  { id: 'gjb_e1', name: 'GJBC East Wing (north)', style: 'gjbc', floors: 6, floorH: 4.4, collide: false, poly: [[59, FS(59)], [80, FS(80)], [E(-84) - 2.5, -84], [59, -84]], roof: { tanks: 2 } },
   { id: 'gjb_e1_col', name: 'GJBC East Colonnade (north)', style: 'gjbc', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'wood', poly: [[80, FS(80)], [E(FS(80)) + 0.5, FS(80)], [E(-84), -84], [E(-84) - 2.5, -84]] },
   { id: 'gjb_e1_arc', name: 'GJBC Quad East Arcade (north)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[55, FS(55)], [59, FS(59)], [59, -84], [55, -84]] },
-  { id: 'gjb_breezeway', name: 'GJBC East Entrance Hall (upper floors; the enterable G lobby below is in gjb/interiors.ts)', style: 'gjbc', floors: 6, floorH: 4.4, base: L1, top: GJ_H, soffit: 'grey', poly: [[55, -84], [E(-84), -84], [E(-76), -76], [55, -76]] },
+  // over the east entrance block: the G lobby (gjb/interiors.ts), the L1 admission hall and the L2 floor (gjb/eastblock.ts)
+  // are hand-built below ARC, and the Quad's east colonnade runs on through under it
+  { id: 'gjb_breezeway', name: 'GJBC East Entrance Block (upper floors)', style: 'gjbc', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'grey', poly: [[55, -84], [E(-84), -84], [E(-76), -76], [55, -76]] },
   { id: 'gjb_e2', name: 'GJBC East Wing (middle)', style: 'gjbc', floors: 6, floorH: 4.4, poly: [[59, -76], [E(-76) - 2.5, -76], [E(-60) - 2.5, -60], [59, -60]] },
   { id: 'gjb_e2_col', name: 'GJBC East Colonnade (middle)', style: 'gjbc', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'wood', poly: [[E(-76) - 2.5, -76], [E(-76), -76], [E(-60), -60], [E(-60) - 2.5, -60]] },
   {

@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { col, type WorldKit } from '../kit';
-import { planterCube } from '../landscape';
 import { driveNorthZ, FRONT_RAMP, GJB_L1, type V2 } from '../layout';
 import type { SignUVs } from '../signs';
-import { rect, segPoly } from './util';
+import { raisedPlanter, rect, segPoly } from './util';
 
 /**
  * The GJBC front ramp + PES signboard (reference/GJB_NOTES.md §2; GJB tour 0:33–0:36, 0:52, 1:52–2:06; old tour 0208,
@@ -90,8 +89,8 @@ export function buildFrontRamp(kit: WorldKit, signs: SignUVs): void {
     kit.box('metal', fx, L1 + 0.27, nz + 1.08, 0.3, 0.5, 0.14, 0, bronze);
   }
   c.addPolygon(rect(tx0 + 0.1, nz, tx1 - 0.1, nz + 1.2), 1.5, 'metal', 'statue', L1);
-  planterCube(kit, tx0 + 0.5, nz + 1.6, 0.7, L1);
-  planterCube(kit, tx1 - 0.5, nz + 1.6, 0.7, L1);
+  raisedPlanter(kit, tx0 + 0.5, nz + 1.6, 0.7, L1);
+  raisedPlanter(kit, tx1 - 0.5, nz + 1.6, 0.7, L1);
   // --- canopy over the west half of the landing (joins the porch roof)
   const cY = L1 + 5.2, cT = 0.7;
   const canopy = rect(tx0, tz0, tx1, NO(tx1) - 0.3);

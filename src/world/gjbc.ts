@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { addLedgesAt } from './buildings';
 import { hash2, normalizeWinding } from './geom';
+import { buildGround } from './gjb/ground';
 import { buildGjbInteriors } from './gjb/interiors';
 import { buildParking } from './gjb/parking';
-import { segPoly } from './gjb/util';
+import { raisedPlanter, segPoly } from './gjb/util';
 import { col, type WorldKit } from './kit';
-import { hedgeBox, planterCube, sapling } from './landscape';
+import { hedgeBox, sapling } from './landscape';
 import {
-  BUILDINGS, COVERED_PLAZA, DRIVE_THROUGH, driveFootpathZ, driveNorthZ, GJB_L1, GJB_L1_FLOORS, GJB_PODIUM, gjbcEastX, pesRdZ,
+  BUILDINGS, COVERED_PLAZA, DRIVE_THROUGH, driveFootpathZ, driveNorthZ, GJB_ARCADE_TOP, GJB_G, GJB_L1, GJB_L1_FLOORS, gjbcEastX, pesRdZ,
   plazaParapetZ, QUAD, type V2,
 } from './layout';
 import type { SignUVs } from './signs';
@@ -47,57 +48,104 @@ export function buildGJBC(kit: WorldKit, signs: SignUVs): void {
 }
 
 // ------------------------------------------------------------------------------------------------ L1 podium
-/** The solid podium under everything on L1: collision prism, L1 granite floors, and its exposed ground-floor faces. */
+/**
+ * The podium under everything on L1: its solids and the enterable ground-floor wing (gjb/ground.ts), the L1 granite
+ * floors, and every face of it that shows at ground level.
+ */
 function podium(kit: WorldKit): void {
-  kit.collision.addPolygon(GJB_PODIUM, L1, 'concrete', 'podium');
+  buildGround(kit);
   for (const f of GJB_L1_FLOORS) {
     const c = f.poly.reduce((s, p) => [s[0] + p[0] / f.poly.length, s[1] + p[1] / f.poly.length], [0, 0]);
     kit.buf('polished', c[0], c[1]).flatPoly(f.poly, L1 + 0.045, col('#aeafab'), 2);
   }
+  const nf = plazaParapetZ, B = GJB_G.corridorB;
   // north face along PES Univ Rd (under the covered plaza's L1 edge): white wall, dark slot windows, granite skirting,
-  // red fire cabinets — the same treatment as the drive-through wall it continues (old tour 0540)
-  const north: V2[] = [[20, plazaParapetZ(20)], [38, plazaParapetZ(38)], [55, plazaParapetZ(55)]];
-  groundFace(kit, north, 'north');
+  // red fire cabinets and AC louvre grilles, the same treatment as the drive-through wall it continues (old tour 0540;
+  // service face with louvres: 2021 tour SmHnHHxbpaE 19:36). The glass door at corridor B leads into the wing.
+  groundFace(kit, [[20, nf(20)], [38, nf(38)], [55, nf(55)]], 'north', [B[0], B[2]]);
+  // under the NE porch, where the podium meets the east wing across the drive-through: the same wall up to the deck
+  groundFace(kit, [[55, nf(55)], [59, driveFootpathZ(59)]], 'porch');
+  // the short west face under the north arcade, between the north wing's corner and the plaza's north-west corner
+  groundFace(kit, [[20, -106.6], [20, nf(20)]], 'stub');
   // south face of the L1 inner court, towards Pie R Cube: glazed ground floor + glass balustrade on L1
-  const south: V2[] = [[18.6, 17.25], [-8, 17.6]];
-  groundFace(kit, south, 'south');
+  groundFace(kit, [[18.6, 17.25], [-8, 17.6]], 'south');
 }
 
-/** Ground-floor face of the podium along a polyline (podium on the left-hand side = +offset), plus the L1 edge on top. */
-function groundFace(kit: WorldKit, line: V2[], kind: 'north' | 'south'): void {
+/**
+ * Ground-floor face of the podium along a polyline (the podium on the left-hand side of a→b), plus the L1 edge on top.
+ * 'north' (road side, optional door x-range), 'porch' (under the NE porch deck: wall only, up to the deck soffit),
+ * 'stub' (wall + a plain parapet on L1), 'south' (glazed, glass balustrade on L1).
+ */
+function groundFace(kit: WorldKit, line: V2[], kind: 'north' | 'porch' | 'stub' | 'south', door?: [number, number]): void {
   const wall = col('#ebe7de');
+  const lerp = (a: V2, b: V2, f: number): V2 => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+  const wallTop = kind === 'porch' ? DRIVE_THROUGH.clear : L1 - 0.65;
   for (let i = 1; i < line.length; i++) {
     const a = line[i - 1], b = line[i];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    kit.segBox('polished', a, b, 0, 0.6, 0.36, col('#2f3133'), 0.15, 0, 0.5);
+    // wall runs, split round the door if it falls in this segment
+    const runs: [V2, V2][] = [];
+    let dA: V2 | null = null, dB: V2 | null = null;
+    if (door && door[0] > Math.min(a[0], b[0]) && door[1] < Math.max(a[0], b[0])) {
+      dA = lerp(a, b, (door[0] - a[0]) / (b[0] - a[0]));
+      dB = lerp(a, b, (door[1] - a[0]) / (b[0] - a[0]));
+      runs.push([a, dA], [dB, b]);
+    } else runs.push([a, b]);
+    for (const [p, q] of runs) {
+      const rl = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      kit.segBox('polished', p, q, 0, 0.6, 0.36, col('#2f3133'), 0.15, 0, 0.5);
+      kit.segBox('plaster', p, q, 0.6, wallTop, 0.3, wall, kind === 'south' ? 0.3 : 0.15, 0, 0.5);
+      if (kind === 'south') {
+        kit.segBox('glass', p, q, 0.6, L1 - 1.3, 0.06, col('#33414c'), 0.12);
+        const n = Math.floor(rl / 2);
+        for (let k = 0; k <= n; k++) {
+          const c = lerp(p, q, k / n);
+          kit.box('polished', c[0], (L1 - 0.65) / 2, c[1] - 0.25, 0.7, L1 - 0.65, 0.7, 0, col('#b9b7b1'), 0.5);
+        }
+        continue;
+      }
+      if (kind === 'stub') continue;
+      // dark slot windows with mullions, fire cabinets; AC louvre grilles on the long road runs
+      kit.segBox('glass', p, q, 1.0, 2.3, 0.06, col('#2c3740'), -0.02);
+      const n = Math.floor(rl / 1.5);
+      for (let k = 1; k < n; k++) {
+        const c = lerp(p, q, k / n);
+        kit.segBox('metal', [c[0] - 0.04, c[1]], [c[0] + 0.04, c[1]], 1.0, 2.3, 0.1, col('#2b2f33'), -0.03);
+        if (k % 6 === 3) kit.box('stone', c[0], 1.0, c[1] + 0.05, 0.55, 0.9, 0.12, 0, col('#c1261c'));
+      }
+      if (kind === 'north' && rl > 10) {
+        for (let f = 0.25; f < 1; f += 0.5) {
+          const c0 = lerp(p, q, f - 2.2 / rl), c1 = lerp(p, q, f + 2.2 / rl);
+          kit.segBox('metal', c0, c1, 2.85, 4.65, 0.08, col('#e3e1dc'), -0.03);
+          for (let y = 2.95; y < 4.55; y += 0.16) kit.segBox('metal', c0, c1, y, y + 0.05, 0.1, col('#9da2a6'), -0.07);
+        }
+      }
+    }
+    if (dA && dB) {
+      // road door into the ground-floor wing: wall over the opening, a small canopy, a navy name plate
+      kit.segBox('plaster', dA, dB, 2.6, wallTop, 0.3, wall, 0.15, 0, 0.5);
+      kit.segBox('stone', dA, dB, 2.72, 2.86, 1.3, col('#e8e2d5'), -0.5, 0.6);
+      const m = lerp(dA, dB, 0.5);
+      kit.box('plaster', m[0], 3.35, m[1] - 0.03, 1.6, 0.36, 0.06, Math.atan2(-(dB[1] - dA[1]), dB[0] - dA[0]), col('#1f2b45'));
+      kit.collision.addPolygon(segPoly(dA, dB, 0.3, 0.15), L1 - GJB_G.slab - 2.6, 'concrete', 'wall', 2.6);
+    }
+    if (kind === 'porch') continue;
     kit.segBox('stone', a, b, L1 - 0.65, L1 + 0.08, 0.5, CHARCOAL, 0.22);
     if (kind === 'north') {
-      kit.segBox('plaster', a, b, 0.6, L1 - 0.65, 0.3, wall, 0.15, 0, 0.5);
-      kit.segBox('glass', a, b, 1.0, 2.3, 0.06, col('#2c3740'), -0.02);
-      const n = Math.floor(len / 1.5);
-      for (let k = 1; k < n; k++) {
-        const f = k / n, p: V2 = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-        kit.segBox('metal', [p[0] - 0.04, p[1]], [p[0] + 0.04, p[1]], 1.0, 2.3, 0.1, col('#2b2f33'), -0.03);
-        if (k % 6 === 3) kit.box('stone', p[0], 1.0, p[1] + 0.05, 0.55, 0.9, 0.12, 0, col('#c1261c'));
-      }
       // L1 planter parapet + dense hedge (Heliconia / peace lily) on the covered-plaza edge
       kit.segBox('stone', a, b, L1, L1 + 0.95, 1.3, PLANTER_GREY, 0.65, 0.02);
       kit.segBox('stone', a, b, L1 + 0.95, L1 + 1.05, 1.45, col('#2c2e30'), 0.65, 0.02);
       const segN = Math.max(1, Math.round(len / 2));
       for (let k = 0; k < segN; k++) {
-        const f0 = k / segN, f1 = (k + 1) / segN;
-        const pa: V2 = [a[0] + (b[0] - a[0]) * f0, a[1] + (b[1] - a[1]) * f0 + 0.65], pb: V2 = [a[0] + (b[0] - a[0]) * f1, a[1] + (b[1] - a[1]) * f1 + 0.65];
-        hedgeBox(kit, 'hedge', pa, pb, L1 + 1.0, L1 + 1.85, 1.1);
+        const pa = lerp(a, b, k / segN), pb = lerp(a, b, (k + 1) / segN);
+        hedgeBox(kit, 'hedge', [pa[0], pa[1] + 0.65], [pb[0], pb[1] + 0.65], L1 + 1.0, L1 + 1.85, 1.1);
       }
       kit.collision.addPolygon(segPoly(a, b, 1.3, 0.65), 1.1, 'concrete', 'parapet', L1);
+    } else if (kind === 'stub') {
+      kit.segBox('plaster', a, b, L1 + 0.08, L1 + 1.1, 0.3, wall, 0.15, 0.3);
+      kit.segBox('stone', a, b, L1 + 1.1, L1 + 1.18, 0.4, col('#2c2e30'), 0.15, 0.3);
+      kit.collision.addPolygon(segPoly(a, b, 0.3, 0.15), 1.1, 'concrete', 'parapet', L1);
     } else {
-      kit.segBox('plaster', a, b, 0.6, L1 - 0.65, 0.3, wall, 0.3, 0, 0.5);
-      kit.segBox('glass', a, b, 0.6, L1 - 1.3, 0.06, col('#33414c'), 0.12);
-      const n = Math.floor(len / 2);
-      for (let k = 0; k <= n; k++) {
-        const f = k / n, p: V2 = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-        kit.box('polished', p[0], (L1 - 0.65) / 2, p[1] - 0.25, 0.7, L1 - 0.65, 0.7, 0, col('#b9b7b1'), 0.5);
-      }
       kit.segBox('glass', a, b, L1 + 0.1, L1 + 1.1, 0.04, col('#6f8290'), 0.4);
       kit.segBox('metal', a, b, L1 + 1.1, L1 + 1.16, 0.08, col('#9aa0a6'), 0.4);
       kit.collision.addPolygon(segPoly(a, b, 0.3, 0.4), 1.1, 'concrete', 'parapet', L1);
@@ -131,7 +179,7 @@ function quad(kit: WorldKit, signs: SignUVs): void {
       kit.box('polished', x, y0 + 0.6, z, 1.02, 1.2, 1.02, 0, DARK_GRANITE, 0.5);
       kit.box('polished', x, y0 + 1.2 + shaftH / 2, z, Q.colSize, shaftH, Q.colSize, 0, WHITE_GRANITE, 0.5);
       kit.box('stone', x, y0 + Q.colHeight - 0.2, z, 1.0, 0.4, 1.0, 0, col('#e2e0da'));
-      kit.collision.addCircle(x, z, 0.62, y0 + Q.colHeight, 'concrete', 'column');
+      kit.collision.addCircle(x, z, 0.62, Q.colHeight, 'concrete', 'column', y0);
       if (k % 2 === 0) kit.signQuad(signs.quadBanner[k % 3], x + face * (Q.colSize / 2 + 0.03), y0 + 4.6, z, 0.78, 2.6, face, 0, false);
       else {
         // small wall-mounted light on the Quad face of the column
@@ -149,14 +197,14 @@ function quad(kit: WorldKit, signs: SignUVs): void {
   }
   // black cube planters with cycads, 5 m apart along each colonnade edge
   for (const x of [Q.minX + 3.2, Q.maxX - 3.2]) {
-    for (let z = Q.minZ + 5; z <= Q.maxZ - 5; z += 5) planterCube(kit, x, z, 0.85, y0);
+    for (let z = Q.minZ + 5; z <= Q.maxZ - 5; z += 5) raisedPlanter(kit, x, z, 0.85, y0);
   }
   // south end: glass gallery bridge above the 2-storey dark base
   kit.box('glass', (Q.minX + Q.maxX) / 2, y0 + 10.8, -12.6, Q.maxX - Q.minX + 4, 3.4, 3.8, 0, col('#50626f'));
   kit.box('stone', (Q.minX + Q.maxX) / 2, y0 + 12.65, -12.6, Q.maxX - Q.minX + 4.4, 0.3, 4.2, 0, col('#e6e0d2'));
   kit.box('stone', (Q.minX + Q.maxX) / 2, y0 + 9.0, -12.6, Q.maxX - Q.minX + 4.4, 0.35, 4.2, 0, col('#e6e0d2'));
   // the inner court (L1, south-west of the Quad): a few planters + a granite bench block
-  for (const [x, z] of [[-2, -8], [8, -8], [-2, 6], [8, 6]] as V2[]) planterCube(kit, x, z, 0.85, y0);
+  for (const [x, z] of [[-2, -8], [8, -8], [-2, 6], [8, 6]] as V2[]) raisedPlanter(kit, x, z, 0.85, y0);
   kit.box('polished', 3, y0 + 0.23, -1, 2.4, 0.45, 0.5, 0, col('#8e8e8b'), 0.5);
 }
 
@@ -172,7 +220,7 @@ function coveredPlaza(kit: WorldKit, signs: SignUVs): void {
     if (z < plazaParapetZ(x) + P.pergolaDepth + 0.8) continue;
     kit.box('stone', x, y0 + 0.55, z, 1.34, 1.1, 1.34, 0, col('#4a4f55'));
     kit.box('wood', x, (y0 + 1.1 + roofY) / 2, z, 1.2, roofY - y0 - 1.1, 1.2, 0, YELLOW_WOOD, 0.4);
-    kit.collision.addCircle(x, z, 0.8, roofY, 'wood', 'column');
+    kit.collision.addCircle(x, z, 0.8, roofY - y0, 'wood', 'column', y0);
   }
   // slate-grey steel beams under the roof slab
   const zS = P.southZ, zN = (x: number) => plazaParapetZ(x) + P.pergolaDepth;
@@ -189,7 +237,7 @@ function coveredPlaza(kit: WorldKit, signs: SignUVs): void {
     pb.beam([x, y0, zp], [x, pergY, zp], 0.5, 0.5, SLATE);
     pb.beam([x, pergY, zp - 0.4], [x, pergY, zr + 0.5], 0.5, 0.7, SLATE);
     pb.beam([x, pergY - 1.6, zp], [x, pergY - 0.2, zp + 1.5], 0.25, 0.25, SLATE);
-    kit.collision.addCircle(x, zp, 0.36, pergY, 'metal', 'pergola');
+    kit.collision.addCircle(x, zp, 0.36, pergY - y0, 'metal', 'pergola', y0);
   }
   for (const f of [0, 0.5, 1]) {
     const pts: [number, number, number][] = frameXs.map((x) => [x, pergY + 0.35, plazaParapetZ(x) + 1.7 + f * (zN(x) - plazaParapetZ(x) - 2.2)]);
@@ -223,10 +271,9 @@ function coveredPlaza(kit: WorldKit, signs: SignUVs): void {
   for (const [x, z] of [[31, -97.2], [44, -97.2]] as V2[]) {
     kit.box('polished', x, y0 + 0.5, z, 3.2, 1.0, 0.8, 0, col('#e3e1dc'), 0.5);
     kit.box('wood', x, y0 + 1.04, z, 3.3, 0.08, 0.9, 0, col('#6b2a26'));
-    kit.collision.addPolygon([[x - 1.6, z - 0.4], [x + 1.6, z - 0.4], [x + 1.6, z + 0.4], [x - 1.6, z + 0.4]], y0 + 1.1, 'concrete', 'desk');
+    kit.collision.addPolygon([[x - 1.6, z - 0.4], [x + 1.6, z - 0.4], [x + 1.6, z + 0.4], [x - 1.6, z + 0.4]], 1.1, 'concrete', 'desk', y0);
   }
-  // granite cladding panels + dark wall zone on the east side of the plaza
-  kit.box('polished', P.maxX + 3.9, y0 + 4.5, -104, 0.2, 9, 14, 0, col('#9b9a96'), 0.5);
+  // (the dark wall zone on the east side of the plaza is stair core S1, gjb/ground.ts)
 }
 
 // ------------------------------------------------------------------------------------------------ north-east porch (L1) over the drive-through
@@ -287,7 +334,7 @@ function nePorch(kit: WorldKit, signs: SignUVs): void {
   kit.collision.addPolygon([[x, zNo], [x + 1.6, zNo], [x + 1.6, zSo], [x, zSo]], L1 + 1.1 - (D.clear - 0.6), 'concrete', 'parapet', D.clear - 0.6);
   kit.collision.addPolygon([[x - 0.05, zNo - 1.2], [x + 1.25, zNo - 1.2], [x + 1.25, zNo], [x - 0.05, zNo]], fTop - D.clear + 0.6, 'concrete', 'frame', D.clear - 0.6);
   // a couple of black steel benches and planters on the porch
-  for (const px of [62, 70]) planterCube(kit, px, FS(px) - 1.6, 0.85, L1);
+  for (const px of [62, 70]) raisedPlanter(kit, px, FS(px) - 1.6, 0.85, L1);
 }
 
 // ------------------------------------------------------------------------------------------------ drive-through (ground floor)
@@ -339,16 +386,17 @@ function eastFacade(kit: WorldKit, signs: SignUVs): void {
     kit.collision.addSegment(a, b, 1.2, 0.62, 'concrete', 'planter');
     sapling(kit, x + 0.05, z, 'sapling', 0.85, false);
   }
-  // east entrance: two-storey cream portal box projecting from the colonnade + speckled granite steps; the lobby
-  // behind it is an enterable ground-floor interior (gjb/interiors.ts)
-  const zA = -86, zB = -74;
+  // east entrance: cream portal frame projecting from the colonnade round the ground-floor lobby and the two-storey
+  // glazing of the L1 admission hall + L2 above it (key_0105), speckled granite steps; the lobby and the block above
+  // it are enterable (gjb/interiors.ts, gjb/eastblock.ts)
+  const zA = -86, zB = -74, pTop = GJB_ARCADE_TOP + 1.5;
   const xa = E(zA), xb = E(zB);
   for (const z of [zA, zB]) {
     const xx = E(z);
-    kit.box('stone', xx + 1.2, 5.25, z, 3.6, 10.5, 0.8, 0, CREAM);
-    kit.collision.addPolygon([[xx - 0.6, z - 0.4], [xx + 3.0, z - 0.4], [xx + 3.0, z + 0.4], [xx - 0.6, z + 0.4]], 10.5, 'concrete', 'portal');
+    kit.box('stone', xx + 1.2, pTop / 2, z, 3.6, pTop, 0.8, 0, CREAM);
+    kit.collision.addPolygon([[xx - 0.6, z - 0.4], [xx + 3.0, z - 0.4], [xx + 3.0, z + 0.4], [xx - 0.6, z + 0.4]], pTop, 'concrete', 'portal');
   }
-  kit.box('stone', (xa + xb) / 2 + 1.3, 9.75, (zA + zB) / 2, 3.4, 1.5, zB - zA + 0.8, Math.atan2(-12, 161), CREAM);
+  kit.box('stone', (xa + xb) / 2 + 1.3, pTop - 0.75, (zA + zB) / 2, 3.4, 1.5, zB - zA + 0.8, Math.atan2(-12, 161), CREAM);
   for (let k = 0; k < 4; k++) kit.box('polished', (xa + xb) / 2 + 3.4 + k * 0.4, 0.07, (zA + zB) / 2, 0.4, 0.14 - k * 0.03, 11, Math.atan2(-12, 161), col('#9c9c9a'), 0.5);
   // hanging creeper at the entrance cheek walls
   hedgeBox(kit, 'hedge', [xa + 2.6, zA + 0.5], [xa + 2.6, zA + 1.2], 6, 9.5, 0.4);
