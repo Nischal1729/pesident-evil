@@ -647,7 +647,7 @@ function lantern(kit: WorldKit): void {
  * seat tiers step down from the atrium level (MRD_LV.f0) to the hall floor at the ground. The 'mrd' building is a
  * walls-only shell; the hall walls, ceiling, roof collision and floor are built here (own distance-culled LOD).
  */
-const AUD = { tier0: 36.9, tierD: 1.0, tiers: 6, rise: 0.3, stageT: 59, stageH: 1.0, ceil: 14.2, roofTop: 16.3, wall: 0.3 };
+const AUD = { tier0: 38.7, tierD: 1.0, tiers: 6, rise: 0.3, stageT: 59, stageH: 1.0, ceil: 14.2, roofTop: 16.3, wall: 0.3 };
 
 /** World → MRD frame. */
 function toLocal(p: V2): [number, number] {
@@ -758,7 +758,10 @@ export function buildMrdAuditorium(kit: WorldKit): void {
   }
 
   // ---------------------------------------------------------------- raked seat tiers from the atrium level down to the court
-  const tierT = (kk: number): [number, number] => [kk === 0 ? AUD.tier0 : AUD.tier0 + 1.7 + (kk - 1) * AUD.tierD, AUD.tier0 + 1.7 + kk * AUD.tierD];
+  // The top landing runs 1.7 m in from tier0 (just inside the passage doorway, whose reveal reaches t 38.7…39.2) and
+  // back to the hall's south corner (t ≈ 37), so the corner behind the landing is filled, not a pit. With tier0 at 36.9
+  // the door opened straight onto the second tier and the rows ran into the passage wall.
+  const tierT = (kk: number): [number, number] => [kk === 0 ? -1e3 : AUD.tier0 + 1.7 + (kk - 1) * AUD.tierD, AUD.tier0 + 1.7 + kk * AUD.tierD];
   for (let kk = 0; kk < AUD.tiers; kk++) {
     const [t0, t1] = tierT(kk);
     const top = F0 - kk * AUD.rise;
@@ -770,8 +773,11 @@ export function buildMrdAuditorium(kit: WorldKit): void {
     const [s0, s1] = spanAt(hall, t1);
     if (s1 - s0 < 1) continue;
     k.fbox('polished', s0, top - AUD.rise, t1 - 0.02, s1, top, t1, col('#8f8a82'), 0.5); // riser
-    // a row of yellow seats with the aisle on the entrance axis; none on the top landing
-    if (kk > 0) for (let s = s0 + 0.7; s < s1 - 0.6; s += 0.56) {
+    // a row of yellow seats with the aisle on the entrance axis; none on the top landing. The row spans the hall where
+    // the seat backs are (t1 − 0.9): the side walls close in towards t0, and a span taken at t1 put the end seats
+    // through the walls.
+    const [r0, r1] = spanAt(hall, t1 - 0.9);
+    if (kk > 0) for (let s = r0 + 0.7; s < r1 - 0.6; s += 0.56) {
       if (Math.abs(s + 5.4) < 0.9) continue;
       const ts = t1 - 0.62;
       k.fbox('plaster', s - 0.22, top + 0.4, ts - 0.2, s + 0.22, top + 0.46, ts + 0.2, SEATY, 0.5);
@@ -800,8 +806,9 @@ export function buildMrdAuditorium(kit: WorldKit): void {
     k.fbox('dark', s0, 0, AUD.stageT - 0.03, s1, AUD.stageH, AUD.stageT, col('#2a1d1a'));
     // magenta proscenium header over the stage front, the screen
     k.fbox('plaster', s0, 8.2, AUD.stageT - 0.3, s1, AUD.ceil, AUD.stageT, MAG, 0.5);
-    k.fbox('plaster', -13.5, 3.2, 66.3, -3.5, 8.0, 66.45, col('#f4f4f2'), 0.5);
-    k.fbox('dark', -13.6, 3.1, 66.45, -3.4, 8.1, 66.55, col('#1b1c1e'));
+    // (the back wall is a V: the hall is only s −13.5…−4.0 wide at t 66.5, so the screen stops short of the east wall)
+    k.fbox('plaster', -13.5, 3.2, 66.3, -4.2, 8.0, 66.45, col('#f4f4f2'), 0.5);
+    k.fbox('dark', -13.6, 3.1, 66.45, -4.1, 8.1, 66.55, col('#1b1c1e'));
     // side stairs (6 steps) up from the court
     for (const [sa, sb2] of [[-16.8, -14.6], [1.0, 3.2]] as V2[]) {
       const tA = AUD.stageT - 2.0;
@@ -809,8 +816,10 @@ export function buildMrdAuditorium(kit: WorldKit): void {
       C.addRamp(R(sa, tA, sb2, AUD.stageT), F.at((sa + sb2) / 2, tA), F.at((sa + sb2) / 2, AUD.stageT), 0, AUD.stageH, 'concrete', 'mrd:stair');
     }
     for (let s = s0 + 2; s < s1 - 1; s += 3.5) k.flight(s, AUD.ceil - 0.03, AUD.stageT + 3, 0.8, 0.8);
-    // speakers either side of the stage front
-    for (const s of [s0 + 1.0, s1 - 1.0]) {
+    // speakers either side of the stage front, placed from the hall width at their back face (the east wall closes in
+    // behind the stage front: at s1 − 1 the east speaker stood half inside it)
+    const [q0, q1] = spanAt(hall, AUD.stageT + 0.9);
+    for (const s of [q0 + 0.6, q1 - 0.6]) {
       k.fbox('dark', s - 0.35, AUD.stageH, AUD.stageT + 0.3, s + 0.35, AUD.stageH + 1.6, AUD.stageT + 0.9, col('#161718'));
       C.addPolygon(R(s - 0.35, AUD.stageT + 0.3, s + 0.35, AUD.stageT + 0.9), 1.6, 'metal', 'prop', AUD.stageH);
     }
@@ -846,7 +855,9 @@ export function buildMrdAuditorium(kit: WorldKit): void {
   // ---------------------------------------------------------------- passage from the atrium (between the central wings)
   {
     const pt0 = A.t1;
-    C.addPolygon(R(-6.6, pt0, -4.2, 39.2), F0, 'concrete', 'mrd:floor');
+    // floor under the passage and the doorway reveal (follows the slanted hall wall; the old rectangle stuck out into
+    // the hall beyond the wall at the west jamb)
+    C.addPolygon(F.poly([[-6.6, pt0], [-4.2, pt0], [-4.2, 39.19], [-6.6, 38.7]]), F0, 'concrete', 'mrd:floor');
     k.fflat('polished', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], F0 + 0.006, MARBLE, 2);
     k.fflat('plaster', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], L.u1 - 0.02, CEIL, 2, true);
     k.fbox('plaster', -6.64, F0, pt0, -6.6, L.u1, 38.4, YELLOW, 0.5);
@@ -856,8 +867,9 @@ export function buildMrdAuditorium(kit: WorldKit): void {
 
   let cx = 0, cz = 0;
   for (const p of bd.poly) { cx += p[0]; cz += p[1]; }
-  // the hall has no openings to the outside (only the passage from the atrium), so it can be culled early
-  k.build('interior:mrd_auditorium', [cx / bd.poly.length, cz / bd.poly.length], 48);
+  // the hall has no openings to the outside (only the passage from the atrium), so it can be culled early; 60 m keeps
+  // it in view through the passage and the auditorium doors from the atrium, the lobby and the forecourt
+  k.build('interior:mrd_auditorium', [cx / bd.poly.length, cz / bd.poly.length], 60);
 }
 
 /** Which side (for InteriorKit.wall) points into the polygon for edge a→b (frame coordinates). */
