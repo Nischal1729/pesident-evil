@@ -41,7 +41,7 @@ export function buildGround(kit: WorldKit): void {
   stairCore(kit, gc);
   const b = G.bounds, ctr: V2 = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
   gc.build('interior:gjb_ground', ctr, 1e9, undefined, (cam) =>
-    cam.y < L1 - 0.3 && cam.x > b[0] - 30 && cam.x < b[2] + 45 && cam.z > b[1] - 28 && cam.z < b[3] + 25);
+    cam.y < L1 - 0.3 && cam.x > b[0] - 30 && cam.x < b[2] + 32 && cam.z > b[1] - 28 && cam.z < b[3] + 25);
   gr.build('interior:gjb_ground_rooms', ctr, 1e9, undefined, (cam) =>
     cam.y < L1 - 0.3 && cam.x > b[0] - 1 && cam.x < b[2] + 26 && cam.z > b[1] - 1 && cam.z < b[3] + 1);
 }

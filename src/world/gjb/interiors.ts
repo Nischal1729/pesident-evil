@@ -145,15 +145,16 @@ function lobby(kit: WorldKit): void {
   const bal = new GeoBuffer({ color: true });
   const yAt = (x: number) => ((sxF - x) / (sxF - sxT)) * GJB_L1;
   for (const [zf, nz] of [[sz0 - 0.18, -1], [sz0 + 0.02, 1]] as [number, number][]) {
-    const i0 = bal.vert(sxF, 0, zf, 0, 0, nz, 0, 0, col('#eceae4')), i1 = bal.vert(sxT, yAt(sxT), zf, 0, 0, nz, 1, 0, col('#eceae4'));
+    const i0 = bal.vert(sxF, 0, zf, 0, 0, nz, 0, 0, col('#eceae4')), i1 = bal.vert(sxT, 0, zf, 0, 0, nz, 1, 0, col('#eceae4'));
     const i2 = bal.vert(sxT, yAt(sxT) + 1.0, zf, 0, 0, nz, 1, 1, col('#eceae4')), i3 = bal.vert(sxF, 1.0, zf, 0, 0, nz, 0, 1, col('#eceae4'));
-    if (nz > 0) bal.quad(i0, i1, i2, i3); else bal.quad(i0, i3, i2, i1);
+    // the balustrade runs west (sxF → sxT), so the side facing −z winds i0 → i1 → i2 → i3
+    if (nz < 0) bal.quad(i0, i1, i2, i3); else bal.quad(i0, i3, i2, i1);
   }
   {
     const c = col('#8f8e8a');
     const i0 = bal.vert(sxF, 1.0, sz0 - 0.2, 0, 1, 0, 0, 0, c), i1 = bal.vert(sxT, yAt(sxT) + 1.0, sz0 - 0.2, 0, 1, 0, 1, 0, c);
     const i2 = bal.vert(sxT, yAt(sxT) + 1.0, sz0 + 0.04, 0, 1, 0, 1, 1, c), i3 = bal.vert(sxF, 1.0, sz0 + 0.04, 0, 1, 0, 0, 1, c);
-    bal.quad(i0, i3, i2, i1);
+    bal.quad(i0, i1, i2, i3);
     const e0 = bal.vert(sxF, 0, sz0 - 0.18, 1, 0, 0, 0, 0, c), e1 = bal.vert(sxF, 0, sz0 + 0.02, 1, 0, 0, 1, 0, c);
     const e2 = bal.vert(sxF, 1.0, sz0 + 0.02, 1, 0, 0, 1, 1, c), e3 = bal.vert(sxF, 1.0, sz0 - 0.18, 1, 0, 0, 0, 1, c);
     bal.quad(e0, e3, e2, e1);
