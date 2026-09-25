@@ -57,11 +57,10 @@ function eastWingCollision(kit: WorldKit): void {
   c.addPolygon(b.poly, L2, 'concrete', tag);
   c.addPolygon(b.poly, top - ARC, 'concrete', tag, ARC);
   // the L2 band: the wing's outline minus the rooms rect (the rooms touch its west and south edges)
-  const [rx0, rz0, rx1, rz1] = ROOMS;
+  const [, rz0, rx1] = ROOMS;
   const north = clipPoly(b.poly, (p) => p[1] <= rz0, (a, q) => lerpAt(a, q, 1, rz0));
   const east = clipPoly(clipPoly(b.poly, (p) => p[1] >= rz0, (a, q) => lerpAt(a, q, 1, rz0)), (p) => p[0] >= rx1, (a, q) => lerpAt(a, q, 0, rx1));
   for (const p of [north, east]) if (p.length >= 3) c.addPolygon(p, ARC - L2, 'concrete', tag, L2);
-  void rx0; void rz1;
 }
 
 function lerpAt(a: V2, b: V2, axis: 0 | 1, v: number): V2 {

@@ -273,8 +273,6 @@ function benchDesk(g: GroupKit, F: Frame, u: number, v: number, len: number, y0:
   for (const du of [-len / 2 + 0.05, len / 2 - 0.05]) F.box(g, 'metal', u + du, y0 + 0.37, v + 0.15, 0.04, 0.74, 0.95, C.steel);
 }
 
-export interface Furnished { solids: V2[][]; heights: number[] }
-
 function addSolid(kit: WorldKit, poly: V2[], h: number, y0: number, tag = 'prop', surface: SurfaceKind = 'wood'): void {
   kit.collision.addPolygon(poly, h, surface, tag, y0);
 }
