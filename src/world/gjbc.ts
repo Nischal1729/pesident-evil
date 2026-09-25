@@ -8,7 +8,7 @@ import { raisedPlanter, segPoly } from './gjb/util';
 import { col, type WorldKit } from './kit';
 import { hedgeBox, sapling } from './landscape';
 import {
-  BUILDINGS, COVERED_PLAZA, DRIVE_THROUGH, driveFootpathZ, driveNorthZ, GJB_ARCADE_TOP, GJB_G, GJB_L1, GJB_L1_FLOORS, gjbcEastX, pesRdZ,
+  BUILDINGS, COVERED_PLAZA, DRIVE_THROUGH, driveFootpathZ, driveNorthZ, GJB_ARCADE_TOP, GJB_G, GJB_GALLERY, GJB_L1, GJB_L1_FLOORS, gjbcEastX, pesRdZ,
   plazaParapetZ, QUAD, type V2,
 } from './layout';
 import type { SignUVs } from './signs';
@@ -158,15 +158,18 @@ function quad(kit: WorldKit, signs: SignUVs): void {
   const Q = QUAD;
   const y0 = Q.floorY;
   const polished = (x: number, z: number) => kit.buf('polished', x, z);
-  // floor pattern: two longitudinal charcoal bands, transverse bands every 15 m with diamonds on the axis
+  // floor pattern (tour frames key_1150, key_0606, uxqjCJBCP_g 11:33): a checkerboard strip of dark and light granite
+  // squares down the axis between thin dark borders, and wide dark bands across the Quad every 15 m
   const y = y0 + 0.052;
-  const midX = (Q.minX + Q.maxX) / 2;
-  for (const bx of [midX - 6.5, midX + 6.5]) polished(bx, -55).flatPoly([[bx - 0.7, Q.minZ], [bx + 0.7, Q.minZ], [bx + 0.7, Q.maxZ], [bx - 0.7, Q.maxZ]], y, BAND, 2);
+  const midX = (Q.minX + Q.maxX) / 2, cs = 4, cz0 = Q.minZ + 1.5, rows = Math.floor((Q.maxZ - Q.minZ - 3) / cs);
+  const rect4 = (x0: number, z0: number, x1: number, z1: number): V2[] => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+  for (let r = 0; r < rows; r++) {
+    const z = cz0 + r * cs, x = r % 2 ? midX : midX - cs;
+    polished(x + cs / 2, z + cs / 2).flatPoly(rect4(x, z, x + cs, z + cs), y + 0.002, BAND, 2);
+  }
+  for (const bx of [midX - cs - 0.35, midX + cs + 0.05]) polished(bx, -55).flatPoly(rect4(bx, cz0, bx + 0.3, cz0 + rows * cs), y + 0.002, BAND, 2);
   for (let z = Q.minZ + 7.5; z < Q.maxZ; z += 15) {
-    polished(midX, z).flatPoly([[Q.minX + 2.2, z - 0.7], [Q.maxX - 2.2, z - 0.7], [Q.maxX - 2.2, z + 0.7], [Q.minX + 2.2, z + 0.7]], y, BAND, 2);
-    const d = 3.2;
-    polished(midX, z).flatPoly([[midX, z - d], [midX + d, z], [midX, z + d], [midX - d, z]], y + 0.002, BAND, 2);
-    polished(midX, z).flatPoly([[midX, z - d + 1], [midX + d - 1, z], [midX, z + d - 1], [midX - d + 1, z]], y + 0.004, col('#aeafab'), 2);
+    for (const [x0, x1] of [[Q.minX + 2.2, midX - cs - 0.35], [midX + cs + 0.35, Q.maxX - 2.2]]) polished((x0 + x1) / 2, z).flatPoly(rect4(x0, z - 0.7, x1, z + 0.7), y, BAND, 2);
   }
   // arcade step lip along both column lines
   for (const x of [Q.minX + 0.45, Q.maxX - 0.45]) kit.box('polished', x, y0 + 0.08, (Q.minZ + Q.maxZ) / 2, 1.6, 0.16, Q.maxZ - Q.minZ, 0, col('#b9bab6'), 0.5);
@@ -188,17 +191,22 @@ function quad(kit: WorldKit, signs: SignUVs): void {
       }
     }
   }
-  // arcade beam line on top of the columns + continuous balcony (slab + glass railing) higher up
+  // the thick white beam on top of the columns carries an open gallery in front of the set-back upper floors (layout.ts
+  // GJB_GALLERY), behind a dark perforated-metal railing (key_1150; uxqjCJBCP_g 11:33): slab, terracotta soffit, rail
+  const gz = (Q.minZ + Q.maxZ) / 2, gl = Q.maxZ - Q.minZ, gY = GJB_ARCADE_TOP, gw = GJB_GALLERY + 0.25;
   for (const [x, face] of [[Q.minX, 1], [Q.maxX, -1]] as [number, number][]) {
-    kit.box('stone', x + face * 0.1, y0 + Q.colHeight + 0.45, (Q.minZ + Q.maxZ) / 2, 0.5, 0.9, Q.maxZ - Q.minZ, 0, col('#e6e0d2'));
-    kit.box('stone', x + face * 0.6, y0 + 13.1, (Q.minZ + Q.maxZ) / 2, 1.2, 0.22, Q.maxZ - Q.minZ, 0, col('#e8e2d4'));
-    kit.box('glass', x + face * 1.15, y0 + 13.75, (Q.minZ + Q.maxZ) / 2, 0.04, 1.05, Q.maxZ - Q.minZ, 0, col('#6f8290'));
-    kit.box('metal', x + face * 1.15, y0 + 14.3, (Q.minZ + Q.maxZ) / 2, 0.08, 0.06, Q.maxZ - Q.minZ, 0, col('#9aa0a6'));
+    const xc = x + face * (0.25 - gw / 2);
+    kit.box('stone', xc, gY + 0.45, gz, gw, 0.9, gl, 0, col('#e6e0d2'));
+    kit.box('stone', xc, gY - 0.01, gz, gw - 0.02, 0.02, gl, 0, col('#8a4a36'));
+    kit.collision.addPolygon(rect4(Math.min(xc - gw / 2, xc + gw / 2), Q.minZ, Math.max(xc - gw / 2, xc + gw / 2), Q.maxZ), 0.9, 'concrete', 'gallery', gY);
+    const rx = x + face * 0.2;
+    kit.box('metal', rx, gY + 1.45, gz, 0.05, 1.1, gl, 0, col('#34383c'));
+    for (let z = Q.minZ + 0.2; z < Q.maxZ; z += 1.5) kit.box('metal', rx - face * 0.05, gY + 1.45, z, 0.06, 1.1, 0.06, 0, col('#26292c'));
+    kit.box('metal', rx, gY + 2.03, gz, 0.1, 0.06, gl, 0, col('#9aa0a6'));
+    kit.collision.addPolygon(rect4(rx - 0.05, Q.minZ, rx + 0.05, Q.maxZ), 1.15, 'metal', 'parapet', gY + 0.9);
   }
-  // black cube planters with cycads, 5 m apart along each colonnade edge
-  for (const x of [Q.minX + 3.2, Q.maxX - 3.2]) {
-    for (let z = Q.minZ + 5; z <= Q.maxZ - 5; z += 5) raisedPlanter(kit, x, z, 0.85, y0);
-  }
+  // black cube planters with fiddle-leaf figs / palms in one row beside the checkerboard strip, 5 m apart
+  for (let z = Q.minZ + 5; z <= Q.maxZ - 5; z += 5) raisedPlanter(kit, midX + cs + 1.3, z, 0.85, y0);
   // south end: glass gallery bridge above the 2-storey dark base
   kit.box('glass', (Q.minX + Q.maxX) / 2, y0 + 10.8, -12.6, Q.maxX - Q.minX + 4, 3.4, 3.8, 0, col('#50626f'));
   kit.box('stone', (Q.minX + Q.maxX) / 2, y0 + 12.65, -12.6, Q.maxX - Q.minX + 4.4, 0.3, 4.2, 0, col('#e6e0d2'));
@@ -288,9 +296,10 @@ function nePorch(kit: WorldKit, signs: SignUVs): void {
   const x0 = D.x0, x1 = D.x1;
   const deck: V2[] = [[x0, NO(x0)], [x1, NO(x1)], [x1, FS(x1)], [59, FS(59)], [x0, plazaParapetZ(x0)]];
   const cx = (x0 + x1) / 2, cz = NO(cx) + 6;
-  // deck: granite top on L1 (continuing the covered plaza floor), wood-look soffit over the road, charcoal edge fascia
+  // deck: granite top on L1 (continuing the covered plaza floor), dark grey soffit with downlights over the road (old tour
+  // 0540), charcoal edge fascia
   kit.buf('polished', cx, cz).flatPoly(deck, L1 + 0.045, col('#aeafab'), 2);
-  kit.buf('wood', cx, cz).flatPoly(deck, D.clear, col('#6b4a36'), 2, true);
+  kit.buf('stone', cx, cz).flatPoly(deck, D.clear, col('#45484c'), 2, true);
   kit.segBox('stone', [x0, NO(x0)], [x1, NO(x1)], D.clear, L1 + 0.05, 0.35, CHARCOAL, -0.17);
   kit.segBox('stone', [x0, NO(x0)], [x0, plazaParapetZ(x0)], D.clear, L1 + 0.05, 0.35, CHARCOAL, 0.17);
   kit.collision.addPolygon(deck, L1 - D.clear, 'concrete', 'deck', D.clear);

@@ -44,7 +44,7 @@ export function buildEastBlock(kit: WorldKit): void {
   l2Rooms(kit, g);
   const far = new THREE.Group();
   far.add(farGlass(kit));
-  g.build('interior:gjb_east', [71, -80], 90, far);
+  g.build('interior:gjb_east', [71, -80], 62, far);
 }
 
 // ------------------------------------------------------------------------------------------------ gjb_e1 collision

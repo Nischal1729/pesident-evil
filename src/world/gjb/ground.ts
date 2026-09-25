@@ -31,15 +31,19 @@ export function buildGround(kit: WorldKit): void {
   // solids: the closed parts of the podium (0 → L1) and the L1 slab over the enterable wing
   for (const p of GJB_PODIUM_PARTS) c.addPolygon(p, L1, 'concrete', 'podium');
   c.addPolygon(G.slabPoly, G.slab, 'concrete', 'slab', SOFFIT);
-  const g = new GroupKit(kit);
-  walls(kit, g);
-  corridors(kit, g);
-  rooms(kit, g);
-  stairCore(kit, g);
-  // the fit-out is drawn only while the camera is on the ground storey near the wing (it is sealed off from L1)
-  const b = G.bounds;
-  g.build('interior:gjb_ground', [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2], 1e9, undefined, (cam) =>
+  // two fit-out groups, both drawn only while the camera is on the ground storey (the wing is sealed off from L1):
+  // the corridors + stair core (seen through the road door and the lobby door from outside) and the rooms (only seen
+  // from the corridors and the lobby)
+  const gc = new GroupKit(kit), gr = new GroupKit(kit);
+  walls(kit, gc);
+  corridors(kit, gc);
+  rooms(kit, gr);
+  stairCore(kit, gc);
+  const b = G.bounds, ctr: V2 = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+  gc.build('interior:gjb_ground', ctr, 1e9, undefined, (cam) =>
     cam.y < L1 - 0.3 && cam.x > b[0] - 30 && cam.x < b[2] + 45 && cam.z > b[1] - 28 && cam.z < b[3] + 25);
+  gr.build('interior:gjb_ground_rooms', ctr, 1e9, undefined, (cam) =>
+    cam.y < L1 - 0.3 && cam.x > b[0] - 1 && cam.x < b[2] + 26 && cam.z > b[1] - 1 && cam.z < b[3] + 1);
 }
 
 // ------------------------------------------------------------------------------------------------ walls

@@ -109,6 +109,8 @@ export function driveFootpathZ(x: number): number { return pesRdZ(x) + 4 + DRIVE
 export function driveNorthZ(x: number): number { return pesRdZ(x) - 5.4; }
 /** Arcade soffit on L1 (the Quad colonnade strips start here). */
 export const GJB_ARCADE_TOP = GJB_L1 + 8.5;
+/** Depth of the open gallery on top of the Quad colonnades (the upper floors stand back this far from the column line). */
+export const GJB_GALLERY = 1.8;
 
 const FS = driveFootpathZ; // south edge of the drive-through footpath
 const E = gjbcEastX;
@@ -248,7 +250,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: 'gjb_west', name: 'GJBC West Wing', style: 'gjbcQuad', floors: 6, floorH: 4.4,
     poly: [[-8, -95], [16, -95], [16, -24], [-8, -24]],
   },
-  { id: 'gjb_west_arc', name: 'GJBC Quad West Arcade (upper floors over the L1 colonnade)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[16, -95], [20, -95], [20, -15], [16, -15]] },
+  // the upper floors over the Quad colonnades stand back GJB_GALLERY m behind the column line: the colonnade carries an
+  // open gallery with a dark railing on top (gjbc.ts quad(); tour frames key_1150, uxqjCJBCP_g 11:33)
+  { id: 'gjb_west_arc', name: 'GJBC Quad West Arcade (upper floors over the L1 colonnade)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[16, -95], [20 - GJB_GALLERY, -95], [20 - GJB_GALLERY, -15], [16, -15]] },
   { id: 'gjb_west_s', name: 'GJBC West Wing (over the L1 inner court)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[-8, -24], [16, -24], [16, -15], [-8, -15]] },
   { id: 'gjb_plaza_roof', name: 'GJBC Covered Plaza (upper floors)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: COVERED_PLAZA.roofY, top: GJ_H, soffit: 'wood', poly: [[20, -104.3], [38, -106.7], [55, -109.4], [55, -95], [20, -95]] },
   // (the north-east porch over the drive-through — L1 deck, roof and porte-cochère — is custom geometry in gjbc.ts)
@@ -256,17 +260,17 @@ export const BUILDINGS: BuildingDef[] = [
   // collision is registered by gjb/eastblock.ts (solid except the L2 classrooms carved out of its south end)
   { id: 'gjb_e1', name: 'GJBC East Wing (north)', style: 'gjbc', floors: 6, floorH: 4.4, collide: false, poly: [[59, FS(59)], [80, FS(80)], [E(-84) - 2.5, -84], [59, -84]], roof: { tanks: 2 } },
   { id: 'gjb_e1_col', name: 'GJBC East Colonnade (north)', style: 'gjbc', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'wood', poly: [[80, FS(80)], [E(FS(80)) + 0.5, FS(80)], [E(-84), -84], [E(-84) - 2.5, -84]] },
-  { id: 'gjb_e1_arc', name: 'GJBC Quad East Arcade (north)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[55, FS(55)], [59, FS(59)], [59, -84], [55, -84]] },
+  { id: 'gjb_e1_arc', name: 'GJBC Quad East Arcade (north)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[55, FS(55)], [59, FS(59)], [59, -84], [55 + GJB_GALLERY, -84], [55 + GJB_GALLERY, -95], [55, -95]] },
   // over the east entrance block: the G lobby (gjb/interiors.ts), the L1 admission hall and the L2 floor (gjb/eastblock.ts)
   // are hand-built below ARC, and the Quad's east colonnade runs on through under it
-  { id: 'gjb_breezeway', name: 'GJBC East Entrance Block (upper floors)', style: 'gjbc', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'grey', poly: [[55, -84], [E(-84), -84], [E(-76), -76], [55, -76]] },
+  { id: 'gjb_breezeway', name: 'GJBC East Entrance Block (upper floors)', style: 'gjbc', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'grey', poly: [[55 + GJB_GALLERY, -84], [E(-84), -84], [E(-76), -76], [55 + GJB_GALLERY, -76]] },
   { id: 'gjb_e2', name: 'GJBC East Wing (middle)', style: 'gjbc', floors: 6, floorH: 4.4, poly: [[59, -76], [E(-76) - 2.5, -76], [E(-60) - 2.5, -60], [59, -60]] },
   { id: 'gjb_e2_col', name: 'GJBC East Colonnade (middle)', style: 'gjbc', floors: 6, floorH: 4.4, base: 9, top: GJ_H, soffit: 'wood', poly: [[E(-76) - 2.5, -76], [E(-76), -76], [E(-60), -60], [E(-60) - 2.5, -60]] },
   {
     id: 'gjb_e3', name: 'GJBC East Wing (south, curtain wall)', style: 'gjbcCurtain', floors: 6, floorH: 4.4,
     poly: [[59, -60], [E(-60), -60], [E(-10), -10], [59, -10]],
   },
-  { id: 'gjb_e_arc', name: 'GJBC Quad East Arcade (south)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[55, -76], [59, -76], [59, -15], [55, -15]] },
+  { id: 'gjb_e_arc', name: 'GJBC Quad East Arcade (south)', style: 'gjbcQuad', floors: 6, floorH: 4.4, base: ARC, top: GJ_H, soffit: 'red', poly: [[55 + GJB_GALLERY, -76], [59, -76], [59, -15], [55 + GJB_GALLERY, -15]] },
   { id: 'gjb_quad_s', name: 'GJBC Quad South Gallery', style: 'gjbcCurtain', floors: 2, floorH: 4.5, top: L1 + 9, poly: [[20, -15], [59, -15], [59, -10], [20, -10]] },
   {
     id: 'gjb_south', name: 'GJBC Electrical Block (south hall)', style: 'gjbc', floors: 4, floorH: 4.0,

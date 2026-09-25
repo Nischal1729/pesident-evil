@@ -393,7 +393,7 @@ export function electronicsLab(kit: WorldKit, g: GroupKit, r: [number, number, n
   const F = frame(r[0], r[1], r[2], r[3], front);
   boards(g, F, y0);
   const instr = [col('#2c6fa8'), col('#d9d4c8'), col('#3a3d40'), col('#c7502e')];
-  for (let v = 2.6; v <= F.D - 1.6; v += 2.3) {
+  for (let v = 2.6; v <= F.D - 2.6; v += 2.3) { // leave a 2 m aisle along the back wall (the door side)
     for (const u0 of [1.0, F.W / 2 + 0.6]) {
       const u1 = Math.min(F.W - 1.0, u0 + F.W / 2 - 1.6);
       if (u1 - u0 < 1.5) continue;
