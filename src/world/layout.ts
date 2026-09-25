@@ -241,15 +241,21 @@ export const BUILDINGS: BuildingDef[] = [
     poly: [[2.0, -179.8], [9.2, -182.4], [21.2, -187.0], [25.8, -185.8], [30.2, -187.9], [31.1, -183.2], [33.0, -172.0], [28.0, -158.0], [15.0, -154.0], [9.2, -156.9], [2.8, -168.5]],
     roof: { parapet: 0.3 },
   },
+  // The entrance block and the central wings are hollowed out for the enterable interior (src/world/mrdInterior.ts,
+  // plan in the local frame of mrdAt(): lobby behind the east glazing, the 4-storey atrium under the octagonal skylight,
+  // a corridor out to the Open Air Theatre side). mrd_fan keeps the outer wings full height (C-shape round the atrium);
+  // the atrium's upper floors are the four mrd_up_* pieces around the gallery ring (base = 2nd-floor slab underside).
   {
-    id: 'mrd_fan', name: 'Prof. MRD Block — central wings', style: 'oldCream', floors: 6, floorH: 3.6,
-    poly: [[31.1, -183.2], [34.8, -180.9], [59.3, -169.6], [43.6, -141.0], [37.7, -143.7], [15.0, -154.0], [28.0, -158.0], [33.0, -172.0]],
+    id: 'mrd_fan', name: 'Prof. MRD Block — central wings', style: 'oldCream', floors: 6, floorH: 3.6, top: 22,
+    poly: [[31.1, -183.2], [34.8, -180.9], [59.3, -169.6], mrdAt(12.512, 15.3), mrdAt(9.6, 15.3), mrdAt(9.6, 33.5), mrdAt(-16, 33.5), mrdAt(-16, 22), mrdAt(-20.95, 22), [15.0, -154.0], [28.0, -158.0], [33.0, -172.0]],
     roof: { tanks: 3 },
   },
+  { id: 'mrd_fan_s', name: 'Prof. MRD Block — central wings (south-east corner)', style: 'oldCream', floors: 6, floorH: 3.6, top: 22, poly: [mrdAt(-20.176, 15.3), mrdAt(-16, 15.3), mrdAt(-16, 19), mrdAt(-20.602, 19)] },
+  ...mrdUpperPieces(),
   {
-    id: 'mrd_east', name: 'Prof. MRD Block — east entrance block (Silver Jubilee Complex)', style: 'glass', floors: 5, floorH: 4.0,
-    poly: [[59.3, -169.6], [73.5, -161.8], [66.7, -150.5], [59.9, -139.3], [43.6, -141.0]],
-    roof: { tanks: 2 },
+    id: 'mrd_east', name: 'Prof. MRD Block — east entrance block (Silver Jubilee Complex)', style: 'glass', floors: 4, floorH: 4.0, base: 5.85, top: 20, soffit: 'grey',
+    poly: [mrdAt(12.512, 15.3), [73.5, -161.8], [66.7, -150.5], [59.9, -139.3], [43.6, -141.0], mrdAt(-20.176, 15.3)],
+    roof: { tanks: 2, parapet: 1.1 },
   },
   {
     id: 'mrd_ne', name: 'Prof. MRD Block — north-east wing', style: 'mrd', floors: 5, floorH: 4.0,
@@ -320,10 +326,50 @@ export const BUILDINGS: BuildingDef[] = [
 ];
 
 /**
- * Octagonal glass skylight lantern over the MRD atrium (4-storey atrium, octagonal skylight — tour frame 0449). Campus
- * extrudes it from the ground inside the mrd_east block, so only the top ~1.7 m shows above that roof (20 m + parapet).
+ * MRD local plan frame (reference/MRD_NOTES.md §5): origin = midpoint of the east curtain-wall face (OSM V14 → V12),
+ * s along that face (+ towards NNE), t into the building (+ towards WSW). Hoisted (plain numbers) so BUILDINGS can use it.
  */
-export const MRD_DRUM = { center: [59.5, -153.5] as V2, radius: 4.2, height: 22.8, sides: 8 };
+export function mrdAt(s: number, t: number): V2 {
+  return [66.7 + 0.51729 * s - 0.85581 * t, -150.55 - 0.85581 * s - 0.51729 * t];
+}
+/** Unit axes of the MRD frame (see mrdAt). */
+export const MRD_FRAME = { origin: [66.7, -150.55] as V2, u: [0.51729, -0.85581] as V2, n: [-0.85581, -0.51729] as V2 };
+/**
+ * MRD interior levels (m): ground floor at the forecourt level, 1st floor, the (not walkable) upper gallery floors, roof.
+ * `u*` = slab undersides. The atrium (local s −16…9.6, t 15.3…33.5) has its void centred at `c` (octagon apothem
+ * `voidR`, gallery ring apothem `ringR`), mrdUpperPieces() fill the atrium footprint minus the ring from `u2` up.
+ */
+export const MRD_LV = {
+  f0: 1.8, f1: 6.2, u1: 5.85, f2: 10.2, u2: 9.85, f3: 14.2, u3: 13.85, f4: 18.2, u4: 17.85, roof: 22.0, roofU: 21.6,
+  atrium: { s0: -16, s1: 9.6, t0: 15.3, t1: 33.5 }, c: [-3.2, 24.4] as [number, number], voidR: 5.0, ringR: 7.4,
+};
+/** Octagon (frame coordinates, sides parallel to s / t) with apothem r round the atrium centre, counter-clockwise from −t. */
+export function mrdOctagon(r: number): [number, number][] {
+  const h = r * Math.tan(Math.PI / 8), [cs, ct] = [-3.2, 24.4];
+  return [[-h, -r], [h, -r], [r, -h], [r, h], [h, r], [-h, r], [-r, h], [-r, -h]].map(([a, b]) => [cs + a, ct + b] as [number, number]);
+}
+/** The atrium's upper floors (2nd floor up): the atrium footprint minus the gallery ring, as four extruded pieces. */
+function mrdUpperPieces(): BuildingDef[] {
+  const [cs, ct] = [-3.2, 24.4], hs = 12.8, ht = 9.1, g = 7.4, h = g * Math.tan(Math.PI / 8);
+  const P = (pts: [number, number][]): V2[] => pts.map(([a, b]) => mrdAt(cs + a, ct + b));
+  const piece = (id: string, name: string, pts: [number, number][]): BuildingDef => ({
+    id, name, style: 'oldCream', floors: 4, floorH: 4.0, base: 9.85, top: 22, soffit: 'grey', roof: { parapet: 0.4 }, poly: P(pts),
+  });
+  return [
+    piece('mrd_up_s', 'Prof. MRD Block — atrium upper floors (south)', [[-hs, -ht], [-hs, ht], [-h, g], [-g, h], [-g, -h], [-h, -g]]),
+    piece('mrd_up_n', 'Prof. MRD Block — atrium upper floors (north)', [[hs, ht], [hs, -ht], [h, -g], [g, -h], [g, h], [h, g]]),
+    piece('mrd_up_e', 'Prof. MRD Block — atrium upper floors (east)', [[-hs, -ht], [-h, -g], [h, -g], [hs, -ht]]),
+    piece('mrd_up_w', 'Prof. MRD Block — atrium upper floors (west)', [[hs, ht], [h, g], [-h, g], [-hs, ht]]),
+    // over the corridor to the Open Air Theatre side (its façade below is hand-built round the door)
+    { id: 'mrd_up_corr', name: 'Prof. MRD Block — over the OAT-side corridor', style: 'oldCream', floors: 4, floorH: 4.0, base: 9.85, top: 22, soffit: 'grey', roof: { parapet: 0.4 },
+      poly: [mrdAt(-16, 19), mrdAt(-16, 22), mrdAt(-20.95, 22), [37.7, -143.7], mrdAt(-20.602, 19)] },
+  ];
+}
+/**
+ * Octagonal skylight lantern over the MRD atrium void (tour 2026 4:40–5:00: pyramid glazing on a white frame). Built by
+ * mrd.ts on the roof slab round the void (`base` = MRD_LV.roof); centre = the atrium void centre.
+ */
+export const MRD_DRUM = { center: mrdAt(-3.2, 24.4), radius: 5.0, base: 22.0, height: 1.3, sides: 8 };
 
 // ---------------------------------------------------------------------------------------------
 // Gates (breakable). Zombies must break them; players can repair.

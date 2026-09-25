@@ -373,7 +373,7 @@ export class CampusBuilder {
       else if (b.style === 'oldCream') addLedges(b.poly, base, floorH, b.floors - 1, 0.5, 0.15, ledge, col('#e6e1d8'));
       if (b.style === 'fTower' || b.style === 'fPodium' || b.style === 'fWing') addLedgesAt(b.poly, [top + 0.2], 0.8, 0.7, ledge, b.style === 'fWing' ? col('#b8604a') : col('#9e4a38'));
       if (b.style === 'mrd') addLedgesAt(b.poly, [top + 0.1], 1.0, 0.45, ledge, col('#1f2b45'), 3);
-      if (base === 0 && b.roof) roofClutter(b.poly, top, seed, b.roof, tanks, solar, cabins.get('cabin', c[0], c[1]), col('#e2ddd2'));
+      if (b.roof && (base === 0 || b.roof.tanks)) roofClutter(b.poly, top, seed, b.roof, tanks, solar, cabins.get('cabin', c[0], c[1]), col('#e2ddd2'));
       if (b.roof?.skylights) {
         for (const [sx, sz, sw, sd] of b.roof.skylights) {
           const skyBuf = roofs.get('skylight', sx, sz);
@@ -384,18 +384,7 @@ export class CampusBuilder {
       if (b.sign) this.buildingSign(b, top);
     };
     BUILDINGS.forEach((b, i) => buildOne(b, i * 17 + 3));
-
-    // MRD octagonal auditorium drum
-    {
-      const d = MRD_DRUM;
-      const poly: V2[] = [];
-      for (let i = 0; i < d.sides; i++) {
-        const a = (i / d.sides) * Math.PI * 2 + Math.PI / 8;
-        poly.push([d.center[0] + Math.cos(a) * d.radius, d.center[1] + Math.sin(a) * d.radius]);
-      }
-      extrudeBuilding(poly, { base: 0, height: d.height, floorH: 4.5, floors: 6, seed: 991, parapet: 0.8 }, facades.get('glass', d.center[0], d.center[1]), roofs.get('roof', d.center[0], d.center[1]));
-      this.collision.addPolygon(poly, d.height, 'concrete', 'bld:mrd_drum');
-    }
+    // (the MRD atrium skylight lantern, MRD_DRUM, sits on the atrium roof and is built with the interior in mrd.ts)
 
     // OSM neighbourhood houses (colourful apartment blocks beyond the walls)
     const palette = ['#f2f2ee', '#e9d38c', '#5fc18e', '#9ccfe0', '#e39a7e', '#f4c7c3', '#fbfaf5', '#f5e3bd', '#dccbe9', '#f4efe2', '#e4e4e4', '#b9dcc4'].map((h) => new THREE.Color(h));
