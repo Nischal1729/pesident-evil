@@ -1341,9 +1341,11 @@ export class World {
         } else { g.x += g.vx * dt; g.z += g.vz * dt; }
       }
     }
-    // stay on whatever is underneath (slopes, small steps down); nothing within reach: fall
-    const f = c.raycast(g.x, g.y, g.z, 0, -1, 0, G.r + 0.3, _gHit, true);
-    if (f && f.dist - G.r < 0.14) g.y -= f.dist - G.r - 0.002;
+    // stay on whatever is underneath: looked for from a little above, so it rolls up a ramp or stair flight (kerbs
+    // and steps are faces the ray above stops at) and down small drops; nothing within reach: fall
+    const up = 0.25;
+    const f = c.raycast(g.x, g.y + up, g.z, 0, -1, 0, up + G.r + 0.3, _gHit, true);
+    if (f && f.dist - up - G.r < 0.14) g.y = f.y + G.r + 0.002;
     else { g.rolling = false; g.vy = 0; }
   }
 
@@ -1376,7 +1378,8 @@ export class World {
       const brute = z.type === 'brute';
       z.stunT = Math.max(z.stunT, (brute ? 0.4 : 1.1) * f);
       if (z.attackT >= 0) { z.attackT = -1; z.anim.attackP = -1; }
-      const kb = 5.5 * f * (brute ? 0.2 : 1);
+      // knock ≤ 3 moves a body ≤ 0.3 m in the first tick: less than its radius, so it can't be shoved through a wall
+      const kb = 3 * f * (brute ? 0.2 : 1);
       z.knock.x += dir.x * kb; z.knock.z += dir.z * kb;
       this.damageZombie(z, dmg0 * f, owner, _gPt.set(tx, ty, tz), dir, false, null, 'grenade');
       if (!z.alive) kills++;
