@@ -25,7 +25,7 @@ export interface GameEvents {
   meleeSwing: { actorId: number; position: Vector3 };
   footstep: { actorId: number; position: Vector3; surface: 'concrete' | 'grass'; loud: boolean };
   bark: { actorId: number; category: string; position: Vector3; voice: 'male' | 'female' };
-  message: { text: string; kind: 'info' | 'warn' | 'good' };
+  message: { text: string; kind: 'info' | 'warn' | 'good'; /** only for this player (co-op); everyone when absent */ to?: number };
   playerDamaged: { playerId: number; amount: number; fromDir: Vector3 | null; health: number };
   gameOver: { wave: number; kills: number; points: number };
   jump: { actorId: number; position: Vector3 };
@@ -37,6 +37,8 @@ type Handler<T> = (payload: T) => void;
 
 export class EventBus<E extends object = GameEvents> {
   private handlers = new Map<keyof E, Set<Handler<any>>>();
+  /** Sees every emitted event (the co-op host forwards them to clients). */
+  tap: (<K extends keyof E>(type: K, payload: E[K]) => void) | null = null;
 
   on<K extends keyof E>(type: K, fn: Handler<E[K]>): () => void {
     let set = this.handlers.get(type);
@@ -46,6 +48,7 @@ export class EventBus<E extends object = GameEvents> {
   }
 
   emit<K extends keyof E>(type: K, payload: E[K]): void {
+    this.tap?.(type, payload);
     const set = this.handlers.get(type);
     if (!set) return;
     for (const fn of set) fn(payload);

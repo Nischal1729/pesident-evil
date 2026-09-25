@@ -21,6 +21,15 @@ export interface PlayerInput {
   command: boolean; // toggle NPC follow/hold
   weaponSlot: number; // -1 = none
   weaponScroll: number; // -1, 0, 1
+  // Co-op: a remote player moves on its own machine and reports the result; the host takes the pose as given
+  remote: boolean;
+  px: number; py: number; pz: number; vx: number; vy: number; vz: number; pyaw: number;
+  pGrounded: boolean;
+  pClimb: boolean; // mid-mantle (no firing or interaction)
+  fallDmg: number; // fall damage taken on landing since the last report
+  jumped: boolean;
+  landed: boolean;
+  poseTele: number; // the host teleport (Survivor.teleportSeq & 255) the pose already reflects
 }
 
 export function emptyInput(): PlayerInput {
@@ -28,6 +37,7 @@ export function emptyInput(): PlayerInput {
     moveX: 0, moveZ: 0, yaw: 0, pitch: 0, camX: NaN, camY: NaN, camZ: NaN, camAlpha: 0, fire: false, aim: false, sprint: false,
     reload: false, interact: false, interactPressed: false, jump: false, melee: false, command: false,
     weaponSlot: -1, weaponScroll: 0,
+    remote: false, px: 0, py: 0, pz: 0, vx: 0, vy: 0, vz: 0, pyaw: 0, pGrounded: true, pClimb: false, fallDmg: 0, jumped: false, landed: false, poseTele: 0,
   };
 }
 
@@ -73,6 +83,7 @@ export class Input {
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (!this.enabled) return;
+    if ((e.target as HTMLElement | null)?.closest?.('input, textarea, select')) return; // typing a name / room code
     if (e.code === 'Escape' || e.code === 'KeyP') { this.onPause?.(); return; }
     if (e.repeat) return;
     this.keys.add(e.code);

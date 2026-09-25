@@ -44,7 +44,7 @@ export class AudioBridge {
     }));
     offs.push(ev.on('death', (e) => {
       if (e.kind === 'zombie') play('zombie_death', e.position, 0.9);
-      else if (e.kind === 'player') play('player_death');
+      else if (e.kind === 'player' && isLocal(e.id)) play('player_death');
     }));
     offs.push(ev.on('zombieGroan', (e) => {
       const now = performance.now();
@@ -71,7 +71,7 @@ export class AudioBridge {
     offs.push(ev.on('meleeSwing', (e) => play('bat_swing', isLocal(e.actorId) ? undefined : e.position)));
     offs.push(ev.on('footstep', (e) => { if (isLocal(e.actorId)) play('footstep_concrete', undefined, e.loud ? 0.5 : 0.3); else play('footstep_concrete', e.position, 0.25); }));
     offs.push(ev.on('land', (e) => { if (isLocal(e.actorId)) play('jump_land', undefined, 0.6); }));
-    offs.push(ev.on('playerDamaged', () => play('player_hurt')));
+    offs.push(ev.on('playerDamaged', (e) => { if (isLocal(e.playerId)) play('player_hurt'); }));
     offs.push(ev.on('pickup', (e) => play(e.kind === 'ammo' ? 'pickup_ammo' : e.kind === 'health' ? 'pickup_health' : 'pickup_weapon')));
     offs.push(ev.on('points', (e) => { if (e.amount >= 50) play('points_ding', undefined, 0.35); }));
     offs.push(ev.on('waveStart', () => play('wave_start')));

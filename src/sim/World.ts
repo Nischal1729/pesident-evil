@@ -83,15 +83,25 @@ const AIM_CLEAR_R = 1.1;
 
 export interface WorldOptions {
   maxZombies: number;
+  /** scales how many zombies a wave sends */
   difficulty: number;
+  /** scales zombie health and how hard each one hits the gate (default: difficulty) */
+  hpDifficulty?: number;
   /** Multi-level movement + layered navigation (walk up ramps, stairs, podiums, decks). */
   multiLevel?: boolean;
+  /**
+   * 'solo' / 'host' run the whole simulation. A co-op 'client' only moves its own player (movePlayer, for zero-lag
+   * movement) and takes everything else from the host's snapshots: no nav graph, no director, no damage.
+   */
+  role?: 'solo' | 'host' | 'client';
 }
 
 /** Anything that walks: survivors and zombies share the vertical state used in multi-level mode. */
 type Walker = { pos: THREE.Vector3; prev: THREE.Vector3; radius: number; height: number; vy: number; grounded: boolean };
 
 const GRAVITY = 16;
+/** Zombie HP per point earned from hits (a wave-1 walker: 20 points of hits + the kill bonus). */
+const DAMAGE_PER_POINT = 5;
 /** Falls higher than this hurt survivors. */
 const SAFE_FALL = 4;
 /** Seconds one timed climb (a rise of at most CLIMB_MAX) takes. */
@@ -112,6 +122,8 @@ export class World {
   pickups: Pickup[] = [];
   brains = new Map<number, NpcBrain>();
   points = new Map<number, number>();
+  /** Points earned over the whole game (spending doesn't lower it): the co-op leaderboard score. */
+  score = new Map<number, number>();
   localPlayerId = 0;
   time = 0;
   timeOfDay = 0.02;
@@ -129,11 +141,15 @@ export class World {
   private fieldT = 0;
   private reviveT = new Map<number, number>();
   private pickupId = 1;
+  private pointFrac = new Map<number, number>();
   private waveMessageShown = new Set<string>();
+
+  readonly role: 'solo' | 'host' | 'client';
 
   constructor(public collision: StaticCollision, public opts: WorldOptions) {
     const b = WORLD_BOUNDS;
     this.levels = !!opts.multiLevel;
+    this.role = opts.role ?? 'solo';
     this.nav = this.levels ? new LayeredNav(b.minX, b.minZ, b.maxX, b.maxZ) : new NavGrid(b.minX, b.minZ, b.maxX, b.maxZ);
     this.spW = Math.ceil((b.maxX - b.minX) / 2);
     this.spH = Math.ceil((b.maxZ - b.minZ) / 2);
@@ -142,7 +158,7 @@ export class World {
   }
 
   init(gatePrisms: Map<string, number[]>): void {
-    this.nav.build(this.collision, GATES);
+    if (this.role !== 'client') this.nav.build(this.collision, GATES);
     GATES.forEach((g, i) => {
       this.gates.push({ id: g.id, index: i, a: g.a, b: g.b, hp: g.hp, maxHp: g.hp, broken: false, prismIds: gatePrisms.get(g.id) ?? [], activeFromWave: g.activeFromWave, lastHitT: -99, inward: gateInward(g.a, g.b) });
     });
@@ -153,7 +169,11 @@ export class World {
   // ---------------------------------------------------------------------------------------------
   addPlayer(name: string, look: Look): Survivor {
     const p = new Survivor('player', name, look.body === 'female' ? 'female' : 'male', look);
-    p.pos.set(PLAYER_SPAWN[0], terrainY(PLAYER_SPAWN[0], PLAYER_SPAWN[1]), PLAYER_SPAWN[1]);
+    // co-op: later players stand in a loose row beside the first (the spawn is on the road inside the gate)
+    const k = this.survivors.filter((s) => s.kind === 'player').length;
+    const [sx, sz] = [PLAYER_SPAWN[0] + (k ? [0, -1.6, 1.6, -3.2, 3.2, -4.8, 4.8, -2.4, 2.4, 0][k % 10] : 0), PLAYER_SPAWN[1] + (k ? (k % 2 ? 1.8 : -1.8) + (k > 4 ? 2.2 : 0) : 0)];
+    p.pos.set(sx, terrainY(sx, sz), sz);
+    p.teleportSeq = 1;
     p.yaw = PLAYER_SPAWN_YAW;
     p.health = p.maxHealth = 100;
     p.weapons = [newSlot('pistol'), newSlot('bat')];
@@ -184,6 +204,37 @@ export class World {
   }
 
   get player(): Survivor | undefined { return this.survivors.find((s) => s.id === this.localPlayerId); }
+
+  /** Co-op client: a survivor as the host created it (same id); its state then comes from snapshots. */
+  addMirrorSurvivor(id: number, kind: 'player' | 'npc', name: string, voice: 'male' | 'female', look: Look): Survivor {
+    const s = new Survivor(kind, name, voice, look);
+    s.id = id;
+    s.weapons = [newSlot('pistol'), newSlot('bat')];
+    s.health = s.maxHealth = kind === 'npc' ? 140 : 100;
+    this.survivors.push(s);
+    return s;
+  }
+
+  /** Co-op: a player left the game. */
+  removeSurvivor(id: number): void {
+    const i = this.survivors.findIndex((s) => s.id === id);
+    if (i >= 0) this.survivors.splice(i, 1);
+    this.brains.delete(id);
+    this.reviveT.delete(id);
+  }
+
+  /** Co-op host: a player joining a game in progress appears beside a teammate. */
+  placeNearTeam(p: Survivor): void {
+    const mate = this.survivors.find((o) => o !== p && o.kind === 'player' && o.active);
+    if (!mate) return;
+    for (const [dx, dz] of [[1.2, 1.2], [-1.2, 1.2], [1.2, -1.2], [-1.2, -1.2], [0, 1.6], [1.6, 0]]) {
+      if (this.nav.isBlocked(mate.pos.x + dx, mate.pos.z + dz, mate.pos.y)) continue;
+      p.pos.set(mate.pos.x + dx, mate.pos.y, mate.pos.z + dz);
+      p.teleportSeq++;
+      p.snapshotPrev();
+      return;
+    }
+  }
 
   // ---------------------------------------------------------------------------------------------
   // Main tick
@@ -243,15 +294,16 @@ export class World {
       if (this.toSpawn <= 0 && alive === 0) {
         this.events.emit('waveEnd', { wave: this.wave });
         for (const s of this.survivors) if (s.kind === 'player') this.addPoints(s, 250 + this.wave * 50, 'Wave survived');
-        // revive everyone downed at wave end, top up NPC health
+        // revive everyone downed at wave end, top up NPC health; co-op players who died come back for the next wave
         for (const s of this.survivors) if (s.alive && s.downed) this.revive(s, 0);
+        for (const s of this.survivors) if (s.kind === 'player' && !s.alive) this.respawnPlayer(s);
         this.state = 'prep';
         this.stateT = 22;
       }
     }
-    // game over: no active survivor able to fight and the player can't be revived
+    // game over: every player is dead (co-op players who die sit out until the wave ends, then respawn)
     const p = this.player;
-    if (p && !p.alive && (this.state as DirectorState) !== 'gameover') {
+    if (p && (this.state as DirectorState) !== 'gameover' && this.survivors.every((s) => s.kind !== 'player' || !s.alive)) {
       this.state = 'gameover';
       this.events.emit('gameOver', { wave: this.wave, kills: p.kills, points: this.points.get(p.id) ?? 0 });
     }
@@ -302,7 +354,7 @@ export class World {
     if (!pos) return;
     const z = new Zombie();
     const type = this.pickZombieType();
-    const hpScale = (1 + (this.wave - 1) * 0.13) * this.opts.difficulty;
+    const hpScale = (1 + (this.wave - 1) * 0.13) * (this.opts.hpDifficulty ?? this.opts.difficulty);
     z.type = type;
     z.variant = Math.floor(this.rand() * 1000);
     switch (type) {
@@ -334,7 +386,7 @@ export class World {
     const targets = this.survivors.filter((s) => s.alive).map((s) => ({ x: s.pos.x, y: s.pos.y, z: s.pos.z }));
     if (targets.length) this.nav.request('zombie', targets);
     const p = this.player;
-    if (p && p.alive) this.nav.request('player', [{ x: p.pos.x, y: p.pos.y, z: p.pos.z }], 12000);
+    if (p && p.alive && this.brains.size) this.nav.request('player', [{ x: p.pos.x, y: p.pos.y, z: p.pos.z }], 12000); // the squad follows it
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -607,7 +659,14 @@ export class World {
         this.events.emit('footstep', { actorId: s.id, position: s.pos, surface: 'concrete', loud: sp > 5 });
       }
     }
-    // local velocity for strafe animations
+    this.locoHints(s);
+  }
+
+  /** Locomotion hints for the animation layer: speed, velocity relative to facing (strafe blend), airborne. */
+  private locoHints(s: Survivor): void {
+    const a = s.anim;
+    const sp = Math.hypot(s.vel.x, s.vel.z);
+    a.speed = sp;
     const cs = Math.cos(s.yaw), sn = Math.sin(s.yaw);
     const fx = -sn, fz = -cs, rx = cs, rz = -sn;
     const ref = Math.max(1, sp);
@@ -672,13 +731,56 @@ export class World {
     p.aiming = wantsAim;
     p.anim.aiming = wantsAim || (input.fire && def.kind === 'gun') || p.sinceFire < 0.8;
 
-    // mantle in progress: scripted climb, no collision, movement, firing or interaction
-    if (p.mantle) {
-      this.stepClimb(p, dt);
-      if (!p.mantle) this.events.emit('land', { actorId: p.id, position: p.pos });
+    if (input.remote) {
+      // co-op: the player moved on their own machine; take the pose as given
+      this.applyPose(p, input);
+      if (input.pClimb) { p.prevFire = input.fire; return; }
+    } else if (this.movePlayer(p, input, dt, sprinting, wantsAim)) {
       p.prevFire = input.fire;
       return;
     }
+
+    // melee (bat equipped + fire, or quick melee key)
+    if ((input.melee || (def.kind === 'melee' && input.fire && !p.prevFire)) && p.meleeT < 0 && p.switchT < 0) {
+      p.meleeT = 0;
+      p.meleeDone = false;
+      p.reloadT = -1;
+      this.events.emit('meleeSwing', { actorId: p.id, position: p.pos });
+    }
+    // shooting
+    if (def.kind === 'gun' && input.fire && p.fireCd <= 0 && p.reloadT < 0 && p.switchT < 0 && p.meleeT < 0) {
+      const semiOk = def.auto || !p.prevFire;
+      if (semiOk) {
+        if (p.slot.mag <= 0) {
+          if (!p.prevFire) { this.events.emit('dryFire', { actorId: p.id, position: p.pos }); this.startReload(p); }
+          p.fireCd = 0.25;
+          if (p.slot.reserve <= 0 && !p.prevFire) this.events.emit('message', { text: 'Out of ammo — find an ammo crate (E)', kind: 'warn', to: p.id });
+        } else {
+          _aimPivot.set(p.pos.x, p.pos.y + CAM.pivotY, p.pos.z);
+          const aimPoint = this.aimPoint(p.aimOrigin, _camDir, 250, _v3, _aimPivot);
+          const muzzle = this.muzzlePos(p, _v);
+          this.fire(p, muzzle, aimPoint, wantsAim);
+        }
+      }
+    }
+    p.prevFire = input.fire;
+
+    // interaction
+    this.handleInteract(p, input, dt);
+  }
+
+  /**
+   * One tick of the player's own movement: climb, walk/sprint, jump or mantle, gravity, landing, facing. Returns true
+   * while a climb runs (no firing or interaction that tick). A co-op client runs this alone for its local player.
+   */
+  private movePlayer(p: Survivor, input: PlayerInput, dt: number, sprinting: boolean, wantsAim: boolean): boolean {
+    // mantle in progress: scripted climb, no collision, movement, firing or interaction
+    if (p.mantle) {
+      this.stepClimb(p, dt);
+      if (!p.mantle) { this.events.emit('land', { actorId: p.id, position: p.pos }); p.netLanded = true; }
+      return true;
+    }
+    const def = p.def;
 
     // movement
     const f = forwardFromYawPitch(input.yaw, 0, _v);
@@ -697,12 +799,12 @@ export class World {
     if (input.jump && p.grounded) {
       p.grounded = false;
       this.events.emit('jump', { actorId: p.id, position: p.pos });
+      p.netJumped = true;
       const ml = Math.hypot(wx, wz);
       const l = this.levels ? this.collision.ledgeAt(p.pos.x, p.pos.z, ml > 0.1 ? wx / ml : f.x, ml > 0.1 ? wz / ml : f.z, p.pos.y, p.radius) : null;
       if (l) {
         this.startClimb(p, l, CLIMB_DUR.player);
-        p.prevFire = input.fire;
-        return;
+        return true;
       }
       p.vy = 5.0;
     }
@@ -713,7 +815,12 @@ export class World {
       const fell = this.moveBody(p, dt);
       if (wasAir && p.grounded) {
         this.events.emit('land', { actorId: p.id, position: p.pos });
-        if (fell > SAFE_FALL) this.damageSurvivor(p, Math.round((fell - SAFE_FALL) * 14), null);
+        p.netLanded = true;
+        if (fell > SAFE_FALL) {
+          const dmg = Math.round((fell - SAFE_FALL) * 14);
+          if (this.role === 'client') p.pendingFall += dmg; // reported to the host, which applies it
+          else this.damageSurvivor(p, dmg, null);
+        }
       }
     } else {
       if (!p.grounded) {
@@ -723,6 +830,7 @@ export class World {
           p.pos.y = 0;
           p.grounded = true;
           this.events.emit('land', { actorId: p.id, position: p.pos });
+          p.netLanded = true;
         }
       }
       p.pos.x += p.vel.x * dt;
@@ -738,34 +846,71 @@ export class World {
     if (facingCam) targetYaw = input.yaw;
     else if (Math.hypot(p.vel.x, p.vel.z) > 0.6) targetYaw = Math.atan2(-p.vel.x, -p.vel.z);
     p.yaw = turnToward(p.yaw, targetYaw, (facingCam ? 18 : 10) * dt);
+    return false;
+  }
 
-    // melee (bat equipped + fire, or quick melee key)
-    if ((input.melee || (def.kind === 'melee' && input.fire && !p.prevFire)) && p.meleeT < 0 && p.switchT < 0) {
-      p.meleeT = 0;
-      p.meleeDone = false;
-      p.reloadT = -1;
-      this.events.emit('meleeSwing', { actorId: p.id, position: p.pos });
-    }
-    // shooting
-    if (def.kind === 'gun' && input.fire && p.fireCd <= 0 && p.reloadT < 0 && p.switchT < 0 && p.meleeT < 0) {
-      const semiOk = def.auto || !p.prevFire;
-      if (semiOk) {
-        if (p.slot.mag <= 0) {
-          if (!p.prevFire) { this.events.emit('dryFire', { actorId: p.id, position: p.pos }); this.startReload(p); }
-          p.fireCd = 0.25;
-          if (p.slot.reserve <= 0 && !p.prevFire) this.events.emit('message', { text: 'Out of ammo — find an ammo crate (E)', kind: 'warn' });
-        } else {
-          _aimPivot.set(p.pos.x, p.pos.y + CAM.pivotY, p.pos.z);
-          const aimPoint = this.aimPoint(p.aimOrigin, _camDir, 250, _v3, _aimPivot);
-          const muzzle = this.muzzlePos(p, _v);
-          this.fire(p, muzzle, aimPoint, wantsAim);
-        }
-      }
-    }
-    p.prevFire = input.fire;
+  /** Co-op host: a remote player's pose as reported by their machine (plus the jump/land/fall they had there). */
+  private applyPose(p: Survivor, input: PlayerInput): void {
+    // a pose from before the client saw our last spawn/respawn would undo it: keep ours until it catches up
+    if (input.poseTele !== (p.teleportSeq & 255)) { p.vel.set(0, 0, 0); return; }
+    p.pos.set(input.px, input.py, input.pz);
+    p.vel.set(input.vx, input.vy, input.vz);
+    p.vy = input.vy;
+    p.yaw = input.pyaw;
+    p.grounded = input.pGrounded;
+    p.mantle = null;
+    if (input.jumped) this.events.emit('jump', { actorId: p.id, position: p.pos });
+    if (input.landed) this.events.emit('land', { actorId: p.id, position: p.pos });
+    if (input.fallDmg > 0) this.damageSurvivor(p, input.fallDmg, null);
+  }
 
-    // interaction
-    this.handleInteract(p, input, dt);
+  /** Co-op client: move the local player one fixed tick. Everything else comes from the host's snapshots. */
+  predictLocal(dt: number, input: PlayerInput): void {
+    const p = this.player;
+    if (!p || !p.alive) return;
+    p.snapshotPrev();
+    p.aimYaw = input.yaw;
+    p.aimPitch = input.pitch;
+    p.anim.aimPitch = input.pitch;
+    const def = p.def;
+    const wantsAim = input.aim && def.kind === 'gun';
+    if (p.downed) {
+      p.vel.set(0, 0, 0);
+      p.aiming = false;
+      p.anim.aiming = false;
+      p.mantle = null;
+      if (this.levels) this.moveBody(p, dt);
+    } else {
+      const sprinting = input.sprint && input.moveZ > 0.1 && !wantsAim && !input.fire && p.reloadT < 0;
+      p.aiming = wantsAim;
+      p.anim.aiming = wantsAim || (input.fire && def.kind === 'gun') || p.sinceFire < 0.8;
+      this.movePlayer(p, input, dt, sprinting, wantsAim);
+      this.clientSeparate(p);
+    }
+    this.locoHints(p);
+  }
+
+  /**
+   * Co-op client: the host can't shove a player who moves on their own machine, so push our player out of the zombies
+   * (and teammates) we're drawing, the share separate() would give a survivor, then back out of walls.
+   */
+  private clientSeparate(p: Survivor): void {
+    if (p.mantle) return;
+    const push = (x: number, z: number, y: number, r: number, k: number) => {
+      if (Math.abs(y - p.pos.y) > 1.2) return;
+      const dx = p.pos.x - x, dz = p.pos.z - z;
+      const min = p.radius + r;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= min * min || d2 < 1e-6) return;
+      const d = Math.sqrt(d2);
+      p.pos.x += (dx / d) * (min - d) * k; p.pos.z += (dz / d) * (min - d) * k;
+    };
+    for (const z of this.zombies) if (z.alive) push(z.pos.x, z.pos.z, z.pos.y, z.radius, 0.6);
+    for (const o of this.survivors) if (o !== p && o.alive) push(o.pos.x, o.pos.z, o.pos.y, o.radius, 0.5);
+    if (this.levels) {
+      this.collision.resolveBody(p.pos, p.radius, p.pos.y, p.height);
+      this.collision.clampLip(p.pos, p.pos.y);
+    } else this.collision.resolveCircle(p.pos, p.radius, p.pos.y + 0.3);
   }
 
   muzzlePos(s: Survivor, out: THREE.Vector3): THREE.Vector3 {
@@ -899,6 +1044,7 @@ export class World {
 
   damageZombie(z: Zombie, dmg: number, by: Survivor | null, point: THREE.Vector3, dir: THREE.Vector3, head: boolean, d: WeaponDef | null): void {
     if (!z.alive) return;
+    const dealt = Math.min(dmg, Math.max(0, z.health)); // overkill earns nothing
     z.health -= dmg;
     z.anim.hitT = 0;
     z.anim.hitDirX = dir.x;
@@ -917,7 +1063,7 @@ export class World {
       z.knock.x += dir.x * kb;
       z.knock.z += dir.z * kb;
     }
-    if (by && by.kind === 'player') this.addPoints(by, 10, '');
+    if (by && by.kind === 'player') this.addDamagePoints(by, dealt);
     if (z.health <= 0) this.killZombie(z, by, head, d);
   }
 
@@ -976,7 +1122,7 @@ export class World {
       s.vel.set(0, 0, 0);
       this.events.emit('downed', { id: s.id, kind: s.kind === 'player' ? 'player' : 'npc', position: s.pos.clone() });
       if (s.kind === 'npc') this.bark(s, 'downed', 0);
-      else this.events.emit('message', { text: "You're down! Hold on — your friends can revive you.", kind: 'warn' });
+      else this.events.emit('message', { text: "You're down! Hold on — your friends can revive you.", kind: 'warn', to: s.id });
     }
   }
 
@@ -987,6 +1133,7 @@ export class World {
     s.anim.downed = false;
     this.events.emit('death', { id: s.id, kind: s.kind === 'player' ? 'player' : 'npc', killerId: 0, headshot: false, position: s.pos.clone() });
     if (s.kind === 'npc') this.events.emit('message', { text: `${s.name} didn't make it.`, kind: 'warn' });
+    else if (this.survivors.some((o) => o !== s && o.kind === 'player' && o.alive)) this.events.emit('message', { text: `${s.name} didn't make it — back when this wave is cleared.`, kind: 'warn' });
   }
 
   private revive(s: Survivor, byId: number): void {
@@ -995,6 +1142,30 @@ export class World {
     s.reviveProgress = 0;
     s.sinceDamage = 0;
     this.events.emit('revived', { id: s.id, byId });
+  }
+
+  /** Co-op: a dead player comes back at the end of the wave beside a living teammate, with the starting loadout. */
+  private respawnPlayer(s: Survivor): void {
+    const mate = this.survivors.find((o) => o !== s && o.kind === 'player' && o.active) ?? this.survivors.find((o) => o.active);
+    let [x, z] = PLAYER_SPAWN, y = terrainY(x, z);
+    if (mate && !this.nav.isBlocked(mate.pos.x + 1.2, mate.pos.z + 1.2, mate.pos.y)) [x, y, z] = [mate.pos.x + 1.2, mate.pos.y, mate.pos.z + 1.2];
+    s.pos.set(x, y, z);
+    s.vel.set(0, 0, 0);
+    s.vy = 0;
+    s.mantle = null;
+    s.alive = true;
+    s.downed = false;
+    s.health = s.maxHealth;
+    s.reviveProgress = 0;
+    s.weapons = [newSlot('pistol'), newSlot('bat')];
+    s.current = 0;
+    s.reloadT = s.meleeT = s.switchT = -1;
+    s.anim.dead = false;
+    s.anim.deadT = 0;
+    s.teleportSeq++;
+    s.snapshotPrev();
+    this.events.emit('revived', { id: s.id, byId: 0 });
+    this.events.emit('message', { text: `${s.name} is back in the fight.`, kind: 'good' });
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1065,7 +1236,7 @@ export class World {
 
   private useStation(p: Survivor, st: StationDef, cost: number): void {
     const pts = this.points.get(p.id) ?? 0;
-    if (pts < cost) { this.events.emit('message', { text: 'Not enough points', kind: 'warn' }); return; }
+    if (pts < cost) { this.events.emit('message', { text: 'Not enough points', kind: 'warn', to: p.id }); return; }
     if (st.kind === 'ammo') {
       let changed = false;
       for (const w of p.weapons) {
@@ -1073,10 +1244,10 @@ export class World {
         if (d.kind !== 'gun') continue;
         if (w.reserve < d.reserve) { w.reserve = d.reserve; changed = true; }
       }
-      if (!changed) { this.events.emit('message', { text: 'Ammo already full', kind: 'info' }); return; }
+      if (!changed) { this.events.emit('message', { text: 'Ammo already full', kind: 'info', to: p.id }); return; }
       this.events.emit('pickup', { playerId: p.id, kind: 'ammo', item: 'crate' });
     } else if (st.kind === 'health') {
-      if (p.health >= p.maxHealth) { this.events.emit('message', { text: 'Already at full health', kind: 'info' }); return; }
+      if (p.health >= p.maxHealth) { this.events.emit('message', { text: 'Already at full health', kind: 'info', to: p.id }); return; }
       p.health = p.maxHealth;
       this.events.emit('pickup', { playerId: p.id, kind: 'health', item: 'kit' });
     } else if (st.kind === 'weapon' && st.item) {
@@ -1100,9 +1271,18 @@ export class World {
     this.addPoints(p, -cost, '');
   }
 
+  /** Hits pay by damage dealt: one point per DAMAGE_PER_POINT HP (fractions carry over, so pellets add up). */
+  private addDamagePoints(p: Survivor, dealt: number): void {
+    const acc = (this.pointFrac.get(p.id) ?? 0) + dealt / DAMAGE_PER_POINT;
+    const whole = Math.floor(acc);
+    this.pointFrac.set(p.id, acc - whole);
+    if (whole > 0) this.addPoints(p, whole, '');
+  }
+
   addPoints(p: Survivor, amount: number, reason: string): void {
     const total = (this.points.get(p.id) ?? 0) + amount;
     this.points.set(p.id, total);
+    if (amount > 0) this.score.set(p.id, (this.score.get(p.id) ?? 0) + amount); // the leaderboard counts points earned, not spent
     if (amount !== 0) this.events.emit('points', { playerId: p.id, amount, total, reason });
   }
 
@@ -1141,6 +1321,20 @@ export class World {
    */
   private updateGateStates(): void {
     for (const g of this.gates) if (g.broken && g.hp >= g.maxHp * GATE_CLOSE_FRAC && !this.gateBlocked(g)) this.closeGate(g);
+  }
+
+  /** Co-op client: the host's gate went down or back up; match its collision (and step out of a closing gateway). */
+  clientGateChanged(g: GateState, broken: boolean): void {
+    g.broken = broken;
+    for (const id of g.prismIds) this.collision.setPrismEnabled(id, !broken);
+    const s = this.player;
+    if (broken || !s?.alive) return;
+    const d = (s.pos.x - g.a[0]) * g.inward[0] + (s.pos.z - g.a[1]) * g.inward[1];
+    if (d < s.radius + 0.35 && distToSegment(s.pos.x, s.pos.z, g.a[0], g.a[1], g.b[0], g.b[1]) < s.radius + 0.6) {
+      const push = s.radius + 0.4 - d;
+      s.pos.x += g.inward[0] * push; s.pos.z += g.inward[1] * push;
+      s.prev.copy(s.pos);
+    }
   }
 
   private closeGate(g: GateState): void {
@@ -1330,7 +1524,7 @@ export class World {
             if (z.attackCd <= 0) {
               z.attackT = 0; a.attackP = 0;
               z.attackCd = 1.0 + this.rand() * 0.6;
-              this.damageGate(gate, (z.type === 'brute' ? 45 : z.type === 'runner' ? 8 : 12) * this.opts.difficulty, z.pos);
+              this.damageGate(gate, (z.type === 'brute' ? 45 : z.type === 'runner' ? 8 : 12) * (this.opts.hpDifficulty ?? this.opts.difficulty), z.pos);
             }
           } else z.state = 'chase';
         } else z.state = 'chase';
