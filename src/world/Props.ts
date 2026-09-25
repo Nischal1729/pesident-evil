@@ -4,7 +4,7 @@ import type { SurfaceKind } from '../core/Events';
 import type { QualityProfile } from '../core/Settings';
 import { StaticCollision } from '../sim/Collision';
 import { distToSegment, pointInPoly, polylineToStrip, rng, samplePolyline } from './geom';
-import { AREAS, BUILDINGS, GATES, GLOBE_POS, ORR, orrPoint, PLAYER_SPAWN, QUAD, ROADS, SPAWN_ZONES, STATIONS, STEP_STACKS, type GateDef, type StationDef, type V2 } from './layout';
+import { AREAS, BUILDINGS, GATES, GLOBE_POS, GLOBE_Y, ORR, orrPoint, PLAYER_SPAWN, QUAD, ROADS, SPAWN_ZONES, STATIONS, STEP_STACKS, type GateDef, type StationDef, type V2 } from './layout';
 import { parkingSlots } from './gjb/parking';
 import { injectWorldLighting } from './materials';
 
@@ -921,8 +921,8 @@ class Dresser {
     const [gx, gz] = GLOBE_POS;
     const main = GATES.find((g) => g.id === 'main') ?? GATES[0];
     const yaw = main ? yawTo((main.a[0] + main.b[0]) / 2 - gx, (main.a[1] + main.b[1]) / 2 - gz) : 0;
-    if (!this.place('globe', gx, gz, yaw, { force: true })) return;
-    if (!this.col.blocked(gx, gz, 0.05, (t) => t === 'globe')) this.col.addCircle(gx, gz, 1.55, 3.2, 'metal', 'prop');
+    if (!this.place('globe', gx, gz, yaw, { force: true, y: GLOBE_Y })) return;
+    if (!this.col.blocked(gx, gz, 0.05, (t) => t === 'globe')) this.col.addCircle(gx, gz, 1.55, 3.2, 'metal', 'prop', GLOBE_Y);
     this.reserved.push({ x: gx, z: gz, r: 2.6 });
   }
 

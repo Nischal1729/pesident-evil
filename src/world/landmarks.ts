@@ -160,7 +160,7 @@ export { buildBBlockBits, buildMRD, buildOAT };
 // =================================================================================================== fountains + misc
 export function buildFountains(kit: WorldKit): void {
   const conc = col('#c9c3b8');
-  for (const [fx, fz, rr] of [[FOUNTAIN_POS[0], FOUNTAIN_POS[1], 3.2], [4, 36, 2.2]] as [number, number, number][]) {
+  for (const [fx, fz, rr] of [[FOUNTAIN_POS[0], FOUNTAIN_POS[1], 1.9]] as [number, number, number][]) {
     kit.buf('stone', fx, fz).cylinder(fx, 0, fz, rr, 0.55, 28, conc);
     kit.buf('stone', fx, fz).cylinder(fx, 0, fz, 0.35, 1.4, 10, conc);
     const water = new THREE.Mesh(new THREE.CircleGeometry(rr - 0.25, 28).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x1f3a44, roughness: 0.05, metalness: 0.9 }));

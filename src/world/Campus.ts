@@ -7,7 +7,7 @@ import { buildGJBC } from './gjbc';
 import { Chunked, col, WorldKit } from './kit';
 import { buildLandscape } from './landscape';
 import {
-  AREAS, BUILDINGS, CAMPUS_BOUNDS, GLOBE_POS, MAIN_GATE_X, MRD_DRUM, NO_TREE_ZONES, ORR, ORR_NORMAL, orrPoint, PATHS, QUAD, ROADS, WALLS,
+  AREAS, BUILDINGS, CAMPUS_BOUNDS, GLOBE_POS, MAIN_GATE_X, MRD_DRUM, NO_TREE_ZONES, ORR, ORR_NORMAL, orrPoint, PATHS, PLAZA_TERRACE, QUAD, ROADS, WALLS,
   type BuildingDef, type FacadeStyle, type V2,
 } from './layout';
 import { asphaltMaterial, barcodePaverTexture, facadeMaterial, FACADE_STYLES, greyPaverTexture, pbrMaterial, radialTexture, setLampLights, worldUniforms, type WorldTextures } from './materials';
@@ -655,9 +655,21 @@ export class CampusBuilder {
     this.addTree('rain', GX - 5.5, -150.3, 0.9);
     // frangipani garden + east plaza planters
     cluster(87, -153, 7, 9, () => 'frangipani', 0.8, 1.15, 3.2, 81);
-    for (const [x, z] of [[99, -147.8], [107.5, -147.8], [108.2, -141.5]] as V2[]) this.addTree('frangipani', x, z, 1.0, false);
-    // PES Lawn: mature Tabebuia / Pongamia / rain trees
-    cluster(128, -160, 20, 12, () => (r() < 0.4 ? 'rain' : r() < 0.6 ? 'gulmohar' : 'copperpod'), 0.7, 1.0, 8, 91);
+    for (const [x, z] of [[99, -147.8], [110.8, -147.8], [108.2, -141.5]] as V2[]) this.addTree('frangipani', x, z, 1.0, false);
+    // PES Lawn: a garden grove under an almost closed canopy (Google satellite), not an open lawn: mature rain trees,
+    // copperpods, gulmohars and ashokas with a few frangipani and palms, kept off the plaza terrace, its ramp and path
+    // and the young trees along the promenade's north bed
+    const pes = AREAS.find((a) => a.id === 'pes_lawn');
+    const prom = PATHS.find((p) => p.id === 'pes_lawn_promenade');
+    if (pes && prom) {
+      const T = PLAZA_TERRACE;
+      const avoid = (x: number, z: number) => (x > T.x0 - 2 && x < T.x1 + 2 && z < T.zS + 2 && z > T.ramp.zEnd - 1.5)
+        || (Math.abs(x - 105.5) < 3.5 && z < T.zN)
+        || prom.pts.some((_, i) => i > 0 && distToSegment(x, z, prom.pts[i - 1][0], prom.pts[i - 1][1], prom.pts[i][0], prom.pts[i][1]) < 6.5)
+        || !this.clearForTree(x, z, 1.4) || !pointInPoly(x, z, CAMPUS_GROUND);
+      const pick = (): TreeSpecies => { const v = r(); return v < 0.32 ? 'rain' : v < 0.52 ? 'copperpod' : v < 0.66 ? 'gulmohar' : v < 0.82 ? 'ashoka' : v < 0.92 ? 'frangipani' : 'palm'; };
+      for (const [x, z] of scatterInPolygon(pes.poly, 48, 5.2, 91, avoid)) this.addTree(pick(), x, z, 0.72 + r() * 0.33);
+    }
     // tiered "cloud" trees along the entry walkway (south side) and at the PES Lawn promenade
     // (try a few lateral offsets so planter walls / crossing paths don't knock whole stretches out)
     const tryAround = (sp: TreeSpecies, x: number, z: number, sc: number, clear: number, dz: number[]) => {

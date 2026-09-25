@@ -170,6 +170,23 @@ export const PARKING_FOOTPRINT: V2[] = [[PARKING.x0, PARKING.z0], [PARKING.x1, P
  * over the drive-through (→ covered plaza → Quad) and a glazed L1 bridge crosses the MRD loop road into MRD.
  */
 export const FRONT_RAMP = { xFoot: 110, xTop: 86, z0: -136.3, z1: -131.9, landing: { x0: 78.9, x1: 86, zN: -137.8 } };
+/**
+ * Raised terrace on the north side of the east plaza (2026 tour 0216 / sheet 2:08: a wide granite stair climbs north
+ * from the plaza between white cheek walls to a white pavilion; Google satellite: the paved strip x ≈ 103–113 running
+ * north from the plaza into the PES Lawn path). Walkable: stair up from the plaza, ramp down north onto the lawn path.
+ */
+export const PLAZA_TERRACE = {
+  x0: 96, x1: 114, zS: -153.4, zN: -162, y: 2.4,
+  stair: { x0: 102.5, x1: 108.5, zFoot: -148.2 },
+  ramp: { x0: 103, x1: 108, zEnd: -173 },
+  pavilion: { x0: 108.5, x1: 114, zS: -157, h: 3.4 },
+};
+/**
+ * Black-granite reflecting pool in the garden east of the MRD loop road, facing MRD's grand steps across the road with a
+ * planted bed between it and the kerb (GJB tour 1:44–1:52; 2026 tour 4:00; OSM amenity=fountain x 80–91, z −148…−130).
+ * Centre, unit long axis (parallel to the road), length, width.
+ */
+export const MRD_POOL = { c: [91.0, -148.0] as V2, u: [0.469, -0.884] as V2, len: 11, wid: 4 };
 /** Areas where the campus tree scatter must not put trees (the parking floor is walkable, so collision alone won't stop it). */
 export const NO_TREE_ZONES: V2[][] = [
   // the parking (and the paved strip along its corten face) + its north entry strip
@@ -417,6 +434,8 @@ export const PATHS: PathDef[] = [
   // diagonal path across the east lawn
   // diagonal path across the east lawn to the parking's middle door
   { id: 'lawn_diagonal', surface: 'greypaver', width: 3, pts: [[100.6, -50], [118.4, -64]] },
+  // PES Lawn path: from the plaza terrace's north ramp through the garden towards the ring-road wall (satellite)
+  { id: 'pes_lawn_north', surface: 'paver', width: 4, pts: [[105.5, -172.6], [105.5, -179]] },
   // footway round the Open Air Theatre
   { id: 'oat_footway', surface: 'paver', width: 2.5, pts: [[38, -117.5], [37, -123], [34.5, -131], [34, -138], [36, -143]] },
 ];
@@ -425,7 +444,7 @@ const pathPoly = (p: PathDef): V2[] => { const s = polylineToStrip(p.pts, p.widt
 
 export const AREAS: AreaDef[] = [
   // PES Lawn (the big lawn between MRD and the ring road)
-  { id: 'pes_lawn', kind: 'lawn', poly: [[91, -150.5], [114, -150.5], [114, -142.5], [130, -145], [150, -148], [GX - 3, -149.2], [GX - 3.5, -151.9], [150, -158.4], [107.2, -179.6], [96, -173.5]] },
+  { id: 'pes_lawn', kind: 'lawn', poly: [[91, -150.5], [PLAZA_TERRACE.x0, -150.5], [PLAZA_TERRACE.x0, PLAZA_TERRACE.zS], [PLAZA_TERRACE.x1, PLAZA_TERRACE.zS], [114, -142.5], [130, -145], [150, -148], [GX - 3, -149.2], [GX - 3.5, -151.9], [150, -158.4], [107.2, -179.6], [96, -173.5]] },
   // frangipani garden between the MRD loop road and the east plaza (the gold globe stands at its east end)
   { id: 'frangipani_garden', kind: 'lawn', poly: [[80.6, -141], [88, -141], [88, -150.5], [91, -150.5], [96, -163], [90.5, -166], [82, -150.8]] },
   // east lawn (Student Lounge + garden) between GJBC's east promenade and the 2-wheeler parking: young trees, white low
@@ -447,7 +466,7 @@ export const AREAS: AreaDef[] = [
   // GJBC east forecourt (bus drop-off)
   { id: 'gjbc_east_forecourt', kind: 'greypaver', poly: [[86.2, -117.2], [104, -115.3], [104, -94], [86.8, -94]] },
   // east plaza (striped pavers) — the ramp rises west from here
-  { id: 'east_plaza', kind: 'plaza', poly: [[84, -150.5], [114, -150.5], [114, -130.2], [104, -129.8], [88, -129.8], [84, -137]] },
+  { id: 'east_plaza', kind: 'plaza', poly: [[84, -150.5], [PLAZA_TERRACE.x0, -150.5], [PLAZA_TERRACE.x0, PLAZA_TERRACE.zS], [PLAZA_TERRACE.x1, PLAZA_TERRACE.zS], [114, -130.2], [104, -129.8], [88, -129.8], [84, -137]] },
   // Pie R Cube plaza
   { id: 'pie_r_cube', kind: 'paver', poly: [[-10, 21], [18, 21], [18, 45], [3, 49], [-6, 49]] },
   // terraced garden below the Law terrace (granite planter tiers, palms)
@@ -468,7 +487,10 @@ export const PLAYER_SPAWN_YAW = -Math.PI / 2 - 0.05; // facing east toward the g
 export const NPC_SPAWNS: V2[] = [[122, -131], [124, -119.5], [116, -127]];
 /** The gold PES armillary globe (model placed by Props.ts; it brings its own plinth). */
 export const GLOBE_POS: V2 = [84.4, -140];
-export const FOUNTAIN_POS: V2 = [106, -156];
+/** Height of the white drum the globe's plinth stands on (landscape.ts globe bed). */
+export const GLOBE_Y = 0.9;
+/** The Pie R Cube fountain (OSM amenity=fountain x 12–15, z 25–28). The old PES Lawn fountain is gone: the lawn is a garden grove. */
+export const FOUNTAIN_POS: V2 = [13.5, 26.5];
 /**
  * Sandbag step stacks (placed by Props.ts) up onto gate and compound-wall tops, every rise ≤ CLIMB_MAX (1.3 m).
  * `at` lies on the gate / wall centreline, `in` is the inward unit normal, `gap` the clearance (m) from the centreline
