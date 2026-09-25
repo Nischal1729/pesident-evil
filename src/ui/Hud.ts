@@ -122,7 +122,7 @@ export class Hud {
     setTimeout(() => d.remove(), 900);
   }
 
-  update(dt: number, world: World, cam: THREE.PerspectiveCamera, camYaw: number, spread: number): void {
+  update(dt: number, world: World, cam: THREE.PerspectiveCamera, camYaw: number): void {
     this.camYaw = camYaw;
     const p = world.player;
     if (!p) return;
@@ -156,8 +156,10 @@ export class Hud {
     this.healthFill.classList.toggle('low', hp < 0.35);
     this.healthTxt.textContent = `${Math.ceil(p.health)}`;
     this.vignette.style.opacity = `${Math.max(0, (0.5 - hp) * 1.6) + (p.downed ? 0.6 : 0)}`;
-    // crosshair & hitmarker
-    const px = Math.round(6 + spread * 420);
+    // crosshair & hitmarker: ring radius = the sim's own spread cone (world.playerSpread()), converted from an
+    // angle to screen pixels via the camera's vertical FOV, so it matches the cone regardless of FOV setting
+    const pxPerRad = (window.innerHeight * 0.5) / Math.tan(THREE.MathUtils.degToRad(cam.fov) * 0.5);
+    const px = Math.round(6 + Math.tan(world.playerSpread()) * pxPerRad);
     this.cross.style.setProperty('--gap', `${px}px`);
     this.cross.style.opacity = p.downed || def.kind !== 'gun' ? '0.25' : '1';
     this.hitT = Math.max(0, this.hitT - dt);
@@ -198,7 +200,6 @@ export class Hud {
       this.fps.textContent = `${Math.round(this.fpsN / this.fpsAcc)} fps`;
       this.fpsAcc = 0; this.fpsN = 0;
     }
-    void cam;
   }
 
   private updateSquad(world: World): void {

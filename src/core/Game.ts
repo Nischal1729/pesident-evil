@@ -341,9 +341,7 @@ export class Game {
       this.updateGates(dt, w);
       this.updatePickups(dt, w);
       this.audio.update(dt, w, e.camera);
-      const def = p.def;
-      const spread = def.kind === 'gun' ? (p.aiming ? def.spreadAim : def.spreadHip) * (1 + p.bloom) * (Math.hypot(p.vel.x, p.vel.z) > 0.8 ? 1.5 : 1) : 0;
-      this.hud.update(dt, w, e.camera, this.input.yaw, spread);
+      this.hud.update(dt, w, e.camera, this.input.yaw);
       this.sky.follow(pp);
       this.setTime(w.timeOfDay);
       this.fx?.update(dt);

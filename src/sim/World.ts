@@ -743,15 +743,32 @@ export class World {
   // ---------------------------------------------------------------------------------------------
   // Shooting
   // ---------------------------------------------------------------------------------------------
+  /** Spread (rad) before the NPC accuracy/skill terms fire() adds on top: shared with playerSpread(). */
+  private baseSpread(s: Survivor, aiming: boolean): number {
+    const moving = Math.hypot(s.vel.x, s.vel.z) > 0.8;
+    let spread = aiming ? s.def.spreadAim : s.def.spreadHip;
+    spread *= (moving ? 1.5 : 1) * (1 + s.bloom) * (s.grounded ? 1 : 2);
+    return spread;
+  }
+
+  /**
+   * Half-angle (rad) of the cone the local player's next shot is guaranteed to land within, for sizing the HUD
+   * reticle: same bloom/moving/airborne terms fire() uses, scaled by perturb()'s worst case (its rand() floor of
+   * 1e-6 caps the deviation any single pellet can get at spread * SPREAD_MAX).
+   */
+  playerSpread(): number {
+    const p = this.player;
+    if (!p || p.def.kind !== 'gun') return 0;
+    return this.baseSpread(p, p.aiming) * SPREAD_MAX;
+  }
+
   fire(s: Survivor, originIn: THREE.Vector3, target: THREE.Vector3, aiming: boolean): void {
     const d = s.def;
     const origin = _fireOrigin.copy(originIn); // callers pass scratch vectors; snapshot before tracing
     s.slot.mag--;
     s.fireCd = 60 / d.rpm;
     s.sinceFire = 0;
-    const moving = Math.hypot(s.vel.x, s.vel.z) > 0.8;
-    let spread = aiming ? d.spreadAim : d.spreadHip;
-    spread *= (moving ? 1.5 : 1) * (1 + s.bloom) * (s.grounded ? 1 : 2);
+    let spread = this.baseSpread(s, aiming);
     if (s.kind === 'npc') spread = spread * 1.2 + (1 - (this.brains.get(s.id)?.accuracy ?? 0.7)) * 0.05 + npcSkill(this.wave).spread;
     const dir = _fireDir.copy(target).sub(origin);
     const dist = dir.length();
@@ -1543,6 +1560,9 @@ export function turnToward(cur: number, target: number, maxStep: number): number
   if (Math.abs(d) <= maxStep) return target;
   return cur + Math.sign(d) * maxStep;
 }
+
+/** perturb()'s rand() is floored at 1e-6, so this is the largest multiple of `spread` it can ever deviate by. */
+const SPREAD_MAX = Math.sqrt(-2 * Math.log(1e-6)) * 0.5;
 
 function perturb(dir: THREE.Vector3, spread: number, out: THREE.Vector3, rand: () => number): THREE.Vector3 {
   if (spread <= 0) return out.copy(dir);
