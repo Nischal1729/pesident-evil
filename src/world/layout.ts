@@ -753,6 +753,24 @@ export const STATIONS: StationDef[] = [
   { id: 'buy_shotgun', kind: 'weapon', item: 'shotgun', pos: [GX - 4.5, -140.2], cost: 1200, label: 'Security locker — Shotgun' },
   { id: 'buy_smg', kind: 'weapon', item: 'smg', pos: [133, -24.5], cost: 1500, label: 'Canteen stash — SMG' },
   { id: 'buy_rifle', kind: 'weapon', item: 'rifle', pos: [50, -124.2], cost: 2500, label: 'NCC armoury — Rifle' },
+  // inside the enterable interiors (`y` = the floor the player stands on; Props fits the prop within that storey)
+  // admission / enquiry hall by the main gate: west wall by the entrance (floor slab 5 cm over the raised forecourt)
+  { id: 'buy_smg_adm', kind: 'weapon', item: 'smg', pos: [158.1, -118.0], y: TERRAIN.h + 0.05, cost: 1500, label: 'Admissions office locker — SMG' },
+  // 2-wheeler parking, PES Innovation Lab: the open south end past the desk rows
+  { id: 'buy_rifle_pil', kind: 'weapon', item: 'rifle', pos: [124.4, -31.9], y: PARKING.road, cost: 2500, label: 'Innovation Lab crate — Rifle' },
+  // GJBC G-05 electronics lab: on the side wall beside the boards, in the aisle in front of the bench rows
+  { id: 'buy_shotgun_gjb', kind: 'weapon', item: 'shotgun', pos: [29.9, -93.8], y: 0, face: propToward([29.9, -93.8], [28, -93.8]), cost: 1200, label: 'Electronics lab cabinet — Shotgun' },
+  // BE block 1st floor computer lab (west wing, far half): the strip behind the last bench row
+  { id: 'buy_smg_be', kind: 'weapon', item: 'smg', pos: bePt(-14.0, 30.1), y: BE_LEVELS.F1, face: propToward(bePt(-14.0, 30.1), bePt(-14.0, 32)), cost: 1500, label: 'BE lab store — SMG' },
+  // MRD lobby: on the back wall just south of the passage into the atrium, facing the "real world" wall
+  { id: 'buy_shotgun_mrd', kind: 'weapon', item: 'shotgun', pos: mrdAt(-3.3, 6.75), y: MRD_LV.f0, face: propToward(mrdAt(-3.3, 6.75), mrdAt(-3.3, 8.6)), cost: 1200, label: 'MRD lobby strongbox — Shotgun' },
+  // south / hostel side: under the PES Food Court colonnade, between two columns
+  { id: 'buy_rifle_food', kind: 'weapon', item: 'rifle', pos: [-13.7, 40.9], cost: 2500, label: 'Food court storeroom — Rifle' },
+  { id: 'ammo_be', kind: 'ammo', pos: bePt(13.98, 19.0), y: BE_LEVELS.F2, face: propToward(bePt(13.98, 19.0), bePt(13.98, 20.9)), cost: 250, label: 'Ammo crate' }, // BE 2nd floor lab, behind the benches
+  { id: 'ammo_gjb_l2', kind: 'ammo', pos: [76.5, -82.0], y: GJB_L2, cost: 250, label: 'Ammo crate' }, // GJBC L2 lounge, east of the classroom doors
+  { id: 'ammo_mrd', kind: 'ammo', pos: mrdAt(8.4, 6.9), y: MRD_LV.f0, face: propToward(mrdAt(8.4, 6.9), mrdAt(8.4, 8.6)), cost: 250, label: 'Ammo crate' }, // MRD lobby, back wall past the office door
+  { id: 'med_huawei', kind: 'health', pos: [133.5, -31.9], y: PARKING.road, face: propToward([133.5, -31.9], [133.5, -30]), cost: 400, label: 'First-aid kit' }, // parking: Huawei lab, back wall
+  { id: 'med_be', kind: 'health', pos: bePt(-16.0, 11.9), y: BE_LEVELS.G, face: propToward(bePt(-16.0, 11.9), bePt(-16.0, 10.02)), cost: 400, label: 'First-aid kit' }, // BE ground floor office, against the front wall
 ];
 
 /** Play-area bounds (for nav grid & culling). */

@@ -24,6 +24,7 @@ const TIPS = [
   'Press F to tell your friends to hold a spot — or to follow you again.',
   'Downed friends can be revived. Stand close and hold E.',
   'The canteen stash near South Thindies has an SMG. The NCC armoury by the MRD block has a rifle.',
+  'More weapon lockers hide indoors: the admissions hall, the Innovation Lab, GJB, the BE labs, the MRD lobby and the food court.',
   'Later waves come round to the west gate on PES University Road.',
   'Press G to throw a grenade where you aim. Ammo crates restock them — up to four.',
 ];
