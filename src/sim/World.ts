@@ -1253,7 +1253,7 @@ export class World {
     // pressed against a wall: the hand stays on the body's side of it
     const cx = s.pos.x, cy = s.pos.y + 1.4, cz = s.pos.z;
     const ex = hx - cx, ey = hy - cy, ez = hz - cz, el = Math.hypot(ex, ey, ez);
-    const wall = c.raycast(cx, cy, cz, ex / el, ey / el, ez / el, el + G.r, _gHit, false);
+    const wall = c.raycast(cx, cy, cz, ex / el, ey / el, ez / el, el + G.r, _gHit, true);
     if (wall) {
       const t = Math.max(0, wall.dist - G.r - 0.02);
       hx = cx + (ex / el) * t; hy = cy + (ey / el) * t; hz = cz + (ez / el) * t;
@@ -1290,7 +1290,10 @@ export class World {
     }
   }
 
-  /** Ballistic step against the static world (walls, floors, ceilings, props, the ground; gate bars are solid). */
+  /**
+   * Ballistic step against the static world (walls, floors, ceilings, props, the ground). Like bullets, grenades pass
+   * the gate bars, so one can be rolled or lobbed onto the zombies bashing a gate.
+   */
   private flyGrenade(g: Grenade, dt: number): void {
     const G = GRENADE;
     g.vy -= G.gravity * dt;
@@ -1298,7 +1301,7 @@ export class World {
     const len = Math.hypot(mx, my, mz);
     if (len < 1e-7) return;
     const dx = mx / len, dy = my / len, dz = mz / len;
-    const h = this.collision.raycast(g.x, g.y, g.z, dx, dy, dz, len + G.r, _gHit, false);
+    const h = this.collision.raycast(g.x, g.y, g.z, dx, dy, dz, len + G.r, _gHit, true);
     if (!h) { g.x += mx; g.y += my; g.z += mz; return; }
     // stop a radius short of the surface (plus a hair along its normal) and bounce
     const t = Math.max(0, h.dist - G.r);
@@ -1328,7 +1331,7 @@ export class World {
       const len = ns * dt;
       if (len > 1e-6) {
         const dx = g.vx / ns, dz = g.vz / ns;
-        const h = c.raycast(g.x, g.y, g.z, dx, 0, dz, len + G.r, _gHit, false);
+        const h = c.raycast(g.x, g.y, g.z, dx, 0, dz, len + G.r, _gHit, true);
         if (h && h.ny < 0.5) {
           const t = Math.max(0, h.dist - G.r);
           g.x += dx * t + h.nx * 0.005; g.z += dz * t + h.nz * 0.005;
@@ -1339,7 +1342,7 @@ export class World {
       }
     }
     // stay on whatever is underneath (slopes, small steps down); nothing within reach: fall
-    const f = c.raycast(g.x, g.y, g.z, 0, -1, 0, G.r + 0.3, _gHit, false);
+    const f = c.raycast(g.x, g.y, g.z, 0, -1, 0, G.r + 0.3, _gHit, true);
     if (f && f.dist - G.r < 0.14) g.y -= f.dist - G.r - 0.002;
     else { g.rolling = false; g.vy = 0; }
   }
@@ -1378,7 +1381,7 @@ export class World {
       this.damageZombie(z, dmg0 * f, owner, _gPt.set(tx, ty, tz), dir, false, null, 'grenade');
       if (!z.alive) kills++;
     });
-    const fl = c.raycast(g.x, g.y, g.z, 0, -1, 0, 3, _gHit, false);
+    const fl = c.raycast(g.x, g.y, g.z, 0, -1, 0, 3, _gHit, true);
     const floorY = fl ? fl.y : g.y - G.r;
     this.events.emit('grenadeExplode', { id: g.id, ownerId: g.ownerId, position: new THREE.Vector3(g.x, g.y, g.z), floorY, radius: R, kills });
   }
