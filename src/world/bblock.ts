@@ -4,7 +4,7 @@ import type { StaticCollision } from '../sim/Collision';
 import { GeoBuffer } from './buildings';
 import { normalizeWinding } from './geom';
 import { col, type DetailKey, type WorldKit } from './kit';
-import { BE_FRAME, BE_LEVELS, bePt, type V2 } from './layout';
+import { BE_FRAME, BE_LEVELS, BE_WING, bePt, type V2 } from './layout';
 import { pottedPlant, quad3, type P3 } from './shapes';
 import type { SignUVs } from './signs';
 
@@ -98,9 +98,11 @@ const MEZZ = 7.2; // front edge of the 1st/2nd-floor galleries over the lobby (t
 const LC = { s: 3.4, d0: 10, d1: 12.6 }; // lift core behind the lobby
 const HALL = { s: 7.6, d0: 10, d1: 27.6 };
 const VOID = { s: 4.8, d0: 15, d1: 25 }; // atrium void through the 1st and 2nd floors
-const ROOM = { s1: 15, dm: 21, d1: 32 };
-const DOORS: [number, number][] = [[11, 13], [21.8, 23.8]]; // doorways in the hall walls (s = ±7.6), every floor, near each room's front
-const WINDOWS: [number, number][] = [[14.2, 20.2], [24.6, 27.2]]; // glazed panels onto the hall
+const ROOM = { s1: BE_WING, dm: 21, d1: 32 }; // room wings s ±7.6…±18.5 (layout.ts notch), partition at d 21
+// doorways in the hall walls (s = ±7.6), every floor, 1 m from each room's front wall (the leaves fold back inside the
+// room, clear of the partition at d 21)
+const DOORS: [number, number][] = [[11, 13], [22.1, 24.1]];
+const WINDOWS: [number, number][] = [[14.2, 20.2], [25.3, 27.3]]; // glazed panels onto the hall
 const ST = { a: -2.5, b: 1.0, laneA: [27.6, 29.6] as [number, number], laneB: [29.8, 32] as [number, number], wc: 3.4 }; // stair core
 const T1 = { s0: -4.8, s1: -2.4, d0: 16.7, d1: 25 }; // floating stair G → 1st (rises west), 2.4 m wide
 const T2 = { s0: 2.4, s1: 4.8, d0: 15, d1: 25 }; // floating stair 1st → 2nd (rises east), 2.4 m wide
@@ -686,7 +688,7 @@ function buildBEInterior(kit: WorldKit): void {
       }
       // sloped soffit plate under the flight
       const pA = P3at(a0s, (c0 + c1) / 2, y0 - 0.2), pB = P3at(a1s, (c0 + c1) / 2, y1 - 0.2);
-      B('plaster').beam(pA, pB, c1 - c0, 0.12, C.white);
+      B('plaster').beam(pA, pB, c1 - c0, 0.12, C.ceiling); // faces down like a ceiling: same cool tint, else it reads tan
     };
     const mid1 = (L.G + L.F1) / 2, mid2 = (L.F1 + L.F2) / 2;
     stepsAlong(ST.a, ST.b, a0, a1, L.G, mid1);
@@ -731,7 +733,7 @@ function buildBEInterior(kit: WorldKit): void {
       const d = LSTAIR.d0 + run * i, yt = G + ((L.F1 - G) * (i + 1)) / n;
       bx(B('granite'), LSTAIR.s0, LSTAIR.s1, d, d + run, yt - 0.18, yt, col('#b7b4ad'), 0.5);
     }
-    B('plaster').beam(P3at((LSTAIR.s0 + LSTAIR.s1) / 2, LSTAIR.d0, G - 0.15), P3at((LSTAIR.s0 + LSTAIR.s1) / 2, LSTAIR.d1, L.F1 - 0.2), LSTAIR.s1 - LSTAIR.s0, 0.14, C.white);
+    B('plaster').beam(P3at((LSTAIR.s0 + LSTAIR.s1) / 2, LSTAIR.d0, G - 0.15), P3at((LSTAIR.s0 + LSTAIR.s1) / 2, LSTAIR.d1, L.F1 - 0.2), LSTAIR.s1 - LSTAIR.s0, 0.14, C.ceiling);
     sloped(B('metal'), LSTAIR.d0, LSTAIR.d1, LSTAIR.s0 + 0.04, G, L.F1);
     // lift bank on the north wall (2024 tour ZyeL_0500 / UOVu_0094): light-grey granite panels with dark joints, three
     // steel lifts, a dark granite band above them with a TV
@@ -839,11 +841,11 @@ function buildBEInterior(kit: WorldKit): void {
   }
 
   function buildRoom(kind: 'office' | 'class' | 'lab', fy: number, cy: number, s0: number, s1: number, d0: number, d1: number, front: number, sg: number): void {
-    const sm = (s0 + s1) / 2;
+    const sm = (s0 + s1) / 2, W = s1 - s0;
     const dir = front === d0 ? 1 : -1; // +d = away from the board
     const at = (k: number) => front + dir * k;
-    // tube lights (2 rows) + ceiling fans
-    for (const s of [sm - 1.8, sm + 1.8]) for (const k of [2.2, 5.3, 8.4]) tube(s, at(k), cy, false);
+    // tube lights (3 rows) + ceiling fans
+    for (const s of [sm - 3.6, sm, sm + 3.6]) for (const k of [2.2, 5.3, 8.4]) tube(s, at(k), cy, false);
     const fan = (s: number, d: number) => {
       const m = B('metal');
       bx(m, s - 0.02, s + 0.02, d - 0.02, d + 0.02, cy - 0.45, cy, C.white);
@@ -851,7 +853,7 @@ function buildBEInterior(kit: WorldKit): void {
       bx(m, s - 0.6, s + 0.6, d - 0.05, d + 0.05, cy - 0.52, cy - 0.5, col('#dcdad4'));
       bx(m, s - 0.05, s + 0.05, d - 0.6, d + 0.6, cy - 0.52, cy - 0.5, col('#dcdad4'));
     };
-    if (kind !== 'lab') for (const k of [3.7, 6.9]) for (const s of [sm - 1.8, sm + 1.8]) fan(s, at(k));
+    if (kind !== 'lab') for (const k of [3.7, 6.9]) for (const s of [sm - 3.6, sm, sm + 3.6]) fan(s, at(k));
     // skirting round the room
     const pt = B('paint');
     vqS(pt, d0 + 0.01, s0, s1, fy, fy + 0.1, 1, C.skirting);
@@ -871,8 +873,11 @@ function buildBEInterior(kit: WorldKit): void {
       solid(col_, s0 + 0.2, s1 - 0.2, front, at(1.6), fy, fy + 0.15, 'be:dais');
       bx(B('wood'), u(0.8), u(2.2), Math.min(at(0.7), at(1.4)), Math.max(at(0.7), at(1.4)), fy + 0.15, fy + 0.93, C.desk);
       solid(col_, u(0.8), u(2.2), at(0.7), at(1.4), fy, fy + 0.93, 'prop', 'wood');
-      // benches: two columns of 3-seater desk + bench units, 7 rows; a 1.8 m aisle along the door wall
-      const colS: [number, number][] = [[u(0.25), u(2.25)], [u(3.45), u(5.45)]];
+      // benches: three columns of 3-seater desk + bench units, 7 rows, the outer columns against the side walls and two
+      // ~2.1 m aisles between them (BE classrooms). The doorway opens onto the clear strip between the dais and the
+      // first row, which links both aisles.
+      const cw = 2.0, edge = 0.3, aisle = (W - 2 * edge - 3 * cw) / 2;
+      const colS: [number, number][] = [0, 1, 2].map((i) => { const x = edge + i * (cw + aisle); return [u(x), u(x + cw)]; });
       for (let r = 0; r < 7; r++) {
         const k0 = 3.2 + r * 1.02;
         for (const [a, b] of colS) {
@@ -880,22 +885,25 @@ function buildBEInterior(kit: WorldKit): void {
           bx(w, a, b, Math.min(at(k0), at(k0 + 0.45)), Math.max(at(k0), at(k0 + 0.45)), fy + 0.72, fy + 0.77, C.desk); // desk top
           bx(w, a, b, Math.min(at(k0 + 0.05), at(k0 + 0.1)), Math.max(at(k0 + 0.05), at(k0 + 0.1)), fy + 0.35, fy + 0.72, C.wood); // modesty panel
           bx(w, a, b, Math.min(at(k0 + 0.55), at(k0 + 0.85)), Math.max(at(k0 + 0.55), at(k0 + 0.85)), fy + 0.42, fy + 0.46, C.wood); // bench seat
-          for (const s of [a + 0.05, b - 0.05]) bx(l, s - 0.025, s + 0.025, Math.min(at(k0), at(k0 + 0.85)), Math.max(at(k0), at(k0 + 0.85)), fy, fy + 0.72, C.legs);
+          for (const s of [Math.min(a, b) + 0.05, Math.max(a, b) - 0.05]) bx(l, s - 0.025, s + 0.025, Math.min(at(k0), at(k0 + 0.85)), Math.max(at(k0), at(k0 + 0.85)), fy, fy + 0.72, C.legs);
           solid(col_, a, b, at(k0), at(k0 + 0.85), fy, fy + 0.77, 'prop', 'wood');
         }
       }
     } else if (kind === 'lab') {
-      // computer lab: 4 rows of benches with monitors and chairs, whiteboard at the front
+      // computer lab: two columns of benches (3 rows) with monitors and chairs, whiteboard at the front; a 2 m aisle
+      // between the columns, a ≥ 1.9 m one along the door wall and 2 m between the rows (the 1 m nav grid routes
+      // through all of them, so nobody has to climb a bench to reach a seat)
       bx(B('paint'), sm - 1.6, sm + 1.6, front + dir * 0.01, front + dir * 0.04, fy + 0.9, fy + 2.1, col('#f6f6f3'));
       bx(B('metal'), sm - 1.65, sm + 1.65, front + dir * 0.01, front + dir * 0.03, fy + 0.87, fy + 2.13, col('#9ea3a8'));
-      const len = Math.min(3.6, s1 - s0 - 3.6);
-      for (let r = 0; r < 4; r++) {
-        const k0 = 1.9 + r * 2.35;
-        const a = sm - len / 2, b = sm + len / 2;
+      const len = 3.3, xs = [0.25, 0.25 + len + 2.0], nMon = Math.round(len / 0.85);
+      for (let r = 0; r < 3; r++) for (const x of xs) {
+        const k0 = 2.0 + r * 2.75;
+        const a = Math.min(u(x), u(x + len)), b = Math.max(u(x), u(x + len));
         bx(B('wood'), a, b, Math.min(at(k0), at(k0 + 0.75)), Math.max(at(k0), at(k0 + 0.75)), fy + 0.72, fy + 0.76, col('#d9d4c8'));
         bx(B('metal'), a + 0.05, b - 0.05, Math.min(at(k0 + 0.05), at(k0 + 0.7)), Math.max(at(k0 + 0.05), at(k0 + 0.7)), fy, fy + 0.72, col('#8a8e93'));
         solid(col_, a, b, at(k0), at(k0 + 0.75), fy, fy + 0.76, 'prop', 'metal');
-        for (let s = a + 0.45; s < b - 0.3; s += 0.9) {
+        for (let i = 0; i < nMon; i++) {
+          const s = a + ((i + 0.5) * len) / nMon;
           bx(B('dark'), s - 0.28, s + 0.28, Math.min(at(k0 + 0.2), at(k0 + 0.24)), Math.max(at(k0 + 0.2), at(k0 + 0.24)), fy + 0.86, fy + 1.2, C.screen);
           bx(B('lamp'), s - 0.25, s + 0.25, Math.min(at(k0 + 0.245), at(k0 + 0.25)), Math.max(at(k0 + 0.245), at(k0 + 0.25)), fy + 0.89, fy + 1.17, col('#3a5f8a'));
           bx(B('dark'), s - 0.04, s + 0.04, Math.min(at(k0 + 0.15), at(k0 + 0.2)), Math.max(at(k0 + 0.15), at(k0 + 0.2)), fy + 0.76, fy + 0.86, C.screen);
@@ -906,15 +914,15 @@ function buildBEInterior(kit: WorldKit): void {
           bx(B('metal'), s - 0.03, s + 0.03, Math.min(at(k0 + 1.15), at(k0 + 1.2)), Math.max(at(k0 + 1.15), at(k0 + 1.2)), fy, fy + 0.44, C.legs);
         }
       }
-      for (const s of [sm - 1.2, sm + 1.2]) for (const k of [3.2, 7.6]) bx(B('lamp'), s - 0.3, s + 0.3, Math.min(at(k), at(k + 0.6)), Math.max(at(k), at(k + 0.6)), cy - 0.02, cy, C.white);
+      for (const x of xs) for (const k of [3.2, 7.6]) { const s = u(x + len / 2); bx(B('lamp'), s - 0.3, s + 0.3, Math.min(at(k), at(k + 0.6)), Math.max(at(k), at(k + 0.6)), cy - 0.02, cy, C.white); }
     } else {
       // CSE department office: service counter across the room, desks with monitors, steel cupboards
       // (the 1.9 m gap at the outer wall lets staff, and zombies, round the counter)
-      const kc = 3.0, w = Math.abs(s1 - s0);
+      const kc = 3.0, w = W - 0.12; // stops short of the hall wall, clear of the folded-back door leaf
       bx(B('plaster'), u(1.9), u(w), Math.min(at(kc), at(kc + 0.6)), Math.max(at(kc), at(kc + 0.6)), fy, fy + 1.05, col('#f0eee8'));
       bx(B('wood'), u(1.85), u(w), Math.min(at(kc - 0.05), at(kc + 0.65)), Math.max(at(kc - 0.05), at(kc + 0.65)), fy + 1.05, fy + 1.1, C.timberDark);
       solid(col_, u(1.85), u(w), at(kc - 0.05), at(kc + 0.65), fy, fy + 1.1, 'prop', 'wood');
-      for (const [x, k] of [[3.0, 5.2], [5.4, 5.2], [3.0, 7.9], [5.4, 7.9]] as V2[]) {
+      for (const [x, k] of [[3.0, 5.2], [5.4, 5.2], [7.8, 5.2], [3.0, 7.9], [5.4, 7.9], [7.8, 7.9]] as V2[]) {
         const s = u(x);
         bx(B('wood'), s - 0.8, s + 0.8, Math.min(at(k), at(k + 0.8)), Math.max(at(k), at(k + 0.8)), fy + 0.72, fy + 0.76, C.desk);
         bx(B('metal'), s - 0.75, s + 0.75, Math.min(at(k + 0.05), at(k + 0.75)), Math.max(at(k + 0.05), at(k + 0.75)), fy, fy + 0.72, col('#8a8e93'));
