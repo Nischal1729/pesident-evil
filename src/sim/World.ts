@@ -142,6 +142,7 @@ export class World {
   private reviveT = new Map<number, number>();
   private pickupId = 1;
   private pointFrac = new Map<number, number>();
+  private tickN = 0;
   private waveMessageShown = new Set<string>();
 
   readonly role: 'solo' | 'host' | 'client';
@@ -247,7 +248,12 @@ export class World {
     this.updateDirector(dt);
     this.updateFields(dt);
     this.rebuildSpatial();
-    for (const s of this.survivors) {
+    // survivors act one after another; the starting one rotates every tick, so when two players' shots would both
+    // finish a zombie in the same tick, nobody (the host, the first to join) always gets the kill
+    const ns = this.survivors.length;
+    const first = ns ? this.tickN++ % ns : 0;
+    for (let k = 0; k < ns; k++) {
+      const s = this.survivors[(first + k) % ns];
       if (!s.alive) continue;
       if (s.kind === 'player') this.updatePlayer(s, inputs.get(s.id), dt);
       else this.updateNpc(s, dt);
