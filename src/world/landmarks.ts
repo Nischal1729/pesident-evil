@@ -3,7 +3,7 @@ import { GeoBuffer } from './buildings';
 import { normalizeWinding, rng } from './geom';
 import { col, type WorldKit } from './kit';
 import { hedgeBox } from './landscape';
-import { BUILDINGS, FOUNTAIN_POS, GATES, MAIN_GATE_PORTAL, MAIN_GATE_X, pesRdZ, PLAYER_SPAWN, type V2 } from './layout';
+import { BUILDINGS, F_BLOCK_SIGN, FOUNTAIN_POS, GATES, MAIN_GATE_PORTAL, MAIN_GATE_X, pesRdZ, PLAYER_SPAWN, type V2 } from './layout';
 import { netTexture } from './materials';
 import type { SignUVs } from './signs';
 import { buildBBlockBits } from './bblock';
@@ -174,9 +174,10 @@ export function buildFountains(kit: WorldKit): void {
 /** F-Block roof sign + podium detail, admission-building compound wall, security cabin door. */
 export function buildMisc(kit: WorldKit, signs: SignUVs): void {
   // F-Block tower: "PES" roof sign facing north (towards GJBC's east colonnade)
-  kit.box('plaster', 118, 37.6, 48.6, 7.2, 2.6, 0.4, 0.1, col('#fbfbf8'));
-  kit.signQuad(signs.fBlockRoof, 118.02, 37.6, 48.38, 6.8, 2.5, -0.1, -1, true);
-  kit.box('metal', 118, 35.6, 48.8, 6, 1.4, 0.2, 0.1, col('#555'));
+  const F = F_BLOCK_SIGN; // on the tower at the block's north end (layout.ts, MRD/buildings agent)
+  kit.box('plaster', F.x, F.y, F.z, 7.2, 2.6, 0.4, F.rot, col('#fbfbf8'));
+  kit.signQuad(signs.fBlockRoof, F.x + F.nx * 0.22, F.y, F.z + F.nz * 0.22, 6.8, 2.5, F.nx, F.nz, true);
+  kit.box('metal', F.x - F.nx * 0.2, F.y - 2.0, F.z - F.nz * 0.2, 6, 1.4, 0.2, F.rot, col('#555'));
   // security cabin (layout 'cabin_gate', just inside the north pillar): blue door facing the gate apron
   const cab = BUILDINGS.find((b) => b.id === 'cabin_gate');
   if (cab) {

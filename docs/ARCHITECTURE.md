@@ -166,3 +166,7 @@ audio.say(line: string, opts?: { voice?: 'male'|'female'; position?: Vector3 }) 
 * Sight lines, zombie reach, melee, interactions, pickups and NPC aim all use actor heights; separation only pushes
   bodies on the same level. `StationDef.y` gives a station's floor height.
 * Doorways need ≥ 1.8 m and corridors ≥ 2.2 m so the 1 m nav grid (agent radius 0.38) routes through them.
+* **Enterable interiors** (`InteriorKit` / `PlanFrame` in `src/world/buildings.ts`): the shell above is a BuildingDef
+  with `base` = the ceiling, or a walls-only `shell`. The rooms are one distance-culled LOD per building (shared kit
+  materials, no lights), and walls and slabs cast shadows so sunlight doesn't leak in. Floors, slabs and walls are
+  prisms with a `base`, stairs are `addRamp`. Examples: `mrdInterior.ts`, `admissionHall.ts`, `gjb/interiors.ts`.

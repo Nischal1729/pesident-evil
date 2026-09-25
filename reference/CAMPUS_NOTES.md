@@ -211,6 +211,8 @@ ceiling, a brick-red wall.
   (≈10–15 m span).
 
 ### 3.3 Prof. MRD Block (A-Block / "Dr. M.R. Doreswamy Silver Jubilee Complex"; 6 levels)
+*Enterable since 2026-09: the lobby, atrium, 1st-floor gallery and classroom, the OAT-side exit and the auditorium
+(indoor court + stage). Details and the plan frame are in `reference/MRD_NOTES.md` §5.*
 *OSM fan/wedge polygon x 2…81, z −188…−126. Key frames: 0208, 0216, 0230, 0306, 0316, 0332, 0401, 0449.*
 * **State in 2026:** under **refurbishment**. There is full-height **steel-tube/bamboo scaffolding** on several
   faces, **green safety nets** and building material at the base.
@@ -250,6 +252,14 @@ ceiling, a brick-red wall.
     open corridors with solid parapets and dark recessed walls behind (a strong striped look).
   * A **3-storey terracotta podium block** has small square punched windows.
   * Rooftop water tanks and dish antennas.
+* **Massing (2026-09 pass, M):** an L of beige open-corridor wings. The terracotta **tower** (10 floors, PES roof sign) is
+  at the **north end**, with the 3-storey terracotta podium in front of it towards GJBC's south-east. A lower (8-floor)
+  terracotta **end block** is at the elbow where the south wing turns west. Sources: Law terrace frames 0050 / 1534 (the
+  tower rises straight behind the podium, the wing runs away to the end block), the 2011 Wikimedia photo
+  (`frames/fblock/wikimedia_pesit_fblock1_2011.jpg`: tower, balcony-banded wing, end block, rooftop PES sign), and the
+  2021 tour 5bxHqmfj7bE 8:02 (on-screen "F-BLOCK AKA PANINI — Labs, Law and First Years"; green hoarding at the base).
+  OSM puts a "Lending Library" node inside the end block (115.8, 57.6). Layout: `f_podium`, `f_tower`, `f_wing1`,
+  `f_end`, `fblock`.
 * **Terraced garden (1512):** in front of F-Block, below the Law terrace. Stepped **granite planter boxes**
   (charcoal coping), fishtail/areca palms, small trees, granite benches and a paved path.
 
@@ -276,8 +286,29 @@ ceiling, a brick-red wall.
     along the bottom.
 * **Compound wall** next to it: **rough-dressed grey granite blocks** (#8D8A83), ≈2.4 m, with thick mortar and a
   top course.
+* **Ground-floor enquiry hall (built 2026-09, L for the layout):** the ground floor of the mural building is an enterable
+  hall (`src/world/admissionHall.ts`) off the entry walkway, between the gate pillar and the compass mural. It has a
+  glazed front with an open door under a navy hood (x 162.9–165.4), oak admission counters with blue "ADMISSION" plates
+  along the back wall, a timber-slat ceiling with linear lights, yellow-wood columns, a red feature wall with a gold tree
+  sculpture and black steel waiting benches. No tour shows this room: the fittings copy the GJBC admission hall (0724 /
+  gjb 0710). Reach it from the player spawn (128, −126) by walking east along the south walkway to (164, −121).
 * North of the gate (outside view): a low white building with a curved white planter wall; beyond it the brief
   mentions blue perforated jali panels (not clearly seen). Planters, grey interlocking pavers outside the gate.
+
+### 3.6b Boys' hostels, the food court (2026-09 pass)
+*Sources: 2021 hostel tour `web_1OVI1TlGEho` (1OVI1TlGEho), 2021 campus tour `web_5bxHqmfj7bE`, the 2010 Wikimedia hostel
+photo (`frames/hostel/`), OSM, satellite.*
+* The hostel has five named blocks: **IT, NB, NBX, MM, IH**. MM / NB / NBX are terracotta with cream balcony bands. The
+  east end is a **white curved block** with open galleries round a semicircular court and parking under it (Wikimedia
+  2010, ZyeLAVjgiYk 19:30). The **IT-Block** is cream with a **stepped / crenellated parapet** of merlons (tour 3:16,
+  satellite).
+* Added from OSM: `hostel_it` (way 1182315666, 3 floors, merlon parapet in `src/world/blocks.ts`), `hostel_s` (347418355,
+  3 floors), and the **PES Food Court** `food_court` (351160549, 2 floors; OSM "PES Food Court" restaurant node inside;
+  yellow-column canteen colonnade on its Pie R Cube side, after the hostel canteens in the 2021 tours). Conf. H for the
+  footprints, L for the facades.
+* Canteens seen in the tours: a hostel canteen with yellow round columns, red plastic chairs on black tables and
+  glass-fronted counters (5bxHqmfj7bE 7:54). A red-chair shed near F-Block (8:26). A mess hall with brick columns
+  (ZyeLAVjgiYk 18:08).
 
 ### 3.7 Small buildings
 * **Security cabin** (from the brief): white 3 × 3 × 2.8 m box with a blue door, just inside the gate on the north

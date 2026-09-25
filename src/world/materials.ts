@@ -376,8 +376,9 @@ export const FACADE_STYLES: Record<FacadeStyle | 'house', FacadeParams> = {
   gjbcCurtain: S({ wall: C('#e6e0d3'), band: C('#3c444c'), frame: C('#2b3138'), glass: C('#2c3843'), bayW: 1.5, curtain: 1, bandH: 0.28, mullions: 0, topBand: 1.0, topColor: C('#e9e3d6'), baseH: 0, litChance: 0.55, dirt: 0.1, glassRough: 0.04, glassMetal: 0.9 }),
   // GJBC NW library tower: white plaster, punched strip windows, granite plinth
   library: S({ wall: C('#f0eee8'), band: C('#e8e5de'), frame: C('#2f3a44'), glass: C('#2f3b46'), bayW: 4.2, winW: 0.82, sill: 1.0, winH: 1.55, bandH: 0, mullions: 3, curtain: 0.14, topBand: 1.2, topColor: C('#eeece6'), panel: [1.4, 4.2], baseH: 4.2, baseMode: 2, baseColor: C('#9c9c9a'), dirt: 0.25, reveal: 0.2 }),
-  // MRD refurb: buff sandstone blocks + frosted glass curtain groups + navy cornice
-  mrd: S({ wall: C('#cdbfa6'), band: C('#c2b398'), frame: C('#4f6d8c'), glass: C('#d6e1e6'), bayW: 3.0, winW: 0.5, sill: 1.0, winH: 1.6, bandH: 0, mullions: 1, curtain: 0.5, topBand: 1.6, topColor: C('#1f2b45'), panel: [1.0, 0.5], baseH: 0, baseMode: 0, glassRough: 0.32, glassMetal: 0.2, litChance: 0.35, dirt: 0.45, reveal: 0.2 }),
+  // MRD refurb stone wings (SE tower, NE block): mostly blank buff sandstone blocks with sparse black-framed openings, navy
+  // cornice (tour 2026 key frames 0230 / 0316 / 0332: no glass curtain groups on the stone towers)
+  mrd: S({ wall: C('#c8b89e'), band: C('#bdae94'), frame: C('#23272b'), glass: C('#34414b'), bayW: 4.2, winW: 0.3, sill: 0.9, winH: 1.6, bandH: 0, mullions: 1, curtain: 0, topBand: 1.6, topColor: C('#1f2b45'), panel: [1.0, 0.5], baseH: 0, baseMode: 0, glassRough: 0.06, glassMetal: 0.55, litChance: 0.35, dirt: 0.4, reveal: 0.22 }),
   // B-Block: beige plaster, pilaster strips, near-square windows, louvre vents, pink-grey stone base (2 floors)
   bblock: S({ wall: C('#e0cfb6'), band: C('#d4c4ad'), frame: C('#2f3a40'), glass: C('#7f93a0'), bayW: 3.5, winW: 0.37, sill: 1.0, winH: 1.4, bandH: 0, mullions: 1, topBand: 1.0, topColor: C('#d8c9b3'), pilaster: 1, pilasterW: 0.55, louvre: 0.28, baseH: 7.0, baseMode: 2, baseColor: C('#a89484'), glassRough: 0.05, glassMetal: 0.7, dirt: 0.2, reveal: 0.22 }),
   // B-Block crest tower: buff stone, tiny square windows
@@ -393,7 +394,8 @@ export const FACADE_STYLES: Record<FacadeStyle | 'house', FacadeParams> = {
   oldCream: S({ wall: C('#efe7d6'), band: C('#e2d9c6'), frame: C('#394249'), glass: C('#2c3440'), bayW: 3.2, winW: 0.45, sill: 0.9, winH: 1.4, bandH: 0.3, topBand: 0.7, topColor: C('#e6dcc8'), reveal: 0.18 }),
   hostel: S({ wall: C('#e9d8b8'), band: C('#c0673f'), frame: C('#4a3f38'), glass: C('#2c3440'), bayW: 3.2, winW: 0.55, sill: 0.9, winH: 1.4, bandH: 0.9, topBand: 0.8, topColor: C('#c0673f'), reveal: 0.18 }),
   service: S({ wall: C('#f1f1ee'), band: C('#e4e4e0'), frame: C('#3a3a3a'), glass: C('#2b3036'), bayW: 3.6, winW: 0.55, sill: 1.0, winH: 1.3, bandH: 0, topBand: 0.7, topColor: C('#9a9c9e'), reveal: 0.12 }),
-  glass: S({ wall: C('#cdbfa6'), band: C('#c9bea9'), frame: C('#4f6d8c'), glass: C('#cfdce3'), bayW: 1.8, winW: 0.9, sill: 0.3, winH: 3.2, bandH: 0.4, curtain: 0.85, topBand: 1.4, topColor: C('#1f2b45'), glassRough: 0.3, glassMetal: 0.25, reveal: 0.1 }),
+  // MRD entrance block: frosted white glass curtain wall on a light grey grid, navy top cornice (key frames 0316 / 0332)
+  glass: S({ wall: C('#d9dfe2'), band: C('#c4cacd'), frame: C('#b4bbbf'), glass: C('#e2eaed'), bayW: 1.5, winW: 1.0, sill: 0.1, winH: 3.7, bandH: 0.16, mullions: 0, curtain: 1, topBand: 1.4, topColor: C('#1f2b45'), glassRough: 0.42, glassMetal: 0.18, litChance: 0.3, dirt: 0.15, reveal: 0.05 }),
   house: S({ wall: C('#ffffff'), band: C('#e8e2d6'), frame: C('#51473f'), glass: C('#2a2f36'), bayW: 2.9, winW: 0.45, sill: 1.0, winH: 1.25, bandH: 0.25, topBand: 0.35, topColor: C('#ffffff'), reveal: 0.12, litChance: 0.5 }),
 };
 

@@ -4,6 +4,7 @@ import { polyCentroid, rng } from './geom';
 import { col, type WorldKit } from './kit';
 import { BUILDINGS, type V2 } from './layout';
 import { netTexture } from './materials';
+import { buildMrdInterior } from './mrdInterior';
 import { outwardNormal, pottedPlant, quad3, type P3 } from './shapes';
 import type { SignUVs } from './signs';
 
@@ -72,13 +73,10 @@ export function buildMRD(kit: WorldKit, signs: SignUVs): void {
     kit.buf('hedge', bed[0][0], bed[0][1]).flatPoly(bed.map(([x, z]) => [x + (64 - x) * 0.12, z + (-137.5 - z) * 0.12] as V2), 1.15, col('#8a4a78'), 1);
     kit.collision.addPolygon(bed, 0.8, 'concrete', 'mrd:planter');
   }
-  // glazed ground floor with blue-grey columns (set back under the canopy)
+  // glazed ground floor with blue-grey columns and two open doorways into the lobby, and the whole enterable interior
+  // behind it (lobby, atrium, stair to the 1st floor, OAT-side corridor): src/world/mrdInterior.ts
+  buildMrdInterior(kit);
   {
-    const g = P(0, 0.12);
-    kit.box('glass', g[0], topY + 2.25, g[1], W - 1.8, 4.5, 0.1, rot, col('#26303a'));
-    for (let s = -W / 2 + 1.2; s <= W / 2 - 1.1; s += 3.2) { const c = P(s, 0.32); kit.box('stone', c[0], topY + 2.25, c[1], 0.5, 4.5, 0.45, rot, col('#4f6d8c'), 0.5); }
-    for (let s = -W / 2 + 2.8; s <= W / 2 - 2.5; s += 3.2) { const c = P(s, 0.2); kit.box('metal', c[0], topY + 2.25, c[1], 0.06, 4.4, 0.08, rot, col('#2b3036')); }
-    kit.box('dark', g[0], topY + 1.15, g[1], 3.0, 2.3, 0.14, rot, col('#1b2026')); // open door leaves
     // navy name band above the glazing: "DR. M.R. DORESWAMY SILVER JUBILEE COMPLEX"
     const sb = P(0, 0.3);
     kit.box('stone', sb[0], topY + 4.95, sb[1], W - 0.8, 0.9, 0.35, rot, NAVY, 0.5);
@@ -87,9 +85,11 @@ export function buildMRD(kit: WorldKit, signs: SignUVs): void {
   // big navy canopy: soffit rises from the wall to the tip, thick fascia (the tour's key frame 0332)
   {
     const cb = kit.buf('stone', mid[0], mid[1]);
+    // a thin blade rising outward (key frame 0316): 0.7 m deep at the wall, 0.4 m fascia at the tip, a lighter
+    // navy-grey soffit (the underside is lit by the steps, not black)
     const hw = W / 2 + 1.2, d = 5.6;
-    const ys0 = topY + 5.5, ys1 = topY + 6.5, yt0 = topY + 6.2, yt1 = topY + 7.2;
-    const nav = NAVY, navD = NAVY.clone().multiplyScalar(0.8);
+    const ys0 = topY + 5.5, ys1 = topY + 6.4, yt0 = topY + 6.2, yt1 = topY + 6.8;
+    const nav = NAVY, navD = col('#4a5670');
     quad3(cb, [P3d(-hw, 0, ys0), P3d(hw, 0, ys0), P3d(hw, d, ys1), P3d(-hw, d, ys1)], [-n[0] * 0.18, -0.98, -n[1] * 0.18], navD);
     quad3(cb, [P3d(-hw, 0, yt0), P3d(hw, 0, yt0), P3d(hw, d, yt1), P3d(-hw, d, yt1)], [-n[0] * 0.18, 0.98, -n[1] * 0.18], nav);
     quad3(cb, [P3d(-hw, d, ys1), P3d(hw, d, ys1), P3d(hw, d, yt1), P3d(-hw, d, yt1)], [n[0], 0, n[1]], nav);

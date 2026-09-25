@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { normalizeWinding, polyBounds, rng } from './geom';
+import type { DetailKey, WorldKit } from './kit';
 import type { V2 } from './layout';
 
 /**
@@ -184,6 +185,10 @@ export interface ExtrudeOpts {
   color?: THREE.Color;
   parapet: number;
   bottom?: boolean;
+  /** false: walls only (no roof slab / parapet caps) — a hand-built interior or roof closes the top */
+  roof?: boolean;
+  /** skip the wall of this edge (plan end points, in the winding the edge is drawn); e.g. an internal party wall */
+  skipEdge?: (a: V2, b: V2) => boolean;
 }
 
 /**
@@ -203,6 +208,7 @@ export function extrudeBuilding(poly: V2[], o: ExtrudeOpts, walls: GeoBuffer, ro
     const dx = bx - ax, dz = bz - az;
     const len = Math.hypot(dx, dz);
     if (len < 0.01) continue;
+    if (o.skipEdge && o.skipEdge(p[i], p[(i + 1) % n])) { u = Math.ceil((u + len) / 0.6) * 0.6; continue; }
     const nx = -dz / len, nz = dx / len;
     const h = wallTop - o.base;
     const a0 = walls.vert(ax, o.base, az, nx, 0, nz, u, 0, o.color, fac);
@@ -214,6 +220,7 @@ export function extrudeBuilding(poly: V2[], o: ExtrudeOpts, walls: GeoBuffer, ro
     // round u to bay-friendly offsets per edge so windows don't straddle corners badly
     u = Math.ceil(u / 0.6) * 0.6;
   }
+  if (o.roof === false) return;
   const contour = p.map(([x, z]) => new THREE.Vector2(x, z));
   const tris = THREE.ShapeUtils.triangulateShape(contour, []);
   const rbase = roof.vertexCount;
@@ -349,5 +356,153 @@ export function roofClutter(poly: V2[], top: number, seed: number, opts: { tanks
         m4.compose(v, tilt, s);
         solar.push(m4.clone());
       }
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Enterable interiors
+// -------------------------------------------------------------------------------------------------
+
+/** Always-on ceiling light panels (unlit, a touch over-bright so they read as lamps by day and bloom at night). */
+let panelMat: THREE.MeshBasicMaterial | null = null;
+export function lightPanelMaterial(): THREE.MeshBasicMaterial {
+  return (panelMat ??= new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.44, 1.32), toneMapped: true }));
+}
+/** See-through glazing for real openings (the kit's 'glass' key is opaque, facade-style). */
+let seeThrough: THREE.MeshStandardMaterial | null = null;
+export function seeThroughGlassMaterial(): THREE.MeshStandardMaterial {
+  return (seeThrough ??= new THREE.MeshStandardMaterial({ color: 0xaec2cc, roughness: 0.04, metalness: 0.25, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
+}
+
+/**
+ * Rectangular building frame for interiors laid out on a rotated grid: `s` runs along `u`, `t` along `n` (both unit,
+ * perpendicular), from `origin`. Boxes built through it are aligned with the frame (box x = s, box z = t).
+ */
+export class PlanFrame {
+  readonly rot: number;
+  constructor(public origin: V2, public u: V2, public n: V2) {
+    // box local x maps to (cos r, −sin r) and local z to (sin r, cos r): x = u; z = ±n (boxes are symmetric in z)
+    this.rot = Math.atan2(-u[1], u[0]);
+  }
+  at(s: number, t: number): V2 { return [this.origin[0] + this.u[0] * s + this.n[0] * t, this.origin[1] + this.u[1] * s + this.n[1] * t]; }
+  rect(s0: number, t0: number, s1: number, t1: number): V2[] { return [this.at(s0, t0), this.at(s1, t0), this.at(s1, t1), this.at(s0, t1)]; }
+  /** Plan polygon from local points. */
+  poly(pts: [number, number][]): V2[] { return pts.map(([s, t]) => this.at(s, t)); }
+}
+
+/**
+ * Merged-geometry builder for one enterable interior: one buffer per kit material key (shared materials) plus light
+ * panels and see-through glass. `build()` adds a THREE.LOD that shows the interior near the camera and `far` (a cheap
+ * stand-in, e.g. an opaque dark glass front) beyond `cullDist`, so the interior costs nothing from across the campus.
+ * Interiors receive shadows; only the keys in `castKeys` (walls / slabs) cast them.
+ */
+export class InteriorKit {
+  bufs = new Map<string, GeoBuffer>();
+  lights = new GeoBuffer();
+  glass = new GeoBuffer();
+  /** Extra objects shown with the interior (e.g. a sign mesh with its own small canvas texture). */
+  extras: THREE.Object3D[] = [];
+  constructor(public kit: WorldKit, public f: PlanFrame) {}
+  /**
+   * Material keys folded together inside an interior (vertex colour carries the albedo, so the look barely changes) to
+   * keep each interior at a handful of draw calls: honed granite → polished, paint / stone → plaster, glass → dark.
+   */
+  alias: Partial<Record<DetailKey, DetailKey>> = { granite: 'polished', paint: 'plaster', stone: 'plaster', glass: 'dark' };
+  b(key: DetailKey): GeoBuffer {
+    const k = this.alias[key] ?? key;
+    let g = this.bufs.get(k);
+    if (!g) this.bufs.set(k, (g = new GeoBuffer({ color: true })));
+    return g;
+  }
+  /** World-space box (rot about Y). */
+  box(key: DetailKey, cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, rot = 0, c?: THREE.Color, uv = 1): void {
+    this.b(key).box(cx, cy, cz, sx, sy, sz, rot, c, uv);
+  }
+  /** Frame-aligned box spanning s0..s1, y0..y1, t0..t1. */
+  fbox(key: DetailKey, s0: number, y0: number, t0: number, s1: number, y1: number, t1: number, c?: THREE.Color, uv = 1): void {
+    const p = this.f.at((s0 + s1) / 2, (t0 + t1) / 2);
+    this.b(key).box(p[0], (y0 + y1) / 2, p[1], Math.abs(s1 - s0), Math.abs(y1 - y0), Math.abs(t1 - t0), this.f.rot, c, uv);
+  }
+  /** Frame-aligned light panel. */
+  flight(s: number, y: number, t: number, ds: number, dt: number): void {
+    const p = this.f.at(s, t);
+    this.lights.box(p[0], y, p[1], ds, 0.03, dt, this.f.rot);
+  }
+  /** Vertical see-through pane from frame point (s0,t0) to (s1,t1), y0..y1. */
+  fpane(s0: number, t0: number, s1: number, t1: number, y0: number, y1: number): void {
+    this.glass.wallQuad(this.f.at(s0, t0), this.f.at(s1, t1), y0, y1);
+  }
+  /** Horizontal polygon (frame coordinates) facing up (or down). */
+  fflat(key: DetailKey, pts: [number, number][], y: number, c?: THREE.Color, uv = 2, down = false): void {
+    this.b(key).flatPoly(this.f.poly(pts), y, c, uv, down);
+  }
+  /**
+   * Wall along the frame from (s0,t0) to (s1,t1), `thick` wide on its left (+) or right (−) side (`side`), y0..y1,
+   * with rectangular openings given as [a0, a1, oy0, oy1] in metres along the wall. Adds the collision (one prism per
+   * solid run of full height, lintels / sills as prisms with a base) unless `tag` is null.
+   */
+  wall(key: DetailKey, s0: number, t0: number, s1: number, t1: number, y0: number, y1: number, thick: number, c: THREE.Color, openings: [number, number, number, number][] = [], tag: string | null = 'wall:int', side = 1): void {
+    const a = this.f.at(s0, t0), b = this.f.at(s1, t1);
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 1e-3) return;
+    const dx = (b[0] - a[0]) / len, dz = (b[1] - a[1]) / len;
+    const nx = -dz * side, nz = dx * side; // the side the wall thickness goes to
+    const at = (d: number, o: number): V2 => [a[0] + dx * d + nx * o, a[1] + dz * d + nz * o];
+    const rot = Math.atan2(-dz, dx);
+    const piece = (d0: number, d1: number, py0: number, py1: number) => {
+      if (d1 - d0 < 0.01 || py1 - py0 < 0.01) return;
+      const m = at((d0 + d1) / 2, thick / 2);
+      this.b(key).box(m[0], (py0 + py1) / 2, m[1], d1 - d0, py1 - py0, thick, rot, c, 0.5);
+      if (tag !== null) this.kit.collision.addPolygon([at(d0, 0), at(d1, 0), at(d1, thick), at(d0, thick)], py1 - py0, 'concrete', tag, py0);
+    };
+    const ops = openings.map(([o0, o1, oy0, oy1]) => [Math.max(0, o0), Math.min(len, o1), Math.max(y0, oy0), Math.min(y1, oy1)] as const).sort((p, q) => p[0] - q[0]);
+    let d = 0;
+    for (const [o0, o1, oy0, oy1] of ops) {
+      piece(d, o0, y0, y1);
+      piece(o0, o1, y0, oy0); // sill
+      piece(o0, o1, oy1, y1); // lintel
+      d = o1;
+    }
+    piece(d, len, y0, y1);
+  }
+  /** Kit keys whose geometry casts shadows (walls and slabs, so no sunlight leaks in under the shells). */
+  castKeys = new Set<string>();
+  meshes(): THREE.Mesh[] {
+    const out: THREE.Mesh[] = [];
+    const add = (geo: GeoBuffer, mat: THREE.Material, name: string, receive: boolean) => {
+      if (!geo.vertexCount) return;
+      const m = new THREE.Mesh(geo.toGeometry(), mat);
+      m.name = name;
+      m.receiveShadow = receive;
+      m.castShadow = this.castKeys.has(name.slice(3));
+      m.matrixAutoUpdate = false;
+      m.updateMatrix();
+      out.push(m);
+    };
+    for (const [k, g] of this.bufs) add(g, this.kit.material(k), `ik:${k}`, true);
+    add(this.lights, lightPanelMaterial(), 'ik:lights', false);
+    if (this.glass.vertexCount) {
+      const m = new THREE.Mesh(this.glass.toGeometry(), seeThroughGlassMaterial());
+      m.name = 'ik:glass'; m.renderOrder = 3; m.matrixAutoUpdate = false; m.updateMatrix();
+      out.push(m);
+    }
+    return out;
+  }
+  /** Distance-culled LOD at `center` (geometry stays in world coordinates). */
+  build(name: string, center: V2, cullDist: number, far?: THREE.Object3D): THREE.LOD {
+    const near = new THREE.Group();
+    near.name = `${name}:near`;
+    for (const m of this.meshes()) near.add(m);
+    for (const o of this.extras) near.add(o);
+    near.position.set(-center[0], 0, -center[1]);
+    const lod = new THREE.LOD();
+    lod.name = name;
+    lod.position.set(center[0], 0, center[1]);
+    lod.addLevel(near, 0);
+    const farObj = far ?? new THREE.Object3D();
+    farObj.position.set(-center[0], 0, -center[1]);
+    lod.addLevel(farObj, cullDist);
+    this.kit.group.add(lod);
+    return lod;
   }
 }
