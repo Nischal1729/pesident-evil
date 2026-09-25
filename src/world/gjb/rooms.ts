@@ -286,14 +286,14 @@ export function classroom(kit: WorldKit, g: GroupKit, r: [number, number, number
   boards(g, F, y0 + 0.2);
   // dais 0.2 m (steppable) and the teacher's table + chair
   const dais = F.rect(0.8, 0.1, F.W - 0.8, 2.0);
-  g.b('wood').flatPoly(dais, y0 + 0.2, C.oakDark, 1);
-  F.box(g, 'wood', F.W / 2, y0 + 0.1, 2.0, F.W - 1.6, 0.2, 0.02, C.oakDark);
+  F.box(g, 'wood', F.W / 2, y0 + 0.1, 1.05, F.W - 1.6, 0.2, 1.9, C.oakDark); // closed box (it had no end faces)
   addSolid(kit, dais, 0.2, y0, 'dais', 'wood');
   F.box(g, 'wood', F.W * 0.3, y0 + 0.95, 1.1, 1.5, 0.05, 0.7, C.oak);
   F.box(g, 'wood', F.W * 0.3, y0 + 0.58, 1.1, 1.4, 0.7, 0.62, C.oakDark);
   addSolid(kit, F.rect(F.W * 0.3 - 0.75, 0.75, F.W * 0.3 + 0.75, 1.45), 0.78, y0 + 0.2, 'desk');
-  // desks: two blocks either side of a 1.5 m centre aisle, 1.1 m side aisles
-  const aisle = 1.5, side = 1.1;
+  // desks: two blocks either side of a 1.5 m centre aisle, 1.6 m side aisles (1.1 m left no nav cells along the door
+  // wall, so G-04's second door led nowhere for zombies and NPCs)
+  const aisle = 1.5, side = 1.6;
   const block = (F.W - aisle - 2 * side) / 2;
   const n = Math.max(1, Math.floor(block / 3.1));
   const len = Math.min(3.0, block / n - 0.1);
@@ -349,13 +349,13 @@ export function computerLab(kit: WorldKit, g: GroupKit, r: [number, number, numb
 }
 
 /** Faculty room: cubicle desks with low partitions along both side walls, steel almirahs at the back, a meeting table. */
-export function facultyRoom(kit: WorldKit, g: GroupKit, r: [number, number, number, number], front: Side, y0: number, ceil: number): void {
+export function facultyRoom(kit: WorldKit, g: GroupKit, r: [number, number, number, number], front: Side, y0: number, ceil: number, boardU?: number): void {
   const F = frame(r[0], r[1], r[2], r[3], front);
   const cub = (u: number, v: number, face: number) => {
     F.box(g, 'wood', u, y0 + 0.74, v, 1.3, 0.04, 0.7, col('#b99a74'));
     F.box(g, 'metal', u - face * 0.3, y0 + 0.36, v, 0.5, 0.72, 0.62, C.steelLight);
     F.box(g, 'plaster', u + face * 0.66, y0 + 0.62, v, 0.04, 1.24, 0.72, col('#7d8a93'));
-    F.box(g, 'dark', u - face * 0.35, y0 + 1.0, v, 0.04, 0.3, 0.5, C.screen);
+    F.box(g, 'dark', u - face * 0.35, y0 + 0.91, v, 0.04, 0.3, 0.5, C.screen); // stands on the desk top (0.76)
     F.box(g, 'plaster', u + face * 0.2, y0 + 0.47, v, 0.46, 0.07, 0.46, col('#3f4a57'));
   };
   const nCub = Math.max(1, Math.floor((F.D - 1.2) / 1.4));
@@ -382,7 +382,8 @@ export function facultyRoom(kit: WorldKit, g: GroupKit, r: [number, number, numb
     F.box(g, 'wood', F.W / 2, y0 + 0.36, F.D / 2, tw - 0.3, 0.7, 0.7, col('#6e4d33'));
     addSolid(kit, F.rect(F.W / 2 - tw / 2, F.D / 2 - 0.55, F.W / 2 + tw / 2, F.D / 2 + 0.55), 0.77, y0, 'desk');
   }
-  noticeBoard(g, F.P(F.W / 2, 0.14)[0], y0 + 1.6, F.P(F.W / 2, 0.14)[1], Math.min(2.4, F.W - 1.5), 1.1, F.nx, F.nz, 7);
+  const bu = boardU ?? F.W / 2;
+  noticeBoard(g, F.P(bu, 0.14)[0], y0 + 1.6, F.P(bu, 0.14)[1], Math.min(2.4, F.W - 1.5), 1.1, F.nx, F.nz, 7);
   tubeGrid(g, r[0] + 0.6, r[1] + 0.6, r[2] - 0.6, r[3] - 0.6, ceil, 2.6, front === 'w' || front === 'e');
 }
 
@@ -391,9 +392,11 @@ export function electronicsLab(kit: WorldKit, g: GroupKit, r: [number, number, n
   const F = frame(r[0], r[1], r[2], r[3], front);
   boards(g, F, y0);
   const instr = [col('#2c6fa8'), col('#d9d4c8'), col('#3a3d40'), col('#c7502e')];
-  for (let v = 2.6; v <= F.D - 2.6; v += 2.3) { // leave a 2 m aisle along the back wall (the door side)
-    for (const u0 of [1.0, F.W / 2 + 0.6]) {
-      const u1 = Math.min(F.W - 1.0, u0 + F.W / 2 - 1.6);
+  // rows 1.9 m apart with a 1.8 m centre aisle (1.4 / 1.2 m left no nav cells between the benches); a ≥ 2 m aisle along
+  // the back wall (the door side)
+  for (let v = 2.6; v <= F.D - 2.6; v += 2.8) {
+    for (const u0 of [1.0, F.W / 2 + 0.9]) {
+      const u1 = Math.min(F.W - 1.0, u0 + F.W / 2 - 1.9);
       if (u1 - u0 < 1.5) continue;
       const cu = (u0 + u1) / 2;
       F.box(g, 'wood', cu, y0 + 0.88, v, u1 - u0, 0.05, 0.9, col('#3d3f42'));
