@@ -69,6 +69,13 @@ export class AudioBridge {
     }));
     offs.push(ev.on('weaponSwitch', (e) => { if (isLocal(e.actorId)) play('weapon_switch'); }));
     offs.push(ev.on('meleeSwing', (e) => play('bat_swing', isLocal(e.actorId) ? undefined : e.position)));
+    offs.push(ev.on('grenadeThrow', (e) => {
+      const pos = isLocal(e.actorId) ? undefined : e.position;
+      if (e.stage === 'pin') play('grenade_pin', pos, 0.9);
+      else play('bat_swing', pos, 0.5, 1.4); // a lighter, quicker whoosh as it leaves the hand
+    }));
+    offs.push(ev.on('grenadeBounce', (e) => play('grenade_bounce', e.position, THREE.MathUtils.clamp(e.speed / 9, 0.3, 1), e.surface === 'metal' ? 1.25 : e.surface === 'wood' ? 0.85 : 1)));
+    offs.push(ev.on('grenadeExplode', (e) => play('grenade_explosion', e.position)));
     offs.push(ev.on('footstep', (e) => { if (isLocal(e.actorId)) play('footstep_concrete', undefined, e.loud ? 0.5 : 0.3); else play('footstep_concrete', e.position, 0.25); }));
     offs.push(ev.on('land', (e) => { if (isLocal(e.actorId)) play('jump_land', undefined, 0.6); }));
     offs.push(ev.on('playerDamaged', () => play('player_hurt')));

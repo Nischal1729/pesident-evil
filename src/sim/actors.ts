@@ -26,6 +26,7 @@ export interface AnimHints {
   downed: boolean;
   reviving: boolean;
   attackP: number; // zombie attack progress 0..1, -1 none
+  throwP: number; // grenade throw progress 0..1, -1 none
   weapon: WeaponId | null;
   wave: boolean; // friendly wave gesture
 }
@@ -34,7 +35,7 @@ export function newAnim(): AnimHints {
   return {
     speed: 0, localX: 0, localZ: 0, aiming: false, aimPitch: 0, fireT: 99, reloading: false, reloadP: 0, meleeP: -1, switchP: -1,
     airborne: false, hitT: 99, hitDirX: 0, hitDirZ: 0, dead: false, deadT: 0, deathVariant: 0, downed: false, reviving: false,
-    attackP: -1, weapon: null, wave: false,
+    attackP: -1, throwP: -1, weapon: null, wave: false,
   };
 }
 
@@ -87,6 +88,9 @@ export class Survivor extends Actor {
   reloadDur = 0;
   meleeT = -1;
   meleeDone = false;
+  /** grenades carried, and the throw in progress (0..1 over GRENADE.throwDur, -1 none) */
+  grenades = 0;
+  throwT = -1;
   downed = false;
   bleedout = 0;
   reviveProgress = 0;
@@ -115,7 +119,7 @@ export class Survivor extends Actor {
   get slot(): WeaponSlot { return this.weapons[this.current]; }
   get def(): WeaponDef { return WEAPONS[this.slot.id]; }
   has(id: WeaponId): WeaponSlot | undefined { return this.weapons.find((w) => w.id === id); }
-  get busy(): boolean { return this.reloadT >= 0 || this.switchT >= 0 || this.meleeT >= 0; }
+  get busy(): boolean { return this.reloadT >= 0 || this.switchT >= 0 || this.meleeT >= 0 || this.throwT >= 0; }
   get active(): boolean { return this.alive && !this.downed; }
 }
 

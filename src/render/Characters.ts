@@ -262,6 +262,15 @@ export class CharacterView {
       b.LeftArm.rotation.z = 0.08; b.RightArm.rotation.z = -0.08;
       b.LeftForeArm.rotation.x = -0.25; b.RightForeArm.rotation.x = -0.25;
     }
+    // grenade throw (left arm, overhand): cocked behind the head, whipped forward, blended back out
+    if (an.throwP >= 0) {
+      const tp = an.throwP, S = THREE.MathUtils.smoothstep;
+      const w = S(tp, 0, 0.12) * (1 - S(tp, 0.6, 1)), k1 = S(tp, 0.28, 0.42), k2 = S(tp, 0.42, 0.62);
+      const L = THREE.MathUtils.lerp;
+      b.LeftArm.rotation.set(L(b.LeftArm.rotation.x, -2.7 + 1.1 * k1 + 0.9 * k2, w), L(b.LeftArm.rotation.y, 0.5 - 0.6 * k1, w), L(b.LeftArm.rotation.z, 0.5 - 0.4 * k1, w));
+      b.LeftForeArm.rotation.x = L(b.LeftForeArm.rotation.x, -1.6 + 1.3 * k1, w);
+      b.Spine2.rotation.y += (0.45 * (1 - k1) - 0.3 * k2) * w;
+    }
     // hit flinch
     if (an.hitT < 0.25) {
       const f = 1 - an.hitT / 0.25;

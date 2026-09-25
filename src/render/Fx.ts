@@ -493,10 +493,17 @@ export class Fx {
     if (lod > 0.55) this.popLight(point.x, point.y + 0.2, point.z, 10, 0.06, 1.0, 0.7, 0.4);
   }
 
-  explosion(pos: THREE.Vector3): void {
+  /**
+   * Frag / blast at `pos` resting on (or above) a floor at world height `floorY` (default: the campus ground): white-hot
+   * core flash, fireballs, an expanding dark smoke column, a ground dust ring, sparks and dirt clods, a scorch decal
+   * and the pooled light flash. Particles clamp and fade against `floorY`, so a blast on the raised gate forecourt or
+   * an upper storey sits on that floor.
+   */
+  explosion(pos: THREE.Vector3, floorY = this.groundY): void {
     const lod = Math.max(0.5, this.lod(pos));
     const p = this.p;
-    const x = pos.x, y = Math.max(pos.y, this.groundY + 0.1), z = pos.z;
+    const fl = Math.max(floorY, this.groundY);
+    const x = pos.x, y = Math.max(pos.y, fl + 0.1), z = pos.z;
     // smoke column (spawned first so fire draws on top)
     const ns = this.count(14, lod);
     for (let i = 0; i < ns; i++) {
@@ -510,7 +517,7 @@ export class Fx {
       const c = rand(0.07, 0.13);
       p.r = c; p.g = c * 0.95; p.b = c * 0.9; p.a = rand(0.55, 0.75);
       p.tile = i % 2 ? PT.SMOKE_A : PT.SMOKE_B; p.fadeIn = 0.08; p.fadeOut = 0.45;
-      p.delay = rand(0, 0.12);
+      p.delay = rand(0, 0.12); p.floor = fl;
       this.alpha.emit(p);
     }
     // ground dust ring
@@ -519,17 +526,17 @@ export class Fx {
       const a = (i / nr) * 6.283 + rand(-0.2, 0.2);
       const sp = rand(5, 9);
       p.reset();
-      p.px = x; p.py = this.groundY + 0.3; p.pz = z;
+      p.px = x; p.py = fl + 0.3; p.pz = z;
       p.vx = Math.cos(a) * sp; p.vy = rand(0.2, 0.8); p.vz = Math.sin(a) * sp;
       p.drag = 2.8; p.gravity = -0.2;
       p.life = rand(1.4, 2.4);
       p.size0 = 0.4; p.size1 = rand(1.6, 2.4);
       p.rot = rand(0, 6.28);
       p.r = 0.48; p.g = 0.42; p.b = 0.34; p.a = 0.45;
-      p.tile = PT.SMOKE_B; p.fadeIn = 0.05; p.fadeOut = 0.4;
+      p.tile = PT.SMOKE_B; p.fadeIn = 0.05; p.fadeOut = 0.4; p.floor = fl;
       this.alpha.emit(p);
     }
-    this.debris(x, y, z, _up, this.count(22, lod), 0.18, 0.14, 0.1, 0.03, 0.07, 1.4, PT.CLUMP, 5, 13);
+    this.debris(x, y, z, _up, this.count(22, lod), 0.18, 0.14, 0.1, 0.03, 0.07, 1.4, PT.CLUMP, 5, 13, fl);
     // fireballs
     const nf = this.count(10, lod);
     for (let i = 0; i < nf; i++) {
@@ -543,14 +550,17 @@ export class Fx {
       const I = rand(3.5, 6);
       p.r = I; p.g = I * 0.7; p.b = I * 0.45; p.a = 1; p.heat = 1;
       p.tile = PT.FIRE; p.fadeOut = 0.35;
-      p.delay = rand(0, 0.05);
+      p.delay = rand(0, 0.05); p.floor = fl;
       this.add.emit(p);
     }
     this.flashGlow(x, y + 0.5, z, 7, 3, 1.0, 0.7, 0.4, 0.14);
-    this.sparks(x, y + 0.3, z, _up, this.count(34, lod), 5, 16, 2.2);
+    // white-hot core, gone within two frames
+    this.flashGlow(x, y + 0.25, z, 2.2, 6, 1.0, 0.92, 0.8, 0.05);
+    this.sparks(x, y + 0.3, z, _up, this.count(34, lod), 5, 16, 2.2, fl);
     const d = this.d;
     d.reset();
-    d.px = x; d.py = this.groundY; d.pz = z;
+    // road and ground meshes sit up to ~6 cm above the collision floor the sim reports: keep the scorch above them
+    d.px = x; d.py = fl + 0.065; d.pz = z;
     d.rot = rand(0, 6.28); d.size = rand(3.2, 4.0); d.tile = DT.SCORCH;
     d.life = this.decalLife * 2; d.rough = 1; d.grow = 0.12; d.start = 0.3; d.fade = 6;
     this.decals.emit(d);
@@ -706,7 +716,7 @@ export class Fx {
     this.add.emit(p);
   }
 
-  private sparks(x: number, y: number, z: number, n: THREE.Vector3, count: number, vmin: number, vmax: number, spread: number): void {
+  private sparks(x: number, y: number, z: number, n: THREE.Vector3, count: number, vmin: number, vmax: number, spread: number, floor = 0): void {
     const p = this.p;
     for (let i = 0; i < count; i++) {
       this.cone(_v1, n, spread);
@@ -720,7 +730,7 @@ export class Fx {
       p.size0 = p.size1 = rand(0.012, 0.02);
       const I = rand(7, 11);
       p.r = I; p.g = I * 0.72; p.b = I * 0.38; p.a = 1; p.heat = 1;
-      p.tile = PT.SOFT; p.fadeOut = 0.55;
+      p.tile = PT.SOFT; p.fadeOut = 0.55; p.floor = floor;
       this.add.emit(p);
     }
   }
@@ -744,7 +754,7 @@ export class Fx {
     }
   }
 
-  private debris(x: number, y: number, z: number, n: THREE.Vector3, count: number, r: number, g: number, b: number, smin: number, smax: number, spread: number, tile: number, vmin = 2.5, vmax = 6): void {
+  private debris(x: number, y: number, z: number, n: THREE.Vector3, count: number, r: number, g: number, b: number, smin: number, smax: number, spread: number, tile: number, vmin = 2.5, vmax = 6, floor = 0): void {
     const p = this.p;
     for (let i = 0; i < count; i++) {
       this.cone(_v1, n, spread);
@@ -758,7 +768,7 @@ export class Fx {
       p.rot = rand(0, 6.28); p.spin = rand(-18, 18);
       const c = rand(0.75, 1.15);
       p.r = r * c; p.g = g * c; p.b = b * c; p.a = 1;
-      p.tile = tile; p.fadeOut = 0.8;
+      p.tile = tile; p.fadeOut = 0.8; p.floor = floor;
       this.alpha.emit(p);
     }
   }

@@ -5,8 +5,9 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Assets } from '../core/Assets';
 import type { QualityProfile } from '../core/Settings';
 import { type Actor, type AnimHints, type Look, type Survivor, type Zombie, CORPSE_FADE_DUR, CORPSE_FADE_START } from '../sim/actors';
-import type { WeaponId } from '../sim/weapons';
+import { GRENADE, type WeaponId } from '../sim/weapons';
 import type { WeaponModels } from './Characters';
+import { grenadeAssets } from './Grenades';
 
 /**
  * Characters from GLB assets (Quaternius CC0 bodies retargeted to the contract in docs/ARCHITECTURE.md).
@@ -348,6 +349,9 @@ export class GlbCharacterView {
   private speedS = 0;
   private aimS = 0;
   private spine: THREE.Bone[] = [];
+  /** grenade throw overlay (left arm) and the grenade shown in the left hand until it is let go */
+  private throwBones: { spine: THREE.Bone; arm: THREE.Bone; fore: THREE.Bone; hand: THREE.Bone } | null = null;
+  private handNade: THREE.Mesh | null = null;
 
   constructor(public actor: Actor, lib: GlbCharacterLibrary, key: string, geometry: THREE.BufferGeometry, private weapons: WeaponModels | null, private scaleToHeight: number) {
     const inst = lib.instantiate(key, geometry);
@@ -365,6 +369,8 @@ export class GlbCharacterView {
     const findBone = (...names: string[]) => { for (const n of names) { const b = this.bones.get(n); if (b) return b; } return undefined; };
     this.socket = findBone('RightHandWeapon', 'RightHand', 'hand_r', 'Hand_R') ?? null;
     for (const n of ['Spine1', 'Spine2', 'spine_02', 'spine_03']) { const b = this.bones.get(n); if (b) this.spine.push(b); }
+    const sp2 = this.bones.get('Spine2'), la = this.bones.get('LeftArm'), lf = this.bones.get('LeftForeArm'), lh = this.bones.get('LeftHand');
+    if (sp2 && la && lf && lh) this.throwBones = { spine: sp2, arm: la, fore: lf, hand: lh };
     this.mesh.castShadow = true;
   }
 
@@ -433,6 +439,48 @@ export class GlbCharacterView {
       const pitch = a.anim.aimPitch * this.aimS;
       for (const b of this.spine) b.rotateX(-pitch * 0.5);
     }
+    if (a.kind !== 'zombie') this.throwPose(a.anim.dead || a.anim.downed ? -1 : a.anim.throwP);
+  }
+
+  /**
+   * Overhand grenade throw with the left arm, layered on whatever the mixer posed (the right hand keeps the weapon):
+   * cocked with the hand behind the head, whipped forward at GRENADE.releaseAt, follow-through, then blended out.
+   * Bone directions are set in the character frame (+Z forward, +X its left, +Y up), so no rig axis conventions leak in.
+   */
+  private throwPose(tp: number): void {
+    const tb = this.throwBones;
+    if (!tb) return;
+    const holding = tp >= 0.03 && tp < GRENADE.releaseAt;
+    if (holding && !this.handNade) {
+      const { geometry, material } = grenadeAssets();
+      this.handNade = new THREE.Mesh(geometry, material);
+      this.handNade.castShadow = true;
+      tb.hand.add(this.handNade);
+      tb.hand.getWorldScale(_ts);
+      const k = 1 / (_ts.x || 1);
+      this.handNade.scale.setScalar(k);
+      // the hand bone points toward the fingers: sit the grenade in the palm, a little out from the wrist
+      const child = tb.hand.children.find((c) => (c as THREE.Bone).isBone);
+      if (child) this.handNade.position.copy(child.position).multiplyScalar(0.6);
+      else this.handNade.position.set(0, 0.07 * k, 0);
+    }
+    if (this.handNade) this.handNade.visible = holding;
+    if (tp < 0) return;
+    const w = THREE.MathUtils.smoothstep(tp, 0, 0.12) * (1 - THREE.MathUtils.smoothstep(tp, 0.6, 1));
+    if (w < 0.002) return;
+    const r = GRENADE.releaseAt;
+    // keys: cocked (0..0.28) → release (r) → follow-through (0.62)
+    const a = THREE.MathUtils.smoothstep(tp, 0.28, r), b = THREE.MathUtils.smoothstep(tp, r, 0.62);
+    const twist = 0.5 * (1 - a) - 0.25 * a * (1 - b) - 0.35 * b;
+    _tUp.set(0.62, 0.12, -0.78).lerp(_tUpRel, a).lerp(_tUpFol, b).normalize();
+    _tFo.set(-0.08, 0.96, 0.25).lerp(_tFoRel, a).lerp(_tFoFol, b).normalize();
+    this.root.getWorldQuaternion(_tRoot);
+    // torso: the left shoulder winds back, then drives through
+    tb.spine.parent!.getWorldQuaternion(_tPq);
+    _tDq.setFromAxisAngle(_tY, twist * w);
+    tb.spine.quaternion.premultiply(_tInv.copy(_tPq).invert().multiply(_tDq).multiply(_tPq));
+    aimBone(tb.arm, tb.fore, _tUp.applyQuaternion(_tRoot), w);
+    aimBone(tb.fore, tb.hand, _tFo.applyQuaternion(_tRoot), w);
   }
 
   private animZombie(z: Zombie, dt: number): void {
@@ -540,6 +588,32 @@ export class GlbCharacterView {
     this.root.removeFromParent();
     this.deadMat?.dispose();
   }
+}
+
+const _ts = new THREE.Vector3();
+const _tUp = new THREE.Vector3();
+const _tFo = new THREE.Vector3();
+const _tUpRel = new THREE.Vector3(0.22, 0.78, 0.58);
+const _tUpFol = new THREE.Vector3(0.12, -0.3, 0.95);
+const _tFoRel = new THREE.Vector3(0.0, 0.55, 0.84);
+const _tFoFol = new THREE.Vector3(-0.2, -0.45, 0.87);
+const _tY = new THREE.Vector3(0, 1, 0);
+const _tRoot = new THREE.Quaternion();
+const _tPq = new THREE.Quaternion();
+const _tDq = new THREE.Quaternion();
+const _tInv = new THREE.Quaternion();
+const _tBq = new THREE.Quaternion();
+const _tAim = new THREE.Quaternion();
+const _tAlong = new THREE.Vector3();
+
+/** Turn bone `b` (weight w) so the direction to its child `child` points along `dir` (world space, unit length). */
+function aimBone(b: THREE.Bone, child: THREE.Object3D, dir: THREE.Vector3, w: number): void {
+  b.parent!.getWorldQuaternion(_tPq);
+  _tBq.copy(_tPq).multiply(b.quaternion);
+  _tAlong.copy(child.position).normalize().applyQuaternion(_tBq);
+  _tAim.setFromUnitVectors(_tAlong, dir).multiply(_tBq);
+  _tAim.premultiply(_tPq.invert());
+  b.quaternion.slerp(_tAim, w);
 }
 
 function fallbackLoco(n: Loco): Loco {

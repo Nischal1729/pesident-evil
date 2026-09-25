@@ -13,6 +13,7 @@ import { Post } from '../render/Post';
 import { CameraRig } from '../render/CameraRig';
 import { CharacterManager, WeaponModels } from '../render/Characters';
 import { GlbCharacterLibrary } from '../render/GlbCharacters';
+import { GrenadeView } from '../render/Grenades';
 import { gateInward, stationY, World } from '../sim/World';
 import { applyTerrain, setTerrainEnabled } from '../world/terrain';
 import type { Look } from '../sim/actors';
@@ -35,6 +36,7 @@ interface FxLike {
   bloodPool?(pos: THREE.Vector3, scale?: number): void;
   melee?(point: THREE.Vector3, dir: THREE.Vector3): void;
   gateHit?(point: THREE.Vector3): void;
+  explosion?(pos: THREE.Vector3, floorY?: number): void;
   shellEject?(pos: THREE.Vector3, right: THREE.Vector3, weapon: string): void;
   update(dt: number): void;
   setNight?(n: number): void;
@@ -62,6 +64,7 @@ export class Game {
   post!: Post;
   rig!: CameraRig;
   chars!: CharacterManager;
+  grenades!: GrenadeView;
   weapons = new WeaponModels();
   charLib = new GlbCharacterLibrary();
   hud!: Hud;
@@ -159,6 +162,7 @@ export class Game {
     this.rig.baseFov = this.settings.fov;
     this.chars = new CharacterManager(this.engine.scene, this.weapons, this.q, this.charLib);
     this.chars.outline = this.post.outline.selection;
+    this.grenades = new GrenadeView(this.engine.scene);
     const fxLoader = Object.values(fxModules)[0];
     if (fxLoader) {
       try {
@@ -214,6 +218,7 @@ export class Game {
     warm.position.y = -1000;
     warm.traverse((o) => { o.castShadow = true; });
     scene.add(warm);
+    this.grenades.prewarm(true);
     renderer.setRenderTarget(this.post.composer.inputBuffer);
     renderer.compile(scene, camera);
     renderer.setRenderTarget(null);
@@ -227,6 +232,7 @@ export class Game {
     for (const o of outlined) this.post.outline.selection.delete(o);
     for (const o of culled) o.frustumCulled = true;
     warm.removeFromParent();
+    this.grenades.prewarm(false);
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -313,6 +319,12 @@ export class Game {
     }));
     off.push(ev.on('death', (e) => { if (e.kind === 'zombie') setTimeout(() => this.fx?.bloodPool?.(e.position, 0.8 + Math.random() * 0.5), 700); }));
     off.push(ev.on('gateHit', (e) => this.fx?.gateHit?.(e.position.clone().setY(1.2))));
+    off.push(ev.on('grenadeExplode', (e) => {
+      this.fx?.explosion?.(e.position, e.floorY);
+      // shake by distance from the camera: a jolt up close, a rumble across the quad
+      const d = e.position.distanceTo(this.engine.camera.position);
+      this.rig.addShake(THREE.MathUtils.clamp(1.15 - d / 28, 0, 1.1));
+    }));
     this.detach.push(() => off.forEach((o) => o()));
   }
 
@@ -350,6 +362,7 @@ export class Game {
     }
     this.world = null;
     this.chars.sync({ survivors: [], zombies: [] } as unknown as World, 1, 0, this.engine.camera.position);
+    this.grenades.update(null, 1, 0);
     // restore gates visually
     for (const [id] of this.campus.gates) {
       this.poseGate(id, 0);
@@ -404,6 +417,7 @@ export class Game {
       const alpha = this.acc / this.fixed;
       const p = w.player!;
       this.chars.sync(w, alpha, dt, e.camera.position);
+      this.grenades.update(w, alpha, dt);
       const pp = new THREE.Vector3().lerpVectors(p.prev, p.pos, alpha);
       const sprinting = this.pin.sprint && this.pin.moveZ > 0 && Math.hypot(p.vel.x, p.vel.z) > 5;
       this.rig.update(dt, pp, this.input.yaw, this.input.pitch, p.aiming && !p.downed, sprinting, p.downed);
@@ -439,7 +453,7 @@ export class Game {
     for (let i = 0; i < steps; i++) {
       this.inputs.set(w.localPlayerId, pin);
       w.update(this.fixed, this.inputs);
-      pin.reload = pin.jump = pin.melee = pin.interactPressed = false;
+      pin.reload = pin.jump = pin.melee = pin.interactPressed = pin.grenade = false;
       pin.weaponSlot = -1;
     }
   }
@@ -534,7 +548,7 @@ export class Game {
     STATIONS.forEach((s, i) => {
       m4.makeTranslation(s.pos[0], (this.multiLevel ? stationY(s) : 0) + 0.08, s.pos[1]);
       mesh.setMatrixAt(i, m4);
-      col.set(s.kind === 'ammo' ? 0xf2b233 : s.kind === 'health' ? 0xe5484d : 0x46c46e).multiplyScalar(2);
+      col.set(s.kind === 'ammo' ? 0xf2b233 : s.kind === 'health' ? 0xe5484d : s.kind === 'grenade' ? 0xb8c46a : 0x46c46e).multiplyScalar(2);
       mesh.setColorAt(i, col);
     });
     mesh.frustumCulled = false;
