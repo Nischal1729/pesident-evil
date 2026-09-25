@@ -864,6 +864,30 @@ export class World {
     if (input.fallDmg > 0) this.damageSurvivor(p, input.fallDmg, null);
   }
 
+  private predFireCd = 0;
+  private predPrevFire = false;
+
+  /**
+   * Co-op client: show our own shot (muzzle flash, tracer, sound, recoil) the tick the trigger is pulled instead of a
+   * round trip later. Only a 'shot' event marked predicted; the host still decides hits, damage and ammo.
+   */
+  predictShot(dt: number, input: PlayerInput): void {
+    const p = this.player;
+    this.predFireCd -= dt;
+    const pressed = input.fire && !this.predPrevFire;
+    this.predPrevFire = input.fire;
+    if (!p || !p.active || p.mantle || !input.fire || this.predFireCd > 0) return;
+    const d = p.def;
+    if (d.kind !== 'gun' || p.reloadT >= 0 || p.switchT >= 0 || p.meleeT >= 0 || p.slot.mag <= 0) return;
+    if (!d.auto && !pressed) return;
+    this.predFireCd = 60 / d.rpm;
+    forwardFromYawPitch(input.yaw, input.pitch, _camDir);
+    _fireOrigin.set(input.camX, input.camY, input.camZ);
+    _aimPivot.set(p.pos.x, p.pos.y + CAM.pivotY, p.pos.z);
+    const end = this.aimPoint(_fireOrigin, _camDir, 250, _v3, _aimPivot).clone();
+    this.events.emit('shot', { shooterId: p.id, weapon: d.id, origin: this.muzzlePos(p, _v).clone(), end, hitSurface: null, predicted: true });
+  }
+
   /** Co-op client: move the local player one fixed tick. Everything else comes from the host's snapshots. */
   predictLocal(dt: number, input: PlayerInput): void {
     const p = this.player;

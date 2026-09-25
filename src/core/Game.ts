@@ -456,8 +456,10 @@ export class Game {
     const dir = new THREE.Vector3();
     let lastRecoilT = -1; // a shotgun trigger pull emits several local 'shot' events in one tick; kick once
     off.push(ev.on('shot', (e) => {
+      // a co-op client drew its own shots already (World.predictShot): skip the host's echo of them
+      if (world.role === 'client' && e.shooterId === world.localPlayerId && !e.predicted) return;
       // recoil moves the aim, so it must not depend on the FX module having loaded
-      if (e.shooterId === world.localPlayerId && world.time !== lastRecoilT) {
+      if (e.shooterId === world.localPlayerId && (e.predicted || world.time !== lastRecoilT)) {
         lastRecoilT = world.time;
         this.input.addRecoil(WEAPONS[e.weapon as keyof typeof WEAPONS]?.recoil ?? 0.02, world.player!.aiming);
       }
@@ -592,6 +594,7 @@ export class Game {
             // our own movement runs here (no lag); the host takes the pose, everything else comes back in snapshots
             if (client.ready) {
               w.predictLocal(this.fixed, this.pin);
+              w.predictShot(this.fixed, this.pin);
               client.sendInput(this.pin, w.player!, !!w.player!.mantle);
             }
           } else {

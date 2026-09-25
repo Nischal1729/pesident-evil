@@ -4,7 +4,7 @@ export type SurfaceKind = 'flesh' | 'concrete' | 'metal' | 'wood' | 'ground';
 
 /** Gameplay events. Payloads are plain data so they can be networked later. */
 export interface GameEvents {
-  shot: { shooterId: number; weapon: string; origin: Vector3; end: Vector3; hitSurface: SurfaceKind | null };
+  shot: { shooterId: number; weapon: string; origin: Vector3; end: Vector3; hitSurface: SurfaceKind | null; /** co-op client: drawn locally ahead of the host's */ predicted?: boolean };
   hit: { targetId: number; attackerId: number; damage: number; point: Vector3; normal: Vector3; headshot: boolean; surface: SurfaceKind };
   impact: { point: Vector3; normal: Vector3; surface: SurfaceKind };
   death: { id: number; kind: 'zombie' | 'npc' | 'player'; killerId: number; headshot: boolean; position: Vector3 };

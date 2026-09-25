@@ -94,7 +94,7 @@ export class Hud {
     on('waveStart', (e) => this.bannerShow(`WAVE ${e.wave}`, e.wave === 1 ? 'They broke through the Ring Road. Hold the main gate!' : `${e.count} of them. Stay together.`));
     on('waveEnd', (e) => this.bannerShow(`WAVE ${e.wave} SURVIVED`, 'Restock at the ammo crates. Repair the gate (hold E).', 'good'));
     on('gateBroken', () => this.bannerShow('GATE BREACHED', 'Fall back and regroup!', 'bad'));
-    on('pickup', (e) => { if (e.kind === 'weapon') this.message(`Picked up ${WEAPONS[e.item as keyof typeof WEAPONS]?.name ?? e.item}`, 'good'); });
+    on('pickup', (e) => { if (e.kind === 'weapon' && e.playerId === world.localPlayerId) this.message(`Picked up ${WEAPONS[e.item as keyof typeof WEAPONS]?.name ?? e.item}`, 'good'); });
     on('downed', (e) => { const s = world.survivors.find((x) => x.id === e.id); if (s && s.id !== world.localPlayerId) this.message(`${s.name} is down! Hold E near them to revive.`, 'warn'); });
     this.lastBoard = '';
     for (const [, pe] of this.plateEls) pe.remove();
