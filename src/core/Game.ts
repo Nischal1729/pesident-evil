@@ -161,13 +161,61 @@ export class Game {
     this.buildStationMarkers();
     this.menu.setProgress(0.95, 'Warming up shaders…');
     this.menuCamera(0);
-    this.engine.renderer.compile(this.engine.scene, this.engine.camera);
+    this.warmShaders();
     this.menu.setProgress(1, 'Ready');
     this.state = 'menu';
     this.menu.show('main');
     (window as unknown as { game: Game }).game = this;
     this.last = performance.now();
     requestAnimationFrame(this.loop);
+  }
+
+  /**
+   * Compile every program play will need before the first frame. A program's cache key includes the output colour
+   * space of the bound render target, and the scene is only ever drawn into the composer's buffers, so compile with
+   * one of them bound. Stand-ins cover what only exists in play (characters, the transparent corpse-fade copy of
+   * their material, weapons, pickups). compile() skips the shadow-depth and outline variants, so one frame is also
+   * drawn with frustum culling off and the stand-in outlined: every object reaches every pass once. A second frame
+   * covers the shadow-depth variants built after an outline frame. The renderer draws shadows before it sets up the
+   * frame's lights, so their key carries the light count of the previous render, and the outline mask pass renders
+   * only the selection layer, which holds no lights. The stand-in materials are never disposed: their programs stay
+   * referenced after the last corpse's private material is disposed, so the next death does not recompile.
+   */
+  private warmShaders(): void {
+    const { renderer, scene, camera } = this.engine;
+    const warm = new THREE.Group();
+    const outlined: THREE.Object3D[] = [];
+    if (this.charLib.ready) {
+      for (const corpse of [false, true]) {
+        const { root, mesh } = this.charLib.instantiate('male', this.charLib.variant('male', {}));
+        if (corpse) {
+          const m = (mesh.material as THREE.Material).clone();
+          m.transparent = true;
+          m.depthWrite = false;
+          mesh.material = m;
+        } else outlined.push(mesh);
+        warm.add(root);
+      }
+    }
+    for (const id of ['pistol', 'smg', 'rifle', 'shotgun', 'bat'] as const) warm.add(this.weapons.create(id));
+    for (const k of ['ammo', 'health'] as const) warm.add(new THREE.Mesh(this.pickupGeo[k], this.pickupMat[k]));
+    // far below the ground, so the warm-up frame shows nothing extra
+    warm.position.y = -1000;
+    warm.traverse((o) => { o.castShadow = true; });
+    scene.add(warm);
+    renderer.setRenderTarget(this.post.composer.inputBuffer);
+    renderer.compile(scene, camera);
+    renderer.setRenderTarget(null);
+    const culled: THREE.Object3D[] = [];
+    scene.traverse((o) => { if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+    for (const o of outlined) this.post.outline.selection.add(o);
+    this.sky.follow(camera.position);
+    this.sky.prepare(camera);
+    this.post.render(0, 0);
+    this.post.render(0, 0);
+    for (const o of outlined) this.post.outline.selection.delete(o);
+    for (const o of culled) o.frustumCulled = true;
+    warm.removeFromParent();
   }
 
   // -----------------------------------------------------------------------------------------------
