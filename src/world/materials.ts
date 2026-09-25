@@ -381,8 +381,8 @@ export const FACADE_STYLES: Record<FacadeStyle | 'house', FacadeParams> = {
   mrd: S({ wall: C('#c8b89e'), band: C('#bdae94'), frame: C('#23272b'), glass: C('#34414b'), bayW: 4.2, winW: 0.3, sill: 0.9, winH: 1.6, bandH: 0, mullions: 1, curtain: 0, topBand: 1.6, topColor: C('#1f2b45'), panel: [1.0, 0.5], baseH: 0, baseMode: 0, glassRough: 0.06, glassMetal: 0.55, litChance: 0.35, dirt: 0.4, reveal: 0.22 }),
   // B-Block: beige plaster, pilaster strips, near-square windows, louvre vents, pink-grey stone base (2 floors)
   bblock: S({ wall: C('#e0cfb6'), band: C('#d4c4ad'), frame: C('#2f3a40'), glass: C('#7f93a0'), bayW: 3.5, winW: 0.37, sill: 1.0, winH: 1.4, bandH: 0, mullions: 1, topBand: 1.0, topColor: C('#d8c9b3'), pilaster: 1, pilasterW: 0.55, louvre: 0.28, baseH: 7.0, baseMode: 2, baseColor: C('#a89484'), glassRough: 0.05, glassMetal: 0.7, dirt: 0.2, reveal: 0.22 }),
-  // B-Block crest tower: buff stone, tiny square windows
-  bblockTower: S({ wall: C('#c4b095'), band: C('#bba88c'), frame: C('#3a3a36'), glass: C('#3a434a'), bayW: 3.0, winW: 0.27, sill: 1.3, winH: 0.8, bandH: 0, mullions: 0, topBand: 0.9, topColor: C('#b8a386'), panel: [1.2, 0.6], litChance: 0.25, reveal: 0.3 }),
+  // B-Block crest tower: buff stone panels, small paired windows in a grid (key frames 0002 / 1928)
+  bblockTower: S({ wall: C('#c4b095'), band: C('#bba88c'), frame: C('#3a3a36'), glass: C('#3a434a'), bayW: 3.6, winW: 0.3, sill: 1.2, winH: 1.25, bandH: 0, mullions: 1, topBand: 0.9, topColor: C('#b8a386'), panel: [1.2, 0.6], litChance: 0.25, reveal: 0.3 }),
   // F-Block tower: terracotta render, deep windows paired with beige vertical panels, heavy cornice
   fTower: S({ wall: C('#b45a45'), band: C('#e3d2b0'), frame: C('#3b2f2a'), glass: C('#2c2a2a'), bayW: 2.4, recess: 1, bandH: 0, topBand: 1.5, topColor: C('#a24c3a'), litChance: 0.35 }),
   // F-Block wings: cream with continuous open-corridor balcony bands
