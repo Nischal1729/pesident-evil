@@ -100,8 +100,14 @@ export function buildMRD(kit: WorldKit, signs: SignUVs): void {
     const cp = [P(-hw, 0), P(hw, 0), P(hw, d), P(-hw, d)];
     kit.collision.addPolygon(cp, yt1 - ys0, 'concrete', 'mrd:canopy', ys0);
   }
-  // perforated metal screen on the navy top cornice of the entrance block
-  { const top = (east.top ?? (east.floorH ?? 3.8) * east.floors); kit.segBox('metal', A, B, top + 0.1, top + 1.9, 0.08, col('#3f444a'), 1.05, 0, 0.3); }
+  // navy top cornice of the entrance block (the refurbished wings' 'mrd' ledge: 1 m deep, 0.45 m thick, top at roof +
+  // 0.1; the 'glass' facade style adds none) with the perforated metal screen standing on its outer edge (it floated
+  // 1.05 m out from the face with nothing under it)
+  {
+    const top = (east.top ?? (east.floorH ?? 3.8) * east.floors);
+    kit.segBox('stone', A, B, top - 0.35, top + 0.1, 1.0, NAVY, 0.5, 0, 0.5);
+    kit.segBox('metal', A, B, top + 0.1, top + 1.9, 0.08, col('#3f444a'), 0.93, 0, 0.3);
+  }
 
   // ---------------------------------------------------------------- navy cantilever slabs on the refurbished stone wings (SE tower + NE block)
   const se = bld('mrd_se'), ne = bld('mrd_ne');
