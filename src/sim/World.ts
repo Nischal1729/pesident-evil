@@ -1564,7 +1564,7 @@ export function turnToward(cur: number, target: number, maxStep: number): number
 }
 
 /** perturb()'s rand() is floored at 1e-6, so this is the largest multiple of `spread` it can ever deviate by. */
-const SPREAD_MAX = Math.sqrt(-2 * Math.log(1e-6)) * 0.5;
+export const SPREAD_MAX = Math.sqrt(-2 * Math.log(1e-6)) * 0.5;
 
 function perturb(dir: THREE.Vector3, spread: number, out: THREE.Vector3, rand: () => number): THREE.Vector3 {
   if (spread <= 0) return out.copy(dir);
