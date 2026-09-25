@@ -507,7 +507,12 @@ export class CampusBuilder {
         const th = w.kind === 'hoarding' ? 0.12 : 0.45;
         buf.box(cx, w.height / 2, cz, len + th, w.height, th, rot, undefined, w.kind === 'stone' ? 0.5 : 0.33);
         if (w.kind !== 'hoarding') coping.box(cx, w.height + 0.06, cz, len + 0.6, 0.12, 0.6, rot, undefined, 0.5);
-        this.collision.addSegment(a, b, Math.max(th, 0.4), w.height + 0.2, w.kind === 'hoarding' ? 'metal' : 'concrete', 'wall');
+        if (w.kind === 'hoarding') this.collision.addSegment(a, b, 0.4, w.height + 0.2, 'metal', 'wall');
+        else {
+          // walkable top at the coping; WALLS run with the outside on the left, so (−dz, dx) is the outward normal
+          const id = this.collision.addSegment(a, b, th, w.height + 0.12, 'concrete', 'boundary');
+          this.collision.setLip(id, -dz / len, dx / len);
+        }
         if (w.kind === 'stone') {
           const n = Math.floor(len / 4);
           for (let k = 0; k <= n; k++) {
