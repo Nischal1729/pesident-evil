@@ -119,6 +119,9 @@ export class Survivor extends Actor {
 
 export type ZombieState = 'chase' | 'attack' | 'gate' | 'dead' | 'stagger';
 
+export const CORPSE_FADE_START = 4.4; // 1.4 s ZombieDeathForward clip + 3 s lying
+export const CORPSE_FADE_DUR = 1.0;
+
 export class Zombie extends Actor {
   type: ZombieType = 'walker';
   state: ZombieState = 'chase';
@@ -132,6 +135,7 @@ export class Zombie extends Actor {
   attackCd = 0;
   stunT = 0;
   deadT = 0;
+  deathYaw = 0;
   gateIdx = -1;
   groanT = 0;
   variant = 0;

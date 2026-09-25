@@ -4,7 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Assets } from '../core/Assets';
 import type { QualityProfile } from '../core/Settings';
-import type { Actor, AnimHints, Look, Survivor, Zombie } from '../sim/actors';
+import { type Actor, type AnimHints, type Look, type Survivor, type Zombie, CORPSE_FADE_DUR, CORPSE_FADE_START } from '../sim/actors';
 import type { WeaponId } from '../sim/weapons';
 import type { WeaponModels } from './Characters';
 
@@ -343,6 +343,7 @@ export class GlbCharacterView {
   private lastFireT = 99;
   private lastAttackP = -1;
   private deathPlayed = false;
+  private deadMat: THREE.Material | null = null;
   private natural: Map<string, number>;
   private speedS = 0;
   private aimS = 0;
@@ -443,8 +444,13 @@ export class GlbCharacterView {
         this.mixer.stopAllAction();
         this.weights.clear();
         this.oneShot(this.full.get(an.deathVariant ? 'ZombieDeathForward' : 'ZombieDeath') ?? this.full.get('Death'), true);
+        // every view of a body shares one template material: fade a private copy
+        this.deadMat = (this.mesh.material as THREE.Material).clone();
+        this.deadMat.transparent = true;
+        this.mesh.material = this.deadMat;
       }
-      if (an.deadT > 10) this.root.position.y -= (an.deadT - 10) * 0.25;
+      const f = THREE.MathUtils.clamp((an.deadT - CORPSE_FADE_START) / CORPSE_FADE_DUR, 0, 1);
+      if (f > 0 && this.deadMat) { this.deadMat.opacity = 1 - f; this.deadMat.depthWrite = false; this.mesh.castShadow = false; }
       return;
     }
     if (an.attackP >= 0 && this.lastAttackP < 0) this.oneShot(this.full.get('ZombieAttack'));
@@ -532,6 +538,7 @@ export class GlbCharacterView {
   dispose(): void {
     this.mixer.stopAllAction();
     this.root.removeFromParent();
+    this.deadMat?.dispose();
   }
 }
 

@@ -4,7 +4,7 @@ import type { PlayerInput } from '../core/Input';
 import { GATES, NPC_SPAWNS, PLAYER_SPAWN, PLAYER_SPAWN_YAW, SPAWN_ZONES, STATIONS, WORLD_BOUNDS, type StationDef, type V2 } from '../world/layout';
 import { distToSegment, rng } from '../world/geom';
 import { CAM, cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
-import { Survivor, Zombie, type Look, type ZombieType } from './actors';
+import { CORPSE_FADE_DUR, CORPSE_FADE_START, Survivor, Zombie, type Look, type ZombieType } from './actors';
 import { STEP_UP, type StaticCollision } from './Collision';
 import { INF } from './flowfield';
 import { LayeredNav } from './LayeredNav';
@@ -818,7 +818,14 @@ export class World {
     z.state = 'dead';
     z.deadT = 0;
     z.anim.dead = true;
-    z.anim.deathVariant = this.rand() < 0.5 ? 0 : 1;
+    // Topple in the direction of the last hit: forward = the hit direction when it came from behind (a forward
+    // stumble), forward = its opposite when hit from the front (a backward fall). Either way the corpse turns
+    // at most 90 degrees to face `deathYaw` (see cleanupCorpses).
+    const hx = z.anim.hitDirX, hz = z.anim.hitDirZ;
+    const fx = -Math.sin(z.yaw), fz = -Math.cos(z.yaw);
+    if (hx === 0 && hz === 0) { z.deathYaw = z.yaw; z.anim.deathVariant = 0; }
+    else if (hx * fx + hz * fz > 0) { z.anim.deathVariant = 1; z.deathYaw = Math.atan2(-hx, -hz); }
+    else { z.anim.deathVariant = 0; z.deathYaw = Math.atan2(hx, hz); }
     z.anim.attackP = -1;
     z.vel.set(0, 0, 0);
     this.totalKills++;
@@ -1078,14 +1085,13 @@ export class World {
   }
 
   private cleanupCorpses(dt: number): void {
-    let corpses = 0;
     for (let i = this.zombies.length - 1; i >= 0; i--) {
       const z = this.zombies[i];
       if (z.alive) continue;
       z.deadT += dt;
       z.anim.deadT = z.deadT;
-      corpses++;
-      if (z.deadT > 14 || (corpses > 30 && z.deadT > 3)) this.zombies.splice(i, 1);
+      if (z.deadT < 0.3) z.yaw = turnToward(z.yaw, z.deathYaw, 8 * dt);
+      if (z.deadT > CORPSE_FADE_START + CORPSE_FADE_DUR) this.zombies.splice(i, 1);
     }
   }
 

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../core/Assets';
 import type { QualityProfile } from '../core/Settings';
-import type { Actor, AnimHints, Look, Survivor, Zombie } from '../sim/actors';
+import { type Actor, type AnimHints, type Look, type Survivor, type Zombie, CORPSE_FADE_DUR, CORPSE_FADE_START } from '../sim/actors';
 import type { World } from '../sim/World';
 import type { WeaponId } from '../sim/weapons';
 import { buildCharacterGeometry, buildSkeleton, type BodyColors, type BoneName } from './ProceduralCharacter';
@@ -95,6 +95,7 @@ export class CharacterView {
   private lod = 0;
   private frame = 0;
   private variant: number;
+  private deadMat: THREE.Material | null = null;
 
   constructor(public actor: Actor, colors: BodyColors, material: THREE.Material, private weapons: WeaponModels | null, prebuilt?: ReturnType<typeof buildCharacterGeometry>, private sharedGeo = false) {
     const { geometry, bindPositions } = prebuilt ?? buildCharacterGeometry(colors);
@@ -189,7 +190,7 @@ export class CharacterView {
     this.lastFireT = an.fireT;
     this.recoil = Math.max(0, this.recoil - dt * 12);
 
-    if (an.dead) { this.poseDead(an, dt, 0); return; }
+    if (an.dead) { this.poseDead(an, dt); return; }
     if (an.downed) { this.poseDowned(); this.placeWeapon('down'); return; }
     if (an.reviving) { this.poseKneel(); this.placeWeapon('down'); return; }
 
@@ -325,14 +326,13 @@ export class CharacterView {
     b.LeftForeArm.rotation.x = -0.3; b.RightForeArm.rotation.x = -0.3;
   }
 
-  private poseDead(an: AnimHints, _dt: number, extraSink: number): void {
+  private poseDead(an: AnimHints, _dt: number): void {
     const b = this.bones;
     const f = THREE.MathUtils.clamp(an.deadT / 0.65, 0, 1);
     const e = f * f * (3 - 2 * f);
     const forward = an.deathVariant === 1;
     // tip the whole mesh over around the feet
     this.mesh.rotation.x = (forward ? 1 : -1) * e * (Math.PI / 2 - 0.08);
-    this.mesh.position.y = -extraSink;
     this.mesh.position.z = (forward ? 0.25 : -0.2) * e;
     b.LeftArm.rotation.set(forward ? -2.6 * e : -0.4 * e, 0, 0.9 * e);
     b.RightArm.rotation.set(forward ? -2.4 * e : -0.2 * e, 0, -1.1 * e);
@@ -348,8 +348,11 @@ export class CharacterView {
     this.reset();
     this.speedS += (an.speed - this.speedS) * Math.min(1, dt * 8);
     if (an.dead) {
-      const sink = an.deadT > 10 ? (an.deadT - 10) * 0.25 : 0;
-      this.poseDead(an, dt, sink);
+      // the manager's zombie material is shared by every view: fade a private copy
+      if (!this.deadMat) { this.deadMat = (this.mesh.material as THREE.Material).clone(); this.deadMat.transparent = true; this.mesh.material = this.deadMat; }
+      const f = THREE.MathUtils.clamp((an.deadT - CORPSE_FADE_START) / CORPSE_FADE_DUR, 0, 1);
+      if (f > 0) { this.deadMat.opacity = 1 - f; this.deadMat.depthWrite = false; this.mesh.castShadow = false; }
+      this.poseDead(an, dt);
       return;
     }
     const v = this.variant;
@@ -412,6 +415,7 @@ export class CharacterView {
     this.root.removeFromParent();
     if (!this.sharedGeo) this.mesh.geometry.dispose();
     this.mesh.skeleton.dispose();
+    this.deadMat?.dispose();
   }
 }
 
