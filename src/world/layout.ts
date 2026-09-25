@@ -602,9 +602,10 @@ export const WALLS: WallDef[] = [
   { kind: 'hoarding', height: 3.2, pts: [[-72, -96.5], [-72, 142]] },
   // south boundary behind the hostels
   { kind: 'stone', height: 2.5, pts: [[-72, 142], [80, 142], [80, 78]] },
-  // east: F-block → around the HPC lab / food point (granite), then the 2-wheeler parking's back wall (the parking's
-  // lawn-facing corten + green-mesh screen is built with the parking, src/world/gjb/parking.ts), then to the gate building
-  { kind: 'stone', height: 2.5, pts: [[127.8, 62], [154, 12], [154, PARKING.backZ1], [PARKING.backX, PARKING.backZ1]] },
+  // east: from just inside F-Block's east corner (no gap to squeeze through) around the HPC lab / food point (granite),
+  // then the 2-wheeler parking's back wall (the parking's lawn-facing corten + green-mesh screen is built with the
+  // parking, src/world/gjb/parking.ts), then to the gate building
+  { kind: 'stone', height: 2.5, pts: [[126.0, 60.8], [154, 12], [154, PARKING.backZ1], [PARKING.backX, PARKING.backZ1]] },
   { kind: 'plaster', height: PARKING.roof + 1.0, pts: [[PARKING.backX, PARKING.backZ1], [PARKING.backX, PARKING.backZ0]] },
   { kind: 'plaster', height: 2.6, pts: [[PARKING.backX, PARKING.backZ0], [156.2, PARKING.backZ0]] },
 ];

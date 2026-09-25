@@ -413,13 +413,17 @@ function labSigns(): THREE.Mesh {
   // top half: PES Innovation Lab (navy with an orange mark); bottom half: Huawei (white with a red mark)
   x.fillStyle = '#12284b'; x.fillRect(0, 0, 512, 128);
   x.fillStyle = '#f28c28'; x.fillRect(24, 34, 60, 60);
-  x.fillStyle = '#ffffff'; x.font = 'bold 44px sans-serif'; x.textBaseline = 'middle';
-  x.fillText('PES INNOVATION LAB', 100, 66);
+  x.textBaseline = 'middle';
+  // shrink the font until the text fits between the mark and the right edge
+  const fit = (text: string, x0: number, y: number, size: number) => {
+    for (; size > 16; size -= 2) { x.font = `bold ${size}px sans-serif`; if (x.measureText(text).width <= 500 - x0) break; }
+    x.fillText(text, x0, y);
+  };
+  x.fillStyle = '#ffffff'; fit('PES INNOVATION LAB', 100, 66, 44);
   x.fillStyle = '#ffffff'; x.fillRect(0, 128, 512, 128);
   x.fillStyle = '#cf0a2c';
   for (let k = 0; k < 8; k++) { x.save(); x.translate(70, 196); x.rotate((k / 8) * Math.PI * 2); x.beginPath(); x.ellipse(0, -22, 7, 20, 0, 0, Math.PI * 2); x.fill(); x.restore(); }
-  x.fillStyle = '#1b1b1b'; x.font = 'bold 40px sans-serif';
-  x.fillText('INNOVATION LAB', 118, 194);
+  x.fillStyle = '#1b1b1b'; fit('HUAWEI INNOVATION LAB', 112, 194, 40);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;

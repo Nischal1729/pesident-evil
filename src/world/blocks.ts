@@ -28,8 +28,10 @@ function itBlockParapet(kit: WorldKit): void {
     // raised merlons with square openings between them, a heavier block at each corner
     const n = Math.max(1, Math.floor(len / 3.2));
     for (let k = 0; k <= n; k++) {
-      const d = (len * k) / n, corner = k === 0 || k === n;
+      const corner = k === 0 || k === n;
       const w = corner ? 1.6 : 1.1, h = corner ? 1.6 : 1.1;
+      // the corner blocks end at the corner (the two edges' blocks meet in an L) instead of overhanging it by w / 2
+      const d = k === 0 ? w / 2 : k === n ? len - w / 2 : (len * k) / n;
       const cx = a[0] + ux * d - nx * 0.18, cz = a[1] + uz * d - nz * 0.18;
       kit.box('plaster', cx, top + h / 2, cz, w, h, 0.36, rot, cream, 0.5);
     }

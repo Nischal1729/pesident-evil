@@ -5,6 +5,7 @@ import { col, type WorldKit } from './kit';
 import { BUILDINGS, type V2 } from './layout';
 import { netTexture } from './materials';
 import { buildMrdInterior } from './mrdInterior';
+import { segPoly } from './gjb/util';
 import { outwardNormal, pottedPlant, quad3, type P3 } from './shapes';
 import type { SignUVs } from './signs';
 
@@ -62,10 +63,12 @@ export function buildMRD(kit: WorldKit, signs: SignUVs): void {
     const a = P(W / 2 + 0.1, 0.6), b = P(W / 2 + 0.1, F + run);
     kit.segBox('stone', a, b, 0, 1.25, 1.1, col('#d9d6cf'), -0.55, 0, 0.5);
     kit.segBox('hedge', a, b, 1.2, 1.75, 0.95, col('#8a4a78'), -0.55, -0.2, 0.5);
+    kit.collision.addPolygon(segPoly(a, b, 1.1, -0.55), 1.25, 'concrete', 'mrd:planter');
     const tp = P(W / 2 + 2.6, F + run - 1.2);
     kit.addTree('rain', tp[0], tp[1], 0.95);
     const c0 = P(-W / 2 - 0.3, 0.3), c1 = P(-W / 2 - 0.3, F + run);
     kit.segBox('polished', c0, c1, 0, topY + 0.35, 0.6, col('#e2e0da'), 0, 0, 0.5);
+    kit.collision.addPolygon(segPoly(c0, c1, 0.6), topY + 0.35, 'concrete', 'mrd:cheek'); // fills the slot beside the flight
     // planted bed filling the wedge between the south end of the flight and the SE wing's north face (no dead pocket)
     const bed: V2[] = [P(-W / 2 - 0.6, 0), [59.9, -139.3], [59.3, -136.4], [62.9, -136.1], [68.4, -135.7], P(-W / 2 - 0.6, F + run)];
     for (let i = 0; i < bed.length; i++) kit.segBox('stone', bed[i], bed[(i + 1) % bed.length], 0, 0.8, 0.25, col('#9d9b96'), 0, 0.1, 0.5);

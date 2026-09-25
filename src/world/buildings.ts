@@ -459,8 +459,8 @@ export class InteriorKit {
     let d = 0;
     for (const [o0, o1, oy0, oy1] of ops) {
       piece(d, o0, y0, y1);
-      piece(o0, o1, y0, oy0); // sill
-      piece(o0, o1, oy1, y1); // lintel
+      piece(o0, o1, y0, Math.min(oy0, y1)); // sill (an opening above this wall's top leaves it whole, not taller)
+      piece(o0, o1, Math.max(oy1, y0), y1); // lintel
       d = o1;
     }
     piece(d, len, y0, y1);
