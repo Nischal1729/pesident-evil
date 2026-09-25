@@ -569,12 +569,12 @@ export class StaticCollision {
     return t;
   }
 
-  /** Line of sight between two points at given heights. */
-  los(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+  /** Line of sight between two points at given heights. Gates are see-through unless solidGates is set. */
+  los(ax: number, ay: number, az: number, bx: number, by: number, bz: number, solidGates = false): boolean {
     const dx = bx - ax, dy = by - ay, dz = bz - az;
     const d = Math.hypot(dx, dy, dz);
     if (d < 1e-4) return true;
-    const h = this.raycast(ax, ay, az, dx / d, dy / d, dz / d, d - 0.05, scratchHit, true);
+    const h = this.raycast(ax, ay, az, dx / d, dy / d, dz / d, d - 0.05, scratchHit, !solidGates);
     return !h || h.tag === 'ground';
   }
 }

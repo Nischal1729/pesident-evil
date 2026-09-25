@@ -1166,7 +1166,8 @@ export class World {
       z.losT -= dt;
       if (z.losT <= 0) {
         z.losT = 0.35 + this.rand() * 0.2;
-        z.hasLos = dist < 14 && this.collision.los(z.pos.x, z.pos.y + 1.2, z.pos.z, target.pos.x, target.pos.y + 1.2, target.pos.z);
+        // steering LOS: gate bars are see-through but not walk-through, so a closed gate sends it to the field (bash)
+        z.hasLos = dist < 14 && this.collision.los(z.pos.x, z.pos.y + 1.2, z.pos.z, target.pos.x, target.pos.y + 1.2, target.pos.z, true);
       }
       if (z.hasLos && dist > 0.1) {
         desiredX = dx / dist; desiredZ = dz / dist;
