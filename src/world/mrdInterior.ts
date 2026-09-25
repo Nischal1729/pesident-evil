@@ -454,17 +454,27 @@ export function buildMrdInterior(kit: WorldKit): void {
     k.glass.wallQuad(pa, pb, win[2], win[3]);
   }
 
-  // ================================================================ far stand-in: opaque glass for the glazing, door and window
+  // ================================================================ far stand-in: opaque glass for the glazing, the OAT-side
+  // facade (its plaster wall round the door and window belongs to the interior LOD, so the far level redraws the whole
+  // wall: plaster, the door and the window, side by side on the outer face)
   const far = new THREE.Group();
   {
-    const g = new GeoBuffer({ color: true });
+    const g = new GeoBuffer({ color: true }), pl = new GeoBuffer({ color: true });
     g.wallQuad(F.at(12.5, -0.12), F.at(-12.7, -0.12), F0, U1, col('#2a343d'), 1, true);
-    const a = F.at(-20.602, 19.0), b = F.at(-20.95, 22.0);
-    g.wallQuad(a, b, 0, 2.8, col('#1c2024'), 1, true);
-    g.wallQuad(a, b, F1 + 0.9, F1 + 2.5, col('#2a343d'), 1, true);
-    const m = new THREE.Mesh(g.toGeometry(), kit.material('glass'));
-    m.name = 'mrd:farFront'; m.matrixAutoUpdate = false; m.updateMatrix();
-    far.add(m);
+    const a = F.at(-20.602, 19.0), b = F.at(-20.95, 22.0), len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const at = (d: number): V2 => [a[0] + ((b[0] - a[0]) * d) / len, a[1] + ((b[1] - a[1]) * d) / len];
+    const plaster = col('#efe7d6'), door = col('#1c2024'), glass = col('#2a343d');
+    const [d0, d1, dTop] = [0.42, 2.62, 2.75], [w0, w1, wy0, wy1] = [0.6, 2.4, F1 + 0.9, F1 + 2.5]; // as the near wall
+    const rect = (buf: GeoBuffer, x0: number, x1: number, y0: number, y1: number, c: THREE.Color) => buf.wallQuad(at(x0), at(x1), y0, y1, c, 1, true);
+    rect(pl, 0, d0, 0, dTop, plaster); rect(g, d0, d1, 0, dTop, door); rect(pl, d1, len, 0, dTop, plaster);
+    rect(pl, 0, len, dTop, wy0, plaster);
+    rect(pl, 0, w0, wy0, wy1, plaster); rect(g, w0, w1, wy0, wy1, glass); rect(pl, w1, len, wy0, wy1, plaster);
+    rect(pl, 0, len, wy1, U2, plaster);
+    for (const [buf, key, name] of [[g, 'glass', 'mrd:farFront'], [pl, 'plaster', 'mrd:farWall']] as const) {
+      const m = new THREE.Mesh(buf.toGeometry(), kit.material(key));
+      m.name = name; m.matrixAutoUpdate = false; m.updateMatrix();
+      far.add(m);
+    }
   }
   {
     const m = new THREE.Mesh(sb.toGeometry(), new THREE.MeshStandardMaterial({ map: SG.tex, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
