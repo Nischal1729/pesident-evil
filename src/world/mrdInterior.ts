@@ -28,6 +28,9 @@ type UV = [number, number, number, number];
 // palette (2026 tour frames): white marble floor with charcoal bands, cream walls and columns, yellow panels, navy cores
 const MARBLE = col('#dddbd4'), BAND = col('#3a3c3e'), CREAM = col('#ece4d2'), COLUMN = col('#efe6cf'), YELLOW = col('#e0b22c');
 const NAVY = col('#1f2b45'), BLACK = col('#1b1c1e'), DOOR = col('#2e2522'), WHITE = col('#f1efe9'), SKIRT = col('#2a2b2d');
+/** Down-facing ceilings: the cool boost offsets the warm ground half of the hemisphere light, which turned the white
+ * ceilings tan (bblock.ts does the same). */
+const CEIL = new THREE.Color(1.02, 1.1, 1.3);
 
 /**
  * The interior's signs on one small canvas (the shared sign atlas is full): the lobby's "education for the real world"
@@ -211,7 +214,7 @@ export function buildMrdInterior(kit: WorldKit): void {
   bench(k, C, -8.0, 8.1, F0, 0);
   bench(k, C, 2.9, 8.1, F0, 0);
   // white ceiling under the mrd_east soffit (lobby, passage, office)
-  k.fflat('plaster', [[-12.7, -0.12], [12.5, -0.12], [12.5, 15.3], [-12.7, 15.3]], U1 - 0.02, WHITE, 2, true);
+  k.fflat('plaster', [[-12.7, -0.12], [12.5, -0.12], [12.5, 15.3], [-12.7, 15.3]], U1 - 0.02, CEIL, 2, true);
   // ceiling light panels
   for (const s of [-9.6, -4.8, 0, 4.8, 9.6]) for (const t of [2.6, 6.6]) k.flight(s, U1 - 0.03, t, 1.2, 0.6);
 
@@ -225,7 +228,9 @@ export function buildMrdInterior(kit: WorldKit): void {
   fwall(k, 'plaster', 1.8, 15.1, 12.3, 15.3, F0, U1, CREAM);
   fwall(k, 'plaster', 12.3, 8.8, 12.5, 15.1, F0, U1, CREAM);
   k.fflat('polished', [[1.8, 8.8], [12.3, 8.8], [12.3, 15.1], [1.8, 15.1]], yl, col('#d2cfc6'), 2);
-  for (const [s, t] of [[5.0, 12.3], [8.3, 12.3]] as V2[]) desk(k, C, s, t, F0); // one row: clear walkways all round
+  // one row of desks with ≥ 2 m walkways all round: the frame is turned ~59° to the 1 m nav grid, so a 1.8 m gap
+  // between the desks, the counter and the cupboards left the corner behind them unreachable
+  for (const [s, t] of [[4.7, 11.8], [8.0, 11.8]] as V2[]) desk(k, C, s, t, F0);
   for (let s = 2.4; s < 11.8; s += 1.0) k.fbox('metal', s, F0, 14.55, s + 0.9, F0 + 2.0, 15.1, col('#8d9096'));
   C.addPolygon(R(2.4, 14.55, 11.8, 15.1), 2.0, 'metal', 'prop', F0);
   k.fbox('wood', 11.0, F0, 9.6, 12.3, F0 + 1.05, 12.6, col('#6b4b33'), 0.5);
@@ -292,7 +297,7 @@ export function buildMrdInterior(kit: WorldKit): void {
   for (const p of slabs) {
     C.addPolygon(F.poly(p), F1 - U1, 'concrete', 'mrd:slab', U1);
     k.fflat('polished', p, F1 + 0.005, MARBLE, 2);
-    k.fflat('plaster', p, U1, WHITE, 2, true);
+    k.fflat('plaster', p, U1, CEIL, 2, true);
   }
   // slab edge fascia round the void and the stairwell
   const edgeRun = (pts: [number, number][], y0: number, y1: number, closed: boolean) => {
@@ -314,7 +319,7 @@ export function buildMrdInterior(kit: WorldKit): void {
       const p = [ring[i], ring[(i + 1) % 8], oct5[(i + 1) % 8], oct5[i]];
       C.addPolygon(F.poly(p), top - und, 'concrete', 'mrd:gallery', und);
       k.fflat('polished', p, top + 0.005, col('#d8d6cf'), 2);
-      k.fflat('plaster', p, und, WHITE, 2, true);
+      k.fflat('plaster', p, und, CEIL, 2, true);
     }
     edgeRun(oct5, und, top, true);
     // gallery ceiling lights
@@ -327,13 +332,13 @@ export function buildMrdInterior(kit: WorldKit): void {
       rel([[-hs, -ht], [-hs, ht], [-hg, g], [-g, hg], [-g, -hg], [-hg, -g]]), rel([[hs, ht], [hs, -ht], [hg, -g], [g, -hg], [g, hg], [hg, g]]),
       rel([[-hs, -ht], [-hg, -g], [hg, -g], [hs, -ht]]), rel([[hs, ht], [hg, g], [-hg, g], [-hs, ht]]),
       [[-16, 19], [-16, 22], [-20.95, 22], [-20.602, 19]] as [number, number][],
-    ]) k.fflat('plaster', p, U2 - 0.02, WHITE, 2, true);
+    ]) k.fflat('plaster', p, U2 - 0.02, CEIL, 2, true);
   }
   // roof round the lantern (ring minus void) — underside seen from the atrium, top seen from the air
   for (let i = 0; i < 8; i++) {
     const p = [ring[i], ring[(i + 1) % 8], oct5[(i + 1) % 8], oct5[i]];
     C.addPolygon(F.poly(p), L.roof - L.roofU, 'concrete', 'mrd:roof', L.roofU);
-    k.fflat('plaster', p, L.roofU, WHITE, 2, true);
+    k.fflat('plaster', p, L.roofU, CEIL, 2, true);
     kit.buf('concrete', F.at(CS, CT)[0], F.at(CS, CT)[1]).flatPoly(F.poly(p), L.roof, col('#b9b3a8'), 3);
   }
   edgeRun(oct5, L.roofU, L.roof, true);
@@ -379,8 +384,10 @@ export function buildMrdInterior(kit: WorldKit): void {
     }
     k.fbox('wood', s0 - 0.02, F1 + 2.4, t0 + 5.1, s0 + 0.22, F1 + 2.55, t0 + 7.3, DOOR, 0.5);
     // green board + teacher's desk on the far wall, desk-bench rows facing it
-    { const p = F.at((s0 + s1) / 2 + 0.1, t1 - 0.215); signQuad(sb, SG.board, p[0], F1 + 1.6, p[1], 3.6, 1.2, -F.n[0], -F.n[1]); }
-    k.fbox('wood', 5.6, F1 + 0.9, t1 - 0.24, 8.8, F1 + 2.3, t1 - 0.2, col('#5a4632'), 0.5);
+    // (the wooden frame stood 2.5 cm in front of the board and hid most of it)
+    const bs = (s0 + 0.2 + s1) / 2;
+    { const p = F.at(bs, t1 - 0.245); signQuad(sb, SG.board, p[0], F1 + 1.6, p[1], 3.6, 1.2, -F.n[0], -F.n[1]); }
+    k.fbox('wood', bs - 1.95, F1 + 0.9, t1 - 0.24, bs + 1.95, F1 + 2.3, t1 - 0.2, col('#5a4632'), 0.5);
     // teacher's desk against the board wall; desk rows packed from the entry end (no player-sized gaps behind them)
     k.fbox('wood', 6.4, F1, t1 - 0.95, 8.4, F1 + 0.78, t1 - 0.2, col('#6b4b33'), 0.5);
     C.addPolygon(R(6.4, t1 - 0.95, 8.4, t1 - 0.2), 0.8, 'wood', 'desk', F1);
@@ -481,7 +488,13 @@ export function mrdGlazing(kit: WorldKit): { doors: V2[] } {
     // door frames + transom panes above the open leaves; the leaves swing in against the reveals
     for (const s of [d0, d1]) { const p = F.at(s, tg); mb.box(p[0], (F0 + U1) / 2, p[1], 0.1, U1 - F0, 0.16, F.rot, frame); }
     const p = F.at((d0 + d1) / 2, tg); mb.box(p[0], F0 + 2.55, p[1], d1 - d0, 0.1, 0.16, F.rot, frame);
-    for (const [s, dir] of [[d0, 1], [d1, -1]] as V2[]) { const q = F.at(s + dir * 0.05, 0.55); mb.box(q[0], F0 + 1.2, q[1], 0.05, 2.3, 1.1, F.rot, frame); }
+    // the glass leaves parked open against the reveals: a slim frame here, the pane in mrdGlazingPanes (the leaf was
+    // one opaque near-black slab)
+    for (const [s, dir] of [[d0, 1], [d1, -1]] as V2[]) {
+      const sl = s + dir * 0.05;
+      for (const t of [0.03, 1.07]) { const q = F.at(sl, t); mb.box(q[0], F0 + 1.2, q[1], 0.06, 2.3, 0.06, F.rot, frame); }
+      for (const y of [F0 + 0.09, F0 + 2.31]) { const q = F.at(sl, 0.55); mb.box(q[0], y, q[1], 0.06, 0.08, 1.1, F.rot, frame); }
+    }
   }
   const sp = F.at(-0.1, tg - 0.05);
   kit.box('stone', sp[0], U1 + 0.25, sp[1], 25.4, 0.5, 0.3, F.rot, col('#1f2b45'), 0.5);
@@ -497,7 +510,10 @@ export function mrdGlazingPanes(k: InteriorKit, doors: V2[]): void {
   for (const [d0, d1] of doors) { runs.push([a, d0]); a = d1; }
   runs.push([a, 12.5]);
   for (const [r0, r1] of runs) k.fpane(r0, tg, r1, tg, F0, U1);
-  for (const [d0, d1] of doors) k.fpane(d0, tg, d1, tg, F0 + 2.6, U1);
+  for (const [d0, d1] of doors) {
+    k.fpane(d0, tg, d1, tg, F0 + 2.6, U1);
+    for (const [s, dir] of [[d0, 1], [d1, -1]] as V2[]) k.fpane(s + dir * 0.05, 0.06, s + dir * 0.05, 1.04, F0 + 0.13, F0 + 2.27); // open leaves
+  }
 }
 
 // ------------------------------------------------------------------------------------------------ pieces
@@ -687,6 +703,9 @@ export function buildMrdAuditorium(kit: WorldKit): void {
   const F0 = L.f0;
   const outline = bd.poly.map((p) => toLocal(p));
   const hall = inset(outline, AUD.wall);
+  // the hall's walls are drawn from 3 cm inside the outline: their outer faces were coplanar with the shell's facade and
+  // z-fought through it (magenta / yellow patches on the outside)
+  const skin = inset(outline, 0.03);
   const worldOut = bd.poly;
   const MAG = col('#a8386c'), RED = col('#8e2b2b'), WOOD = col('#9a6a3e'), SEATY = col('#e8b923');
 
@@ -705,13 +724,14 @@ export function buildMrdAuditorium(kit: WorldKit): void {
     }
     const side = sideInward(outline, a, b);
     const c = (a[1] + b[1]) / 2 > 60 ? col('#e0a92a') : CREAM;
-    k.wall('plaster', a[0], a[1], b[0], b[1], 0, AUD.ceil, AUD.wall, c, openings, null, side);
+    const a2 = skin[i], b2 = skin[(i + 1) % outline.length];
+    k.wall('plaster', a2[0], a2[1], b2[0], b2[1], 0, AUD.ceil, AUD.wall - 0.03, c, openings, null, side);
     wallCollision(C, a, b, 0, AUD.roofTop, AUD.wall, side, openings);
     // magenta band + skirting on every wall
-    k.wall('plaster', a[0], a[1], b[0], b[1], 4.6, 6.2, AUD.wall + 0.03, MAG, [], null, side);
-    k.wall('polished', a[0], a[1], b[0], b[1], 0, 0.14, AUD.wall + 0.03, SKIRT, openings, null, side);
+    k.wall('plaster', a2[0], a2[1], b2[0], b2[1], 4.6, 6.2, AUD.wall, MAG, [], null, side);
+    k.wall('polished', a2[0], a2[1], b2[0], b2[1], 0, 0.14, AUD.wall, SKIRT, openings, null, side);
   }
-  k.fflat('plaster', hall, AUD.ceil, WHITE, 3, true);
+  k.fflat('plaster', hall, AUD.ceil, CEIL, 3, true);
   C.addPolygon(worldOut, AUD.roofTop - AUD.ceil, 'concrete', 'mrd:roof', AUD.ceil);
   // steel trusses across the hall, hanging banners, lights under the trusses
   const mb = k.b('metal'), truss = col('#3a3d42');
@@ -828,7 +848,7 @@ export function buildMrdAuditorium(kit: WorldKit): void {
     const pt0 = A.t1;
     C.addPolygon(R(-6.6, pt0, -4.2, 39.2), F0, 'concrete', 'mrd:floor');
     k.fflat('polished', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], F0 + 0.006, MARBLE, 2);
-    k.fflat('plaster', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], L.u1 - 0.02, WHITE, 2, true);
+    k.fflat('plaster', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], L.u1 - 0.02, CEIL, 2, true);
     k.fbox('plaster', -6.64, F0, pt0, -6.6, L.u1, 38.4, YELLOW, 0.5);
     k.fbox('plaster', -4.2, F0, pt0, -4.16, L.u1, 38.9, YELLOW, 0.5);
     k.flight(-5.4, L.u1 - 0.05, 36.2, 0.6, 1.2);

@@ -56,7 +56,7 @@ function foodCourtColonnade(kit: WorldKit): void {
   kit.collision.addPolygon([at(0.75, 0), at(len - 0.75, 0), at(len - 0.75, depth), at(0.75, depth)], 0.45, 'concrete', 'canopy', y);
   for (let d = 1.6; d < len - 1; d += 4.0) {
     const q = at(d, depth - 0.35);
-    kit.buf('wood', q[0], q[1]).cylinder(q[0], 0, q[1], 0.28, y, 12, col('#d9a441'), false);
+    kit.buf('paint', q[0], q[1]).cylinder(q[0], 0, q[1], 0.28, y, 12, col('#d9a441'), false); // painted, not timber grain
     kit.buf('stone', q[0], q[1]).cylinder(q[0], 0, q[1], 0.3, 0.35, 12, col('#3a3c3e'), false);
     kit.collision.addCircle(q[0], q[1], 0.28, y, 'concrete', 'column');
   }

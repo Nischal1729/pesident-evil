@@ -40,8 +40,12 @@ export function buildGround(kit: WorldKit): void {
   rooms(kit, gr);
   stairCore(kit, gc);
   const b = G.bounds, ctr: V2 = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+  // (also near stair core S1 at any height: its L1 door, upper wall lights and lit ceiling are in this group, and they
+  // vanished when seen from the covered plaza or flight 2)
+  const S = G.core, scx = (S[0] + S[2]) / 2, scz = (S[1] + S[3]) / 2;
   gc.build('interior:gjb_ground', ctr, 1e9, undefined, (cam) =>
-    cam.y < L1 - 0.3 && cam.x > b[0] - 30 && cam.x < b[2] + 32 && cam.z > b[1] - 28 && cam.z < b[3] + 25);
+    (cam.y < L1 - 0.3 && cam.x > b[0] - 30 && cam.x < b[2] + 32 && cam.z > b[1] - 28 && cam.z < b[3] + 25) ||
+    (Math.abs(cam.x - scx) < 14 && Math.abs(cam.z - scz) < 14 && cam.y < G.coreTop + 6));
   gr.build('interior:gjb_ground_rooms', ctr, 1e9, undefined, (cam) =>
     cam.y < L1 - 0.3 && cam.x > b[0] - 1 && cam.x < b[2] + 26 && cam.z > b[1] - 1 && cam.z < b[3] + 1);
 }
@@ -147,8 +151,10 @@ function stairCore(kit: WorldKit, g: GroupKit): void {
   const yMid = L1 / 2;
   const dz = G.coreDoor, doorAt = (dz[0] + dz[1]) / 2 - S[1], doorW = dz[1] - dz[0];
   // walls: west (= corridor B east wall, a door at G and one at L1), north, east, south — up to the arcade soffit
-  wall(kit, [B[2], S[1]], [B[2], S[3]], { y0: 0, top: L1, colTop: L1, dadoL: C.dadoGrey, dadoR: null, gk: g, leafSide: -1, openings: [{ at: doorAt, w: doorW, kind: 'door' }] });
-  wall(kit, [B[2], S[1]], [B[2], S[3]], { y0: L1, top, gk: g, leafSide: -1, openings: [{ at: doorAt, w: doorW, kind: 'door' }] });
+  // ground door: leaves parked on corridor B's wall (on the core side one stuck 0.7 m into G-03, the other into flight 2);
+  // the L1 doorway onto the plaza is a plain opening (its leaves would poke through the core's south wall)
+  wall(kit, [B[2], S[1]], [B[2], S[3]], { y0: 0, top: L1, colTop: L1, dadoL: C.dadoGrey, dadoR: null, gk: g, leafSide: 1, openings: [{ at: doorAt, w: doorW, kind: 'door' }] });
+  wall(kit, [B[2], S[1]], [B[2], S[3]], { y0: L1, top, gk: g, leafSide: -1, openings: [{ at: doorAt, w: doorW, kind: 'open' }] });
   wall(kit, [S[0], S[1]], [S[2], S[1]], { y0: 0, top, gk: g });
   wall(kit, [S[2], S[1]], [S[2], S[3]], { y0: 0, top, gk: g });
   wall(kit, [S[0], S[3]], [S[2], S[3]], { y0: 0, top, dadoL: C.dadoOak, gk: g }); // G-03 on its south side below L1
@@ -162,7 +168,7 @@ function stairCore(kit: WorldKit, g: GroupKit): void {
   c.addPolygon(rect(x0, z0, x1, zMid), yMid, 'concrete', 'landing');
   kit.box('polished', (x0 + x1) / 2, L1 - G.slab / 2, (zLand + z1) / 2, x1 - x0, G.slab, z1 - zLand, 0, C.granite, 0.5);
   c.addPolygon(rect(x0, zLand, x1, z1), G.slab, 'concrete', 'slab', SOFFIT);
-  floor(g, rect(x0, zLand, x1, z1), 0.03, C.corridor);
+  floor(g, rect(B[2], zLand, x1, z1), 0.03, C.corridor); // from corridor B's floor edge: no 10 cm gap in the doorway
   // centre wall between the flights (up to a rail height over the upper flight), rails on the open landing edges
   kit.box('plaster', mid, (L1 + 1.1) / 2, (zMid + zLand) / 2, cw, L1 + 1.1, zLand - zMid, 0, C.wall);
   c.addPolygon(rect(mid - cw / 2, zMid, mid + cw / 2, zLand), L1 + 1.1, 'concrete', 'wall');

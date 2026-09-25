@@ -85,6 +85,9 @@ function lobby(kit: WorldKit): void {
   const sxF = 73.0, sxT = 61.8; // grand stair: foot (east) and top (west)
   kit.box('plaster', (x0 + fx(z0)) / 2, h / 2, z0 + 0.1, fx(z0) - x0, h, 0.2, 0, wall, 0.5);
   kit.box('plaster', (x0 + fx(z1)) / 2, h / 2, z1 - 0.1, fx(z1) - x0, h, 0.2, 0, wall, 0.5);
+  // the north wall had no collision of its own (only the east wing's edge at z0), so bodies sank 0.2-0.3 m into the lift
+  // doors and the slat wall
+  kit.collision.addPolygon(rect(x0, z0, 78.0, z0 + 0.3), h, 'concrete', 'wall');
   // west wall in granite, with the doorway into the ground-floor wing (corridor A, gjb/ground.ts)
   const dA = GJB_G.lobbyDoor;
   const granite = col('#b3b1ab');
@@ -94,7 +97,7 @@ function lobby(kit: WorldKit): void {
   }
   kit.box('polished', x0 + 0.1, (2.5 + h) / 2, (dA[0] + dA[1]) / 2, 0.2, h - 2.5, dA[1] - dA[0], 0, granite, 0.5);
   kit.collision.addPolygon(rect(x0, dA[0], x0 + 0.2, dA[1]), h - 2.5, 'concrete', 'wall', 2.5);
-  doorFrame(g, [x0 + 0.1, dA[0]], [x0 + 0.1, dA[1]], 0, 2.5, 0.2, 1);
+  doorFrame(g, [x0 + 0.1, dA[0]], [x0 + 0.1, dA[1]], 0, 2.5, 0.2, -1); // leaves on the lobby side (west, they were buried in the G-03 / G-04 walls)
   g.box('plaster', x0 + 0.24, 2.85, (dA[0] + dA[1]) / 2, 0.03, 0.26, 1.4, 0, col('#1f2b45'));
   g.box('plaster', x0 + 0.255, 2.85, (dA[0] + dA[1]) / 2, 0.01, 0.06, 1.0, 0, col('#f4f4f1'));
   // lift doors in the north wall's west end (steel frames, brushed leaves, call-button lights)
@@ -128,7 +131,7 @@ function lobby(kit: WorldKit): void {
     kit.collision.addPolygon(rect(78.2, z - 0.35, 80.2, z + 0.35), 0.8, 'metal', 'prop');
   }
   // standee banners (navy / orange) near the entrance
-  for (const [z, c] of [[-83.0, '#1f2b45'], [-77.3, '#e8622a']] as [number, string][]) {
+  for (const [z, c] of [[-82.2, '#1f2b45'], [-77.3, '#e8622a']] as [number, string][]) { // (the navy one stood in the planter)
     g.box('plaster', 81.2, 1.05, z, 0.8, 1.9, 0.04, 0, col(c));
     g.box('metal', 81.2, 0.03, z, 0.6, 0.06, 0.35, 0, col('#2b2f33'));
   }
@@ -158,13 +161,16 @@ function lobby(kit: WorldKit): void {
     const e0 = bal.vert(sxF, 0, sz0 - 0.18, 1, 0, 0, 0, 0, c), e1 = bal.vert(sxF, 0, sz0 + 0.02, 1, 0, 0, 1, 0, c);
     const e2 = bal.vert(sxF, 1.0, sz0 + 0.02, 1, 0, 0, 1, 1, c), e3 = bal.vert(sxF, 1.0, sz0 - 0.18, 1, 0, 0, 0, 1, c);
     bal.quad(e0, e3, e2, e1);
+    // west end (seen from the lobby floor under the L1 slab)
+    const w0 = bal.vert(sxT, 0, sz0 - 0.18, -1, 0, 0, 0, 0, c), w1 = bal.vert(sxT, 0, sz0 + 0.02, -1, 0, 0, 1, 0, c);
+    const w2 = bal.vert(sxT, yAt(sxT) + 1.0, sz0 + 0.02, -1, 0, 0, 1, 1, c), w3 = bal.vert(sxT, yAt(sxT) + 1.0, sz0 - 0.18, -1, 0, 0, 0, 1, c);
+    bal.quad(w0, w1, w2, w3);
   }
   mergeBuf(kit.buf('plaster', 67, sz0), bal);
   kit.buf('metal', 67, sz0).beam([sxF, 1.15, sz0 - 0.08], [sxT, GJB_L1 + 1.15, sz0 - 0.08], 0.05, 0.05, col('#2e3236'));
-  for (let k = 0; k < 4; k++) {
-    const xa = sxF - ((sxF - sxT) * k) / 4, xb = sxF - ((sxF - sxT) * (k + 1)) / 4;
-    kit.collision.addPolygon(rect(xb, sz0 - 0.2, xa, sz0 + 0.02), yAt(xb) + 1.1, 'concrete', 'parapet');
-  }
+  // one sloped block that follows the drawn balustrade (the old flat quarters stood up to 1.6 m above it: nobody on the
+  // stair could shoot or see over it)
+  kit.collision.addRamp(rect(sxT, sz0 - 0.2, sxF, sz0 + 0.02), [sxF, sz0 - 0.09], [sxT, sz0 - 0.09], 1.1, GJB_L1 + 1.1, 'concrete', 'parapet');
   kit.collision.addRamp(rect(sxT, sz0, sxF, sz1), [sxF, (sz0 + sz1) / 2], [sxT, (sz0 + sz1) / 2], 0, GJB_L1, 'concrete', 'stair');
   kit.collision.addPolygon(rect(x0, sz0, sxT, sz1), GJB_L1, 'concrete', 'landing');
   // ceiling: the L1 slab soffit (dark, shadow-casting shell) with a timber-slat ceiling and linear lights under it,

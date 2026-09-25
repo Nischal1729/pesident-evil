@@ -112,7 +112,7 @@ function hall(kit: WorldKit, g: GroupKit): void {
   // gold tree sculpture beside the void (a lattice vase with bare golden branches)
   const gold = col('#c9a24a'), vx = 66.2, vz = VOID[1] - 1.05;
   const m = g.b('metal');
-  for (let k = 0; k < 5; k++) m.cylinder(vx, L1 + 0.12 + k * 0.2, vz, 0.2 + Math.sin((k / 4) * Math.PI) * 0.16, 0.2, 10, gold, k === 4);
+  for (let k = 0; k < 5; k++) m.cylinder(vx, L1 + 0.03 + k * 0.2, vz, 0.2 + Math.sin((k / 4) * Math.PI) * 0.16, 0.2, 10, gold, k === 4); // stands on the floor
   for (let k = 0; k < 9; k++) {
     const a = (k / 9) * Math.PI * 2, r = 0.5 + (k % 3) * 0.25, h = 1.6 + (k % 4) * 0.35;
     m.beam([vx, L1 + 1.0, vz], [vx + Math.cos(a) * r, L1 + h, vz + Math.sin(a) * r], 0.03, 0.03, gold);
@@ -188,12 +188,16 @@ function upper(kit: WorldKit, g: GroupKit): void {
   const e0 = side.vert(x0, L1, zs - 0.1, -1, 0, 0, 0, 0, C.wall), e1 = side.vert(x0, L1, zs + 0.1, -1, 0, 0, 1, 0, C.wall);
   const e2 = side.vert(x0, topAt(x0), zs + 0.1, -1, 0, 0, 1, 1, C.wall), e3 = side.vert(x0, topAt(x0), zs - 0.1, -1, 0, 0, 0, 1, C.wall);
   side.quad(e0, e1, e2, e3);
+  // east end (seen from the nook under the L2 landing)
+  const f0 = side.vert(x1, L1, zs - 0.1, 1, 0, 0, 0, 0, C.wall), f1 = side.vert(x1, L1, zs + 0.1, 1, 0, 0, 1, 0, C.wall);
+  const f2 = side.vert(x1, topAt(x1), zs + 0.1, 1, 0, 0, 1, 1, C.wall), f3 = side.vert(x1, topAt(x1), zs - 0.1, 1, 0, 0, 0, 1, C.wall);
+  side.quad(f0, f3, f2, f1);
   mergeInto(kit.buf('plaster', x0, z0), side);
   kit.buf('metal', x0, z0).beam([x0, q(x0) + 1.1, zs + 0.13], [xk, S2 + 0.1, zs + 0.13], 0.05, 0.05, C.steel);
-  for (let k = 0; k < 4; k++) {
-    const xa = x0 + ((x1 - x0) * k) / 4, xb = x0 + ((x1 - x0) * (k + 1)) / 4;
-    c.addPolygon(rect(xa, zs - 0.1, xb, zs + 0.1), Math.min(q(xb) + 1.1, S2) - L1, 'concrete', 'parapet', L1);
-  }
+  // collision follows the drawn top: a sloped block up to where it meets the L2 slab, then a wall to the soffit (the old
+  // flat quarters stood up to 1.2 m above the balustrade and blocked shots and sight lines from the flight)
+  c.addRamp(rect(x0, zs - 0.1, xk, zs + 0.1), [x0, zs], [xk, zs], L1 + 1.1, S2, 'concrete', 'parapet', 1.1);
+  c.addPolygon(rect(xk, zs - 0.1, x1, zs + 0.1), S2 - L1, 'concrete', 'parapet', L1);
   // L2 slab (open over the flight), floor, ceiling
   const l2 = slabPoly(FL);
   c.addPolygon(l2, L2 - S2, 'concrete', 'slab', S2);
@@ -308,7 +312,8 @@ function l2Rooms(kit: WorldKit, g: GroupKit): void {
     ceiling(kit, rect(r[0] - 0.15, r[1] - 0.15, r[2] + 0.15, r[3] + 0.15), CEIL, C.ceiling, g);
   }
   classroom(kit, g, [rx0 + 0.25, rz0 + 0.2, mid - 0.1, rz1 - 0.1], 'n', L2, CEIL);
-  facultyRoom(kit, g, [mid + 0.1, rz0 + 0.2, rx1 - 0.2, rz1 - 0.1], 's', L2, CEIL);
+  // (front edge on the wall face, and the notice board clear of the parked door leaf; it floated 0.24 m off the wall)
+  facultyRoom(kit, g, [mid + 0.1, rz0 + 0.2, rx1 - 0.2, rz1], 's', L2, CEIL, 0.25 * (rx1 - 0.2 - mid - 0.1));
 }
 
 function mergeInto(dst: GeoBuffer, src: GeoBuffer): void {
