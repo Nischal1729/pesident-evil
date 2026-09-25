@@ -18,7 +18,7 @@ export interface SurvSnap {
 }
 export interface ZombSnap {
   id: number; x: number; y: number; z: number; yaw: number; type: number; state: number; alive: boolean; airborne: boolean;
-  health: number; speed: number; localX: number; localZ: number; attackP: number; hitT: number; hitDirX: number; hitDirZ: number;
+  speed: number; localX: number; localZ: number; attackP: number; hitT: number; hitDirX: number; hitDirZ: number;
   deadT: number; deathVariant: number; variant: number; scale: number;
 }
 export interface Snapshot {
@@ -79,7 +79,6 @@ export function writeSnapshot(w: Writer, world: World, seq: number): ArrayBuffer
     w.i16(z.pos.x * 64); w.i16(z.pos.y * 256); w.i16(z.pos.z * 64);
     w.i16(wrapAngle(z.yaw) * 10000);
     w.u8(ZTYPES.indexOf(z.type) | (ZSTATES.indexOf(z.state) << 2) | (z.alive ? 32 : 0) | (a.airborne ? 64 : 0));
-    w.u16(Math.max(0, z.health));
     w.u8(Math.min(255, a.speed * 20));
     w.i8(a.localX * 127); w.i8(a.localZ * 127);
     w.frac(a.attackP);
@@ -119,9 +118,9 @@ export function readSnapshot(r: Reader, at: number): Snapshot {
   const zomb: ZombSnap[] = [];
   for (let i = 0, n = r.u16(); i < n; i++) {
     const id = r.u32(), x = r.i16() / 64, y = r.i16() / 256, z = r.i16() / 64, yaw = r.i16() / 10000, fl = r.u8();
-    const health = r.u16(), speed = r.u8() / 20, localX = r.i8() / 127, localZ = r.i8() / 127, attackP = r.frac(), hitT = r.secs();
+    const speed = r.u8() / 20, localX = r.i8() / 127, localZ = r.i8() / 127, attackP = r.frac(), hitT = r.secs();
     const hitDirX = r.i8() / 127, hitDirZ = r.i8() / 127, deadT = r.u8() / 10, deathVariant = r.u8(), variant = r.u8(), scale = r.u8() / 100;
-    zomb.push({ id, x, y, z, yaw, type: fl & 3, state: (fl >> 2) & 7, alive: !!(fl & 32), airborne: !!(fl & 64), health, speed, localX, localZ, attackP, hitT, hitDirX, hitDirZ, deadT, deathVariant, variant, scale });
+    zomb.push({ id, x, y, z, yaw, type: fl & 3, state: (fl >> 2) & 7, alive: !!(fl & 32), airborne: !!(fl & 64), speed, localX, localZ, attackP, hitT, hitDirX, hitDirZ, deadT, deathVariant, variant, scale });
   }
   const gates: Snapshot['gates'] = [];
   for (let i = 0, n = r.u8(); i < n; i++) gates.push({ hp: r.u16(), broken: r.u8() === 1, hitAgo: r.u8() / 10 });
@@ -133,13 +132,65 @@ export function readSnapshot(r: Reader, at: number): Snapshot {
 // ------------------------------------------------------------------------------------------------ client: apply
 const lerpAngle = (a: number, b: number, t: number) => a + wrapAngle(b - a) * t;
 
+type SurvPair = { s: Survivor; sn: SurvSnap; pa: SurvSnap | undefined };
+type ZombPair = { z: Zombie; zn: ZombSnap; pa: ZombSnap | undefined };
+
+/**
+ * What applySnapshot keeps between frames: the bracketing pair it last synced, the actors matched to it, and the
+ * mirror's zombies by id. Membership and state change only when a new pair comes up (20 Hz); every frame only
+ * re-interpolates positions, without allocating.
+ */
+export class ApplyCache {
+  a: Snapshot | null = null;
+  b: Snapshot | null = null;
+  surv: SurvPair[] = [];
+  zomb: ZombPair[] = [];
+  zmap = new Map<number, Zombie>();
+}
+
+const survIndex = new WeakMap<Snapshot, Map<number, SurvSnap>>();
+const zombIndex = new WeakMap<Snapshot, Map<number, ZombSnap>>();
+function survById(s: Snapshot): Map<number, SurvSnap> {
+  let m = survIndex.get(s);
+  if (!m) survIndex.set(s, (m = new Map(s.surv.map((q) => [q.id, q]))));
+  return m;
+}
+function zombById(s: Snapshot): Map<number, ZombSnap> {
+  let m = zombIndex.get(s);
+  if (!m) zombIndex.set(s, (m = new Map(s.zomb.map((q) => [q.id, q]))));
+  return m;
+}
+
 /**
  * Write the state at render time into the client's mirror World: `a` and `b` are the snapshots around it and `t`
  * the fraction between them (b alone when there is no a). Positions are interpolated and written to both pos and
  * prev, so the renderer's own tick alpha has no effect on remote actors. The local player keeps its own pose and
  * locomotion (it moves on this machine) unless the host moved it (teleport counter changed).
  */
-export function applySnapshot(world: World, a: Snapshot | null, b: Snapshot, t: number, localTele: { seq: number }): void {
+export function applySnapshot(world: World, a: Snapshot | null, b: Snapshot, t: number, localTele: { seq: number }, cache: ApplyCache): void {
+  if (cache.a !== a || cache.b !== b) syncPair(world, a, b, localTele, cache);
+  for (const { s, sn, pa } of cache.surv) {
+    if (pa) {
+      s.pos.set(pa.x + (sn.x - pa.x) * t, pa.y + (sn.y - pa.y) * t, pa.z + (sn.z - pa.z) * t);
+      s.yaw = lerpAngle(pa.yaw, sn.yaw, t);
+    } else { s.pos.set(sn.x, sn.y, sn.z); s.yaw = sn.yaw; }
+    s.prev.copy(s.pos);
+    s.prevYaw = s.yaw;
+  }
+  for (const { z, zn, pa } of cache.zomb) {
+    if (pa) {
+      z.pos.set(pa.x + (zn.x - pa.x) * t, pa.y + (zn.y - pa.y) * t, pa.z + (zn.z - pa.z) * t);
+      z.yaw = lerpAngle(pa.yaw, zn.yaw, t);
+    } else { z.pos.set(zn.x, zn.y, zn.z); z.yaw = zn.yaw; }
+    z.prev.copy(z.pos);
+    z.prevYaw = z.yaw;
+  }
+}
+
+/** A new bracketing pair: take b's globals, survivor states, zombie roster, gates and pickups. */
+function syncPair(world: World, a: Snapshot | null, b: Snapshot, localTele: { seq: number }, cache: ApplyCache): void {
+  cache.a = a;
+  cache.b = b;
   world.time = b.time;
   world.timeOfDay = b.tod;
   world.wave = b.wave;
@@ -147,20 +198,14 @@ export function applySnapshot(world: World, a: Snapshot | null, b: Snapshot, t: 
   world.stateT = b.stateT;
   world.toSpawn = b.toSpawn;
   world.totalKills = b.totalKills;
-  const prevS = new Map(a?.surv.map((s) => [s.id, s]) ?? []);
+  const prevS = a ? survById(a) : null;
+  cache.surv.length = 0;
   for (const sn of b.surv) {
     const s = world.survivors.find((q) => q.id === sn.id);
     if (!s) continue;
     const local = s.id === world.localPlayerId;
-    const pa = prevS.get(sn.id);
-    if (!local) {
-      if (pa) {
-        s.pos.set(pa.x + (sn.x - pa.x) * t, pa.y + (sn.y - pa.y) * t, pa.z + (sn.z - pa.z) * t);
-        s.yaw = lerpAngle(pa.yaw, sn.yaw, t);
-      } else { s.pos.set(sn.x, sn.y, sn.z); s.yaw = sn.yaw; }
-      s.prev.copy(s.pos);
-      s.prevYaw = s.yaw;
-    } else if (sn.tele !== localTele.seq) {
+    if (!local) cache.surv.push({ s, sn, pa: prevS?.get(sn.id) });
+    else if (sn.tele !== localTele.seq) {
       // the host placed us (spawn, respawn): snap
       localTele.seq = sn.tele;
       s.pos.set(sn.x, sn.y, sn.z);
@@ -173,28 +218,23 @@ export function applySnapshot(world: World, a: Snapshot | null, b: Snapshot, t: 
     applySurvivorState(world, s, sn, local);
   }
   // zombies: create, update, drop
-  const prevZ = new Map(a?.zomb.map((z) => [z.id, z]) ?? []);
-  const have = new Map(world.zombies.map((z) => [z.id, z]));
+  const prevZ = a ? zombById(a) : null;
+  const zmap = cache.zmap;
+  cache.zomb.length = 0;
   const next: Zombie[] = [];
   for (const zn of b.zomb) {
-    let z = have.get(zn.id);
+    let z = zmap.get(zn.id);
     if (!z) {
       z = new Zombie();
       z.id = zn.id;
       z.type = ZTYPES[zn.type] ?? 'walker';
       z.variant = zn.variant;
       z.scale = zn.scale;
+      zmap.set(zn.id, z);
     }
-    const pa = prevZ.get(zn.id);
-    if (pa) {
-      z.pos.set(pa.x + (zn.x - pa.x) * t, pa.y + (zn.y - pa.y) * t, pa.z + (zn.z - pa.z) * t);
-      z.yaw = lerpAngle(pa.yaw, zn.yaw, t);
-    } else { z.pos.set(zn.x, zn.y, zn.z); z.yaw = zn.yaw; }
-    z.prev.copy(z.pos);
-    z.prevYaw = z.yaw;
+    cache.zomb.push({ z, zn, pa: prevZ?.get(zn.id) });
     z.state = ZSTATES[zn.state] ?? 'chase';
     z.alive = zn.alive;
-    z.health = zn.health;
     z.grounded = !zn.airborne;
     const an = z.anim;
     an.speed = zn.speed; an.localX = zn.localX; an.localZ = zn.localZ; an.attackP = zn.attackP; an.hitT = zn.hitT;
@@ -202,6 +242,7 @@ export function applySnapshot(world: World, a: Snapshot | null, b: Snapshot, t: 
     an.airborne = zn.airborne;
     next.push(z);
   }
+  if (zmap.size > next.length) { const keep = zombById(b); for (const id of zmap.keys()) if (!keep.has(id)) zmap.delete(id); }
   world.zombies = next;
   // gates (collision follows the host's broken flag so our own movement agrees)
   b.gates.forEach((gs, i) => {

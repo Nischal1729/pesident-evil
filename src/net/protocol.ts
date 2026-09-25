@@ -10,7 +10,7 @@ import { WEAPONS, type WeaponId } from '../sim/weapons';
  *   and binary player inputs (client → host, 30 Hz). A lost packet is simply superseded by the next one, so every
  *   one-shot action in an input travels as a wrapping press counter rather than a flag.
  */
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 export const MAX_PLAYERS = 10;
 
 export interface Profile { name: string; look: Look }
@@ -27,37 +27,89 @@ export type CtrlMsg =
   | { t: 'start'; yourId: number; difficulty: number; maxZombies: number; survivors: StartSurvivor[] }
   | { t: 'join'; survivor: StartSurvivor }
   | { t: 'leave'; id: number }
-  | { t: 'ev'; e: [string, Record<string, unknown>][] }
+  | { t: 'ev'; s: string[]; e: unknown[][] }
   | { t: 'ping'; c: number }
   | { t: 'pong'; c: number }
   | { t: 'rtt'; ms: Record<number, number> }
   | { t: 'end'; reason: string };
 
 // ------------------------------------------------------------------------------------------------ events
-const round = (v: number) => Math.round(v * 1000) / 1000;
+const r2 = (v: number) => Math.round(v * 100) / 100;
 
-/** Event payloads are flat: Vector3 fields become {$v:[x,y,z]}, numbers are rounded to mm. */
-export function encodeEvent(type: string, payload: object): [string, Record<string, unknown>] {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(payload)) {
-    if (v && (v as THREE.Vector3).isVector3) { const q = v as THREE.Vector3; out[k] = { $v: [round(q.x), round(q.y), round(q.z)] }; }
-    else out[k] = typeof v === 'number' ? round(v) : v;
+/**
+ * One tick's events, without repeating field names: each distinct (type, fields) shape gets a signature
+ * ("shot|shooterId,weapon,@origin,@end,hitSurface", '@' marking a Vector3) and every event is [signature index,
+ * ...values]. Numbers go to cm (FX, sound and HUD positions). About a third of the plain JSON before compression.
+ */
+export class EventBatch {
+  sigs: string[] = [];
+  e: unknown[][] = [];
+  private idx = new Map<string, number>();
+
+  get size(): number { return this.e.length; }
+
+  add(type: string, payload: object): void {
+    let sig = type + '|';
+    const row: unknown[] = [0];
+    for (const [k, v] of Object.entries(payload)) {
+      if (v && (v as THREE.Vector3).isVector3) { const q = v as THREE.Vector3; sig += '@' + k + ','; row.push([r2(q.x), r2(q.y), r2(q.z)]); }
+      else { sig += k + ','; row.push(typeof v === 'number' ? r2(v) : v); }
+    }
+    let i = this.idx.get(sig);
+    if (i === undefined) { i = this.sigs.length; this.sigs.push(sig); this.idx.set(sig, i); }
+    row[0] = i;
+    this.e.push(row);
   }
-  return [type, out];
+
+  message(): Extract<CtrlMsg, { t: 'ev' }> { return { t: 'ev', s: this.sigs, e: this.e }; }
 }
 
-export function decodeEvent(e: [string, Record<string, unknown>]): [keyof GameEvents, GameEvents[keyof GameEvents]] {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(e[1])) {
-    const vv = v as { $v?: number[] } | null;
-    out[k] = vv && typeof vv === 'object' && Array.isArray(vv.$v) ? new THREE.Vector3(vv.$v[0], vv.$v[1], vv.$v[2]) : v;
+/** Expand a received batch back into (type, payload) pairs with THREE.Vector3 fields. */
+export function* decodeEvents(m: Extract<CtrlMsg, { t: 'ev' }>): Generator<[keyof GameEvents, GameEvents[keyof GameEvents]]> {
+  const shapes = m.s.map((sig) => {
+    const [type, fields] = sig.split('|');
+    return { type: type as keyof GameEvents, keys: fields.split(',').filter(Boolean).map((k) => (k[0] === '@' ? { k: k.slice(1), v: true } : { k, v: false })) };
+  });
+  for (const row of m.e) {
+    const sh = shapes[row[0] as number];
+    if (!sh) continue;
+    const out: Record<string, unknown> = {};
+    sh.keys.forEach(({ k, v }, j) => {
+      const val = row[j + 1];
+      out[k] = v && Array.isArray(val) ? new THREE.Vector3(val[0], val[1], val[2]) : val;
+    });
+    yield [sh.type, out as unknown as GameEvents[keyof GameEvents]];
   }
-  return [e[0] as keyof GameEvents, out as unknown as GameEvents[keyof GameEvents]];
+}
+
+// ------------------------------------------------------------------------------------------------ compression
+/** Deflate (CompressionStream, where the browser has it): snapshots shrink ~40%, event batches ~70%. */
+export const canCompress = typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+
+async function pipe(data: BufferSource | string, t: CompressionStream | DecompressionStream): Promise<Uint8Array> {
+  return new Uint8Array(await new Response(new Blob([data as BlobPart]).stream().pipeThrough(t)).arrayBuffer());
+}
+
+/** [type byte][deflated payload] */
+export async function pack(type: number, data: BufferSource | string): Promise<ArrayBuffer> {
+  const z = await pipe(data, new CompressionStream('deflate-raw'));
+  const out = new Uint8Array(z.byteLength + 1);
+  out[0] = type;
+  out.set(z, 1);
+  return out.buffer;
+}
+
+export async function unpack(buf: ArrayBuffer): Promise<Uint8Array> {
+  return pipe(new Uint8Array(buf, 1), new DecompressionStream('deflate-raw'));
 }
 
 // ------------------------------------------------------------------------------------------------ binary helpers
 export const MSG_SNAPSHOT = 1;
 export const MSG_INPUT = 2;
+/** a deflated snapshot (fast channel) */
+export const MSG_SNAPSHOT_Z = 3;
+/** a deflated event batch, JSON inside (reliable channel, in order with control messages) */
+export const MSG_EVENTS_Z = 4;
 
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 export const weaponIndex = (id: WeaponId | null) => (id ? WEAPON_IDS.indexOf(id) : 255);

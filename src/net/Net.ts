@@ -54,9 +54,18 @@ export class Link {
     }
   }
 
-  send(m: CtrlMsg): void {
+  send(m: CtrlMsg): void { this.sendText(JSON.stringify(m)); }
+
+  /** Binary over the reliable channel (compressed event batches, which must arrive, in order). */
+  sendBinary(b: ArrayBuffer): void {
     if (this.closed || !this.conn.open) return;
-    const s = JSON.stringify(m);
+    this.bytesOut += b.byteLength;
+    this.conn.send(b);
+  }
+
+  /** An already-serialised control message (one encoding shared by every client). */
+  sendText(s: string): void {
+    if (this.closed || !this.conn.open) return;
     this.bytesOut += s.length;
     this.conn.send(s);
   }

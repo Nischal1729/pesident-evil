@@ -3,10 +3,11 @@ import type { Survivor } from '../sim/actors';
 import type { World } from '../sim/World';
 import { Link, NetClient, NetHost } from './Net';
 import {
-  decodeEvent, encodeEvent, MAX_PLAYERS, MSG_INPUT, MSG_SNAPSHOT, newCounters, PROTOCOL, readInput, Reader, writeInput, Writer,
+  canCompress, decodeEvents, EventBatch, MAX_PLAYERS, MSG_EVENTS_Z, MSG_INPUT, MSG_SNAPSHOT, MSG_SNAPSHOT_Z, newCounters, pack, PROTOCOL,
+  readInput, Reader, unpack, writeInput, Writer,
   type CtrlMsg, type InputCounters, type InputPacket, type Profile, type RosterEntry, type StartSurvivor,
 } from './protocol';
-import { applySnapshot, readSnapshot, writeSnapshot, type Snapshot } from './snapshot';
+import { ApplyCache, applySnapshot, readSnapshot, writeSnapshot, type Snapshot } from './snapshot';
 
 /** Snapshot every SNAP_EVERY host ticks (60 Hz / 3 = 20 Hz); clients draw INTERP seconds behind the newest one. */
 const SNAP_EVERY = 3;
@@ -43,7 +44,9 @@ export class CoopHost {
   world: World | null = null;
   inGame = false;
   code = '';
-  private pending: [string, Record<string, unknown>][] = [];
+  private pending = new EventBatch();
+  /** reliable sends go out in order, even while an event batch is still being compressed */
+  private out: Promise<void> = Promise.resolve();
   private w = new Writer();
   private tick = 0;
   private seq = 0;
@@ -55,6 +58,11 @@ export class CoopHost {
     this.net.onError = (msg) => hooks.onError(msg);
     this.net.onLink = (link) => this.accept(link);
     this.net.start();
+  }
+
+  /** Send a control message in order with the (asynchronously compressed) event batches. */
+  private post(link: Link, msg: CtrlMsg): void {
+    this.out = this.out.then(() => link.send(msg));
   }
 
   private accept(link: Link): void {
@@ -71,8 +79,8 @@ export class CoopHost {
           if (ss) {
             m.survivorId = ss.id;
             this.start.survivors.push(ss);
-            link.send({ ...this.start, yourId: ss.id });
-            for (const o of this.members.values()) if (o !== m) o.link.send({ t: 'join', survivor: ss });
+            this.post(link, { ...this.start, yourId: ss.id });
+            for (const o of this.members.values()) if (o !== m) this.post(o.link, { t: 'join', survivor: ss });
           }
         }
       } else if (msg.t === 'pong' && m) m.rtt = Math.round(performance.now() - msg.c);
@@ -93,7 +101,7 @@ export class CoopHost {
       if (this.inGame && m.survivorId) {
         this.hooks.onLeaveInGame(m);
         if (this.start) this.start.survivors = this.start.survivors.filter((s) => s.id !== m!.survivorId);
-        for (const o of this.members.values()) o.link.send({ t: 'leave', id: m.survivorId });
+        for (const o of this.members.values()) this.post(o.link, { t: 'leave', id: m.survivorId });
       }
     };
   }
@@ -104,7 +112,7 @@ export class CoopHost {
 
   private broadcastRoster(): void {
     const msg: CtrlMsg = { t: 'roster', players: this.roster(), inGame: this.inGame };
-    for (const m of this.members.values()) m.link.send(msg);
+    for (const m of this.members.values()) this.post(m.link, msg);
     this.hooks.onRoster();
   }
 
@@ -112,13 +120,13 @@ export class CoopHost {
   beginGame(world: World, survivors: StartSurvivor[], difficulty: number, maxZombies: number): void {
     this.world = world;
     this.inGame = true;
-    this.pending = [];
+    this.pending = new EventBatch();
     this.start = { t: 'start', difficulty, maxZombies, survivors };
-    world.events.tap = (type, payload) => { if (this.members.size) this.pending.push(encodeEvent(type as string, payload as object)); };
+    world.events.tap = (type, payload) => { if (this.members.size) this.pending.add(type as string, payload as object); };
     for (const m of this.members.values()) {
       m.last = null;
       m.primed = false;
-      if (m.survivorId) m.link.send({ ...this.start, yourId: m.survivorId });
+      if (m.survivorId) this.post(m.link, { ...this.start, yourId: m.survivorId });
     }
     this.broadcastRoster();
   }
@@ -171,19 +179,26 @@ export class CoopHost {
   afterTick(world: World): void {
     if (++this.tick % SNAP_EVERY !== 0 || !this.members.size) return;
     const snap = writeSnapshot(this.w, world, ++this.seq);
-    const ev: CtrlMsg | null = this.pending.length ? { t: 'ev', e: this.pending } : null;
-    this.pending = [];
-    for (const m of this.members.values()) {
-      if (!m.survivorId) continue;
-      m.link.sendFast(snap);
-      if (ev) m.link.send(ev);
+    // one encoding (and one compression) of the tick's snapshot and events, shared by every client
+    const ev = this.pending.size ? JSON.stringify(this.pending.message()) : null;
+    this.pending = new EventBatch();
+    const targets = [...this.members.values()].filter((m) => m.survivorId).map((m) => m.link);
+    if (canCompress) {
+      pack(MSG_SNAPSHOT_Z, snap).then((z) => { for (const l of targets) l.sendFast(z); }).catch(() => { for (const l of targets) l.sendFast(snap); });
+      if (ev) {
+        const zev = pack(MSG_EVENTS_Z, ev);
+        this.out = this.out.then(() => zev).then((z) => { for (const l of targets) l.sendBinary(z); }, () => { for (const l of targets) l.sendText(ev); });
+      }
+    } else {
+      for (const l of targets) l.sendFast(snap);
+      if (ev) this.out = this.out.then(() => { for (const l of targets) l.sendText(ev); });
     }
     const now = performance.now();
     if (now - this.pingT > 2000) {
       this.pingT = now;
       const ms: Record<number, number> = {};
-      for (const m of this.members.values()) { m.link.send({ t: 'ping', c: now }); if (m.survivorId) ms[m.survivorId] = m.rtt; }
-      for (const m of this.members.values()) m.link.send({ t: 'rtt', ms });
+      for (const m of this.members.values()) { this.post(m.link, { t: 'ping', c: now }); if (m.survivorId) ms[m.survivorId] = m.rtt; }
+      for (const m of this.members.values()) this.post(m.link, { t: 'rtt', ms });
     }
   }
 
@@ -193,7 +208,7 @@ export class CoopHost {
   }
 
   destroy(): void {
-    for (const m of this.members.values()) m.link.send({ t: 'end', reason: 'The host closed the room.' });
+    for (const m of this.members.values()) this.post(m.link, { t: 'end', reason: 'The host closed the room.' });
     const net = this.net;
     setTimeout(() => net.destroy(), 300);
     if (this.world) this.world.events.tap = null;
@@ -227,14 +242,17 @@ export class CoopClient {
   private slot = -1;
   private prevFire = false;
   private tele = { seq: -1 };
+  private cache = new ApplyCache();
   private lastSnapAt = 0;
   private ended = false;
+  /** reliable messages are handled in arrival order, compressed event batches included */
+  private inQ: Promise<void> = Promise.resolve();
 
   constructor(code: string, private profile: Profile, private hooks: ClientHooks, onConnectError: (msg: string) => void) {
     this.net.onError = (msg) => { if (!this.link) onConnectError(msg); };
     this.net.onLink = (link) => {
       this.link = link;
-      link.onCtrl = (m) => this.onCtrl(m);
+      link.onCtrl = (m) => { this.inQ = this.inQ.then(() => this.onCtrl(m)); };
       link.onBinary = (b) => this.onBinary(b);
       link.onClose = () => this.end('Lost connection to the host.');
       link.send({ t: 'hello', v: PROTOCOL, profile: this.profile });
@@ -261,8 +279,7 @@ export class CoopClient {
       case 'ev': {
         const w = this.world;
         if (!w) break;
-        for (const e of m.e) {
-          const [type, payload] = decodeEvent(e);
+        for (const [type, payload] of decodeEvents(m)) {
           // our own jumps and landings already played here (World.movePlayer)
           if ((type === 'jump' || type === 'land') && (payload as { actorId: number }).actorId === w.localPlayerId) continue;
           w.events.emit(type, payload as never);
@@ -273,6 +290,18 @@ export class CoopClient {
   }
 
   private onBinary(b: ArrayBuffer): void {
+    if (!b.byteLength) return;
+    const type = new Uint8Array(b, 0, 1)[0];
+    if (type === MSG_EVENTS_Z) {
+      const dec = unpack(b);
+      this.inQ = this.inQ.then(() => dec).then((u) => this.onCtrl(JSON.parse(new TextDecoder().decode(u)) as CtrlMsg), (e) => console.warn('[net] bad event batch', e));
+      return;
+    }
+    if (type === MSG_SNAPSHOT_Z) { unpack(b).then((u) => this.onSnapshot(u.buffer as ArrayBuffer), (e) => console.warn('[net] bad snapshot', e)); return; }
+    this.onSnapshot(b);
+  }
+
+  private onSnapshot(b: ArrayBuffer): void {
     if (!this.world || !b.byteLength) return;
     const r = new Reader(b);
     if (r.u8() !== MSG_SNAPSHOT) return;
@@ -289,6 +318,7 @@ export class CoopClient {
     this.snaps = [];
     this.renderT = -1;
     this.tele.seq = -1;
+    this.cache = new ApplyCache();
     this.lastSnapAt = performance.now();
   }
 
@@ -340,7 +370,7 @@ export class CoopClient {
     }
     if (b === latest && latest.time < this.renderT) a = n > 1 ? this.snaps[n - 2] : null;
     const t = a ? Math.min(1, Math.max(0, (this.renderT - a.time) / Math.max(1e-4, b.time - a.time))) : 1;
-    applySnapshot(w, a, b, t, this.tele);
+    applySnapshot(w, a, b, t, this.tele, this.cache);
   }
 
   destroy(): void { this.ended = true; this.net.destroy(); }
