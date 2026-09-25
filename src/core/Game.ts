@@ -197,6 +197,7 @@ export class Game {
     this.world = world;
     this.input.yaw = world.player!.yaw;
     this.input.pitch = -0.05;
+    this.input.resetRecoil();
     this.detach.push(this.audio.attach(world));
     this.hud.attach(world);
     this.attachFx(world);
@@ -221,7 +222,13 @@ export class Game {
     const off: (() => void)[] = [];
     const muzzleWorld = new THREE.Vector3();
     const dir = new THREE.Vector3();
+    let lastRecoilT = -1; // a shotgun trigger pull emits several local 'shot' events in one tick; kick once
     off.push(ev.on('shot', (e) => {
+      // recoil moves the aim, so it must not depend on the FX module having loaded
+      if (e.shooterId === world.localPlayerId && world.time !== lastRecoilT) {
+        lastRecoilT = world.time;
+        this.input.addRecoil(WEAPONS[e.weapon as keyof typeof WEAPONS]?.recoil ?? 0.02, world.player!.aiming);
+      }
       if (!this.fx) return;
       const v = this.chars.view(e.shooterId);
       if (v?.muzzle) v.muzzle.getWorldPosition(muzzleWorld); else muzzleWorld.copy(e.origin);
@@ -232,7 +239,6 @@ export class Game {
         const right = new THREE.Vector3(dir.z, 0, -dir.x).normalize().negate();
         this.fx.shellEject?.(muzzleWorld.clone().addScaledVector(dir, -0.35), right, e.weapon);
       }
-      if (e.shooterId === world.localPlayerId) this.rig.addKick(WEAPONS[e.weapon as keyof typeof WEAPONS]?.recoil ?? 0.02);
     }));
     off.push(ev.on('impact', (e) => this.fx?.impact(e.point, e.normal, e.surface)));
     off.push(ev.on('hit', (e) => {
@@ -304,6 +310,7 @@ export class Game {
     if (w && (this.state === 'playing' || this.state === 'gameover')) {
       if (this.state === 'playing') {
         this.acc += dt;
+        this.input.updateRecoil(dt);
         let first = true;
         let steps = 0;
         while (this.acc >= this.fixed && steps < 5) {

@@ -7,12 +7,10 @@ const _dir = new THREE.Vector3();
 const _pivot = new THREE.Vector3();
 const _hit = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground' as const, tag: '' };
 
-/** Over-the-shoulder third-person camera with collision pull-in, aim zoom, recoil kick and shake. */
+/** Over-the-shoulder third-person camera with collision pull-in, aim zoom, and shake. */
 export class CameraRig {
   aimBlend = 0;
   private shake = 0;
-  private kick = 0;
-  private kickYaw = 0;
   private dist = 99;
   private t = 0;
   baseFov = 62;
@@ -22,10 +20,6 @@ export class CameraRig {
   constructor(private camera: THREE.PerspectiveCamera, private collision: StaticCollision) {}
 
   addShake(a: number): void { this.shake = Math.min(1.2, this.shake + a); }
-  addKick(pitch: number): void {
-    this.kick += pitch;
-    this.kickYaw += (Math.random() - 0.5) * pitch * 0.6;
-  }
 
   private pivotY: number | null = null;
 
@@ -33,19 +27,15 @@ export class CameraRig {
     this.t += dt;
     this.aimBlend += ((aiming ? 1 : 0) - this.aimBlend) * Math.min(1, dt * 11);
     this.shoulderS += (this.shoulderSide - this.shoulderS) * Math.min(1, dt * 8);
-    this.kick *= Math.max(0, 1 - dt * 14);
-    this.kickYaw *= Math.max(0, 1 - dt * 14);
     this.shake = Math.max(0, this.shake - dt * 2.2);
-    const p = pitch + this.kick;
-    const y = yaw + this.kickYaw;
     const tgt = _pivot.copy(target);
     // smooth the pivot height so snapping up steps / onto ramps doesn't jolt the camera (jumps still read)
     if (this.pivotY === null || Math.abs(tgt.y - this.pivotY) > 3) this.pivotY = tgt.y;
     else this.pivotY += (tgt.y - this.pivotY) * Math.min(1, dt * 14);
     tgt.y = this.pivotY;
     if (downed) tgt.y -= 0.9;
-    cameraPose(tgt, y, p, this.aimBlend, _desired, _dir, this.shoulderS);
-    cameraPivot(tgt, y, this.aimBlend, _pivot, this.shoulderS);
+    cameraPose(tgt, yaw, pitch, this.aimBlend, _desired, _dir, this.shoulderS);
+    cameraPivot(tgt, yaw, this.aimBlend, _pivot, this.shoulderS);
     // collision pull-in (sphere-ish: test a few rays)
     const toCam = _desired.clone().sub(_pivot);
     const full = toCam.length();
@@ -65,7 +55,7 @@ export class CameraRig {
       this.camera.position.x += Math.sin(this.t * 61) * s;
       this.camera.position.y += Math.sin(this.t * 47 + 1) * s;
     }
-    this.camera.rotation.set(p, y, 0, 'YXZ');
+    this.camera.rotation.set(pitch, yaw, 0, 'YXZ');
     const fov = this.baseFov * THREE.MathUtils.lerp(1, 0.72, this.aimBlend) + (sprinting ? 5 : 0);
     if (Math.abs(this.camera.fov - fov) > 0.05) {
       this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 10);
