@@ -145,18 +145,28 @@ export const GJB_INTERIORS = {
  * open upper deck at `deck` (slab prism with base > 1.5 → walk under it). Vehicle ramp at the north end off the entry
  * walkway, pedestrian stair at the south end by the food court, white-roofed covered bay on the deck at the north end.
  */
+/**
+ * 2-wheeler parking (user's description 2026-09-25; GJB tour 0:40–0:47): the campus falls from the main gate towards
+ * GJB, so the -1 floor sits at GJB / lawn level (`low`) and the ground floor one storey up at the level of the entry
+ * walkway it opens off (`road`). Above the covered part of the ground floor is an empty roof (`roof`).
+ */
 export const PARKING = {
   x0: 120, x1: 137.5, z0: -111, z1: -30,
-  deck: 3.2, deckT: 0.35,
-  /** vehicle ramp along the back wall at the north end: ground at z0 → deck at rampZ (x rampX … x1) */
-  rampX: 134, rampZ: -93,
-  /** pedestrian stair along the corten face at the south end: ground at z1 → deck at stairZ (x x0 … stairX) */
-  stairX: 122.8, stairZ: -41,
-  /** walk-in door gaps in the ground floor: north face (x range) and the lawn-side corten face (z ranges) */
-  northDoor: [124, 131] as V2,
+  low: 0, road: 3.2, roof: 6.4, slabT: 0.35,
+  /** open-air north yard of the ground floor (z0 … yardZ), straight off the walkway; covered floor south of it */
+  yardZ: -97,
+  /** vehicle lane to the -1 floor: branches left (east) off the yard and runs south along the back wall, down from
+   * road level at z0 to the -1 floor at rampZ, in the middle of the parking (x laneX … x1) */
+  laneX: 134, rampZ: -72,
+  /** pedestrian stair between the floors along the lawn-side screen: -1 floor at stairZ0 → ground floor at stairZ1 */
+  stairX: 122.8, stairZ0: -49, stairZ1: -60,
+  /** walk-in doors from the lawn into the -1 floor (z ranges in the corten screen) */
   westDoors: [[-92, -88], [-66, -62]] as V2[],
-  /** white-roofed covered bay on the deck at the north end, open to the walkway */
-  bay: { x0: 120, x1: 133.8, z0: -111, z1: -99, roof: 6.0 },
+  /**
+   * PES Innovation Lab block across the ground floor's south end: the PIL in the west half (door on its east side), a
+   * lobby in the north-east quarter that opens onto the parking, and the Huawei innovation lab south of the lobby.
+   */
+  labs: { z0: -47.5, xMid: 128.75, lobbyZ1: -39 },
   /** reflecting pool at the north end of the east lawn, under the entry walkway's tall grey retaining wall */
   pool: { x0: 105, x1: 117.5, z0: -108.4, z1: -105.4 },
   retainingWall: { x0: 104, x1: 119.6, z: -110.4, h: 2.4 },
@@ -365,7 +375,7 @@ export const WALLS: WallDef[] = [
   // east: F-block → around the HPC lab / food point (granite), then the 2-wheeler parking's back wall (the parking's
   // lawn-facing corten + green-mesh screen is built with the parking, src/world/gjb/parking.ts), then to the gate building
   { kind: 'stone', height: 2.5, pts: [[127.8, 62], [154, 12], [154, PARKING.backZ1], [PARKING.backX, PARKING.backZ1]] },
-  { kind: 'plaster', height: PARKING.deck + 1.2, pts: [[PARKING.backX, PARKING.backZ1], [PARKING.backX, PARKING.backZ0]] },
+  { kind: 'plaster', height: PARKING.roof + 1.0, pts: [[PARKING.backX, PARKING.backZ1], [PARKING.backX, PARKING.backZ0]] },
   { kind: 'plaster', height: 2.6, pts: [[PARKING.backX, PARKING.backZ0], [156.2, PARKING.backZ0]] },
 ];
 /** White free-standing low walls on the east lawn, in front of the parking's corten face (not part of the boundary). */
