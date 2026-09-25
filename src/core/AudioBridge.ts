@@ -80,10 +80,11 @@ export class AudioBridge {
     offs.push(ev.on('revived', (e) => play('revive_progress', world.survivors.find((s) => s.id === e.id)?.pos)));
     offs.push(ev.on('bark', (e) => {
       if (!this.ready) return;
-      if (e.category in BARKS) a.bark(e.category as BarkCategory, { voice: e.voice, character: world.survivors.find((s) => s.id === e.actorId)?.name, position: e.position });
+      const character = world.survivors.find((s) => s.id === e.actorId)?.name;
+      if (e.category in BARKS) a.bark(e.category as BarkCategory, { voice: e.voice, character, position: e.position });
       else {
         const lines = this.extraLines[e.category];
-        if (lines) a.say(lines[Math.floor(Math.random() * lines.length)], { voice: e.voice, position: e.position });
+        if (lines) a.say(lines[Math.floor(Math.random() * lines.length)], { voice: e.voice, character, position: e.position });
       }
     }));
     offs.push(ev.on('waveStart', (e) => {
