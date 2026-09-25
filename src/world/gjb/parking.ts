@@ -195,11 +195,11 @@ export function buildParking(kit: WorldKit): void {
     if (z > P.yardZ + 1 && z < L.z0 - 1) kit.box('emissive', x, ROOF - T - 0.03, z, 0.1, 0.05, 1.2, 0, col('#ffffff'));
   }
 
-  // ground-floor bike-row collision (base = road level; the -1 floor bikes get their own prop collision in Props.ts)
-  for (const [xa, xb, za, zb] of [
-    [X0 + 0.2, X0 + 2.2, Z0 + 1, L.z0 - 3], [MID_X - 1.95, MID_X + 1.95, Z0 + 1, L.z0 - 3],
-    [P.laneX - 2.2, P.laneX - 0.3, Z0 + 1, P.rampZ - 0.5], [X1 - 2.2, X1 - 0.2, P.rampZ + 1, L.z0 - 3],
-  ] as number[][]) c.addPolygon(rect(xa, za, xb, zb), 1.1, 'metal', 'prop', ROAD);
+  // ground-floor bike collision, one segment per parked bike (base = road level; the gaps between bikes stay walkable).
+  // The -1 floor bikes get their own prop collision in Props.ts.
+  for (const sl of parkingSlots()) {
+    if (sl.y > LOW) c.addSegment([sl.x - 0.8, sl.z], [sl.x + 0.8, sl.z], 0.5, 1.1, 'metal', 'prop', ROAD);
+  }
 
   // --- corten screens with a leaf cut-out marking the entrances (the yard's lane corner, the -1 floor's south end)
   for (const [cx, cz, y0, h, alongX] of [[P.laneX - 1.6, Z0 + 0.4, ROAD, 3.4, 1], [X1 - 1.6, Z1 + 0.4, LOW, 5.4, 1]] as number[][]) {
@@ -431,13 +431,14 @@ function labSigns(): THREE.Mesh {
     uv.push(0, v0, 1, v0, 1, v1, 0, v1); // CanvasTexture flips Y: v0 (bottom of the band) at the bottom edge
     idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
   };
-  const y0 = ROAD + 2.3, y1 = ROAD + 2.7;
+  // between the door lintels (ROAD + 2.2) and the false ceilings (ceil − 0.25 = ROAD + 2.6); 4:1 like the canvas bands
+  const y0 = ROAD + 2.23, y1 = ROAD + 2.55, hw = 0.64;
   // PIL sign on the lobby face of the dividing wall, above the PIL door (facing +x)
   const pz = (PIL_DOOR[0] + PIL_DOOR[1]) / 2, sx = L.xMid + 0.11;
-  quad([[sx, y0, pz + 0.8], [sx, y0, pz - 0.8], [sx, y1, pz - 0.8], [sx, y1, pz + 0.8]], 0.5, 1);
+  quad([[sx, y0, pz + hw], [sx, y0, pz - hw], [sx, y1, pz - hw], [sx, y1, pz + hw]], 0.5, 1);
   // Huawei sign on the lobby face of the lobby's south wall, above the Huawei door (facing −z)
   const hx = (HUAWEI_DOOR[0] + HUAWEI_DOOR[1]) / 2, sz = L.huaZ0 - 0.11;
-  quad([[hx + 0.8, y0, sz], [hx - 0.8, y0, sz], [hx - 0.8, y1, sz], [hx + 0.8, y1, sz]], 0, 0.5);
+  quad([[hx + hw, y0, sz], [hx - hw, y0, sz], [hx - hw, y1, sz], [hx + hw, y1, sz]], 0, 0.5);
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
