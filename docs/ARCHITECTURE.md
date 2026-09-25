@@ -34,8 +34,13 @@ reference/           tour-video frames, CAMPUS_NOTES.md (layout + look reference
 * Origin: centroid of the OpenStreetMap outline of the Golden Jubilee Block (lat 12.933977, lon 77.534549).
   Real footprints come from OSM (`tools/osm/extract.py` → `src/world/data/osm.json`, © OpenStreetMap contributors, ODbL);
   campus buildings are hand-authored in `src/world/layout.ts` from those outlines.
-* Terrain is flat at y = 0, but the campus is multi-level: podiums, decks, ramps, stairs and tiers are walkable
-  (see "Multi-level movement" below). Most buildings are solid exteriors; a few ground-floor interiors are enterable.
+* The campus falls from the main gate towards GJB (`src/world/terrain.ts`, layout.ts `TERRAIN`): the entry
+  corridor, the gate forecourt, the PES Lawn and the Ring Road near the gate stand 3.2 m up; the entry road slopes
+  down to GJB level between x 118 and 92. The world is authored flat and lifted once after it is built (geometry per
+  vertex with edge subdivision, instances and collision by position, trees and props through hooks), then the raised
+  ground is added as solid 'terrain' prisms with retaining faces and parapets. The sim reads `terrainY` for spawns and
+  stations. The campus is also multi-level: podiums, decks, ramps, stairs and tiers are walkable (see "Multi-level
+  movement" below). Several buildings have explorable interiors (GJB, MRD, BE block, the 2-wheeler parking's labs).
 * Outer Ring Road runs diagonally (WNW→ESE) along the north-east edge; the main gate opens onto its service road.
   Zombie hordes spawn out on the ring road and come in through the main gate (later waves: other breaches).
 
