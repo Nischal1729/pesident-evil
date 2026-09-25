@@ -596,6 +596,16 @@ function buildBEInterior(kit: WorldKit): void {
     vqD(pl, sg * (ROOM.s1 - 0.02), HALL.d0, ROOM.d1, L.G, CEIL[2], -sg, C.white); // room wing outer wall
   }
   vqS(pl, ROOM.d1 - 0.02, -ROOM.s1, ROOM.s1, L.G, CEIL[2], -1, C.white); // west wall of the core
+  // Hidden shadow casters 0.6 m inside the solid block, behind the core's west wall and the north wing's outer wall (the
+  // sides the WNW sun comes from). The sun's constant depth bias (−0.0004 of the 399 m light frustum ≈ 0.16 m) let light
+  // onto a thin strip of floor along the base of those walls: their caster, the `bblock` notch face, is only centimetres
+  // from the floor there. Facing away from the sun, these land in the shadow map in front of that face; buried in the
+  // block, they are never seen. (Dropping the global bias instead makes the double-sided tree foliage self-shadow.)
+  {
+    const q = P(0, ROOM.d1 + 0.6), hb = kit.buf('plaster', q[0], q[1]);
+    vqS(hb, ROOM.d1 + 0.6, -ROOM.s1, ROOM.s1, 0, L.top, -1);
+    vqD(hb, -(ROOM.s1 + 0.6), HALL.d0, ROOM.d1, 0, L.top, 1);
+  }
   // lift core: granite-clad lift wall to the lobby at G, the orange wall above the mezzanine, plaster elsewhere
   {
     const gr = B('granite');
