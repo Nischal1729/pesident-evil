@@ -20,6 +20,8 @@ interface Prism {
   passBullets: boolean;
   /** sloped top (ramps / stair flights): top(x,z) = y0 + (y1 − y0)·clamp01(((x−ax)·dx + (z−az)·dz)·inv) */
   ramp: { ax: number; az: number; dx: number; dz: number; inv: number; y0: number; y1: number; slope: number } | null;
+  /** boundary lip (see setLip): outward unit normal, outer plane dot(p, n) = off, extent along (−nz, nx) in [u0, u1] */
+  lip: { nx: number; nz: number; off: number; u0: number; u1: number } | null;
 }
 
 interface Cyl {
@@ -47,10 +49,19 @@ export const STEP_UP = 0.45;
 const GROUND_TOL = 0.15;
 /** Body height used for head-room / blocking tests in multi-level mode. */
 export const AGENT_HEIGHT = 1.8;
-/** Highest ledge above the feet the player can mantle onto: covers the 2.4 m gates; boundary walls are 2.7 m and up. */
-export const MANTLE_MAX = 2.6;
-/** Zombies only hit a target less than this far above or below them (World's zombie reach test uses the same 1.3 m). */
-const ZOMBIE_REACH_Y = 1.3;
+/**
+ * Highest rise anyone climbs in one go (player mantle, AI climbs, navigation climb edges). Zombies hit a target less
+ * than 1.3 m above or below them (World's reach test), so a single climb never lifts a survivor out of their reach.
+ */
+export const CLIMB_MAX = 1.3;
+/**
+ * Solids whose tops can be climbed onto. Everything else (buildings, parapets, desks, roofs, the gate median, trees,
+ * hoardings and other 'wall' pieces) refuses, so a new tag never opens a perch the navigation can't follow.
+ */
+const CLIMB_TAGS = new Set(['prop', 'planter', 'mrd:planter', 'oat:planter', 'stair', 'ramp', 'landing', 'be:steps', 'mrd:steps', 'mrd:forecourt', 'oat:tier', 'oat:stair', 'oat:aisle', 'boundary']);
+export function climbableTag(tag: string): boolean {
+  return CLIMB_TAGS.has(tag) || tag.startsWith('gate:');
+}
 
 export class StaticCollision {
   prisms: Prism[] = [];
@@ -86,7 +97,7 @@ export class StaticCollision {
       minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
     });
     const id = this.prisms.length;
-    this.prisms.push({ id, pts, n: p.length, base, height, minX, maxX, minZ, maxZ, surface, enabled: true, tag, stamp: 0, passBullets: tag.startsWith('gate:'), ramp: null });
+    this.prisms.push({ id, pts, n: p.length, base, height, minX, maxX, minZ, maxZ, surface, enabled: true, tag, stamp: 0, passBullets: tag.startsWith('gate:'), ramp: null, lip: null });
     this.cellsFor(minX, maxX, minZ, maxZ, (c) => c.p.push(id));
     return id;
   }
@@ -131,6 +142,59 @@ export class StaticCollision {
 
   setPrismEnabled(id: number, enabled: boolean): void {
     this.prisms[id].enabled = enabled;
+  }
+
+  /**
+   * Mark a prism as part of the campus boundary with outward unit normal (nx, nz). Its top is climbable only from the
+   * inside (ledgeAt and the navigation climb edges), and survivors on it are held back at its outer face (clampLip),
+   * so nobody leaves the campus over a wall or gate. `off` moves the plane (default: the outer face less 5 cm).
+   */
+  setLip(id: number, nx: number, nz: number, off?: number): void {
+    const P = this.prisms[id];
+    let o = -Infinity, u0 = Infinity, u1 = -Infinity;
+    for (let i = 0; i < P.n; i++) {
+      const x = P.pts[i * 2], z = P.pts[i * 2 + 1];
+      o = Math.max(o, x * nx + z * nz);
+      const u = -x * nz + z * nx;
+      u0 = Math.min(u0, u); u1 = Math.max(u1, u);
+    }
+    P.lip = { nx, nz, off: off ?? o - 0.05, u0, u1 };
+  }
+
+  /**
+   * Hold a survivor (feet at y) inside the campus: past the outer plane of a lipped prism whose top is within
+   * [y − 1.0, y + 0.3], it is put back on the plane. The 0.3 m keeps a hop on the ground outside (peak 0.74 m) from
+   * being caught by the 1.1 m gate median; the 0.6 m depth only catches a body that crossed the plane this tick.
+   */
+  clampLip(pos: { x: number; z: number }, y: number): boolean {
+    let hit = false;
+    const stamp = ++this.stampCounter;
+    this.cellsAround(pos.x, pos.z, 0.6, (cell) => {
+      for (const pi of cell.p) {
+        const P = this.prisms[pi];
+        if (P.stamp === stamp) continue;
+        P.stamp = stamp;
+        const L = P.lip;
+        if (!L || !P.enabled) continue;
+        const top = P.base + P.height;
+        if (y < top - 0.3 || y > top + 1.0) continue;
+        const u = -pos.x * L.nz + pos.z * L.nx;
+        if (u < L.u0 || u > L.u1) continue;
+        const d = pos.x * L.nx + pos.z * L.nz - L.off;
+        if (d <= 0 || d > 0.6) continue;
+        pos.x -= L.nx * d; pos.z -= L.nz * d;
+        hit = true;
+      }
+    });
+    return hit;
+  }
+
+  private cellsAround(x: number, z: number, r: number, fn: (cell: { p: number[]; c: number[] }) => void): void {
+    for (let cx = Math.floor((x - r) / CELL); cx <= Math.floor((x + r) / CELL); cx++)
+      for (let cz = Math.floor((z - r) / CELL); cz <= Math.floor((z + r) / CELL); cz++) {
+        const cell = this.grid.get(this.key(cx, cz));
+        if (cell) fn(cell);
+      }
   }
 
   /** Push a circle out of all static shapes. Returns true if any collision happened. */
@@ -256,9 +320,8 @@ export class StaticCollision {
   /**
    * Highest walkable surface under (x,z) that is at or below maxY (0 = terrain). Surfaces whose outline passes within
    * GROUND_TOL count as underfoot, so hairline seams between adjacent solids (tier rings, stacked slabs) never open a
-   * hole to fall through. Gate tops count: only a mantle gets a body up there (navigation skips them in forTopsAt).
-   * Tops of 'wall' prisms (compound, low and parking walls) never do: from a gate top the player could otherwise step
-   * or hop onto the 2.7 m compound wall beside the west gate and walk along it.
+   * hole to fall through. Gate and compound-wall ('boundary') tops count. Tops of 'wall' prisms (hoardings, low and
+   * parking walls) never do: they are too thin or too tall to stand on.
    */
   groundAt(x: number, z: number, maxY: number): number {
     let best = 0;
@@ -298,45 +361,52 @@ export class StaticCollision {
   }
 
   /**
-   * Ledge the player can mantle onto, probing ahead along the unit direction (dx,dz). The first probe that is inside
-   * something decides: a boundary wall or anything above MANTLE_MAX refuses, a top in (feetY + 0.9, feetY + MANTLE_MAX]
-   * with AGENT_HEIGHT of headroom is the ledge. A top ZOMBIE_REACH_Y or more above the feet must be a gate: zombies
-   * bash a gate down, but any other perch that high (ramp parapets, the OAT wall, the statue) is out of their reach for good.
+   * Ledge to climb onto, probing ahead along the unit direction (dx,dz). The first probe inside something decides:
+   * its highest top (prisms and cylinders) must rise more than STEP_UP and at most CLIMB_MAX above the feet, belong to a
+   * climbable solid (climbableTag), have AGENT_HEIGHT of headroom, and for a lipped (boundary) solid be approached from
+   * the inside. Used by the player's jump and by AI climbs; the navigation climb edges apply the same rule.
    */
   ledgeAt(x: number, z: number, dx: number, dz: number, feetY: number, r: number): { x: number; z: number; y: number } | null {
     for (const s of [0.25, 0.45, 0.65]) {
       const px = x + dx * (r + s), pz = z + dz * (r + s);
       const cell = this.cellAt(px, pz);
       if (!cell) continue;
-      let top = -Infinity, gate = false;
+      let top = -Infinity, best: Prism | Cyl | null = null;
       for (const pi of cell.p) {
         const P = this.prisms[pi];
-        if (!P.enabled || px < P.minX || px > P.maxX || pz < P.minZ || pz > P.maxZ || !pointInPolygon(px, pz, P.pts, P.n)) continue;
-        if (P.tag === 'wall') return null;
-        if (P.base > feetY + MANTLE_MAX) continue;
+        if (!P.enabled || P.base > feetY + CLIMB_MAX || px < P.minX || px > P.maxX || pz < P.minZ || pz > P.maxZ || !pointInPolygon(px, pz, P.pts, P.n)) continue;
         const t = this.topAt(P, px, pz);
-        if (t > top) { top = t; gate = P.passBullets; }
+        if (t > top) { top = t; best = P; }
       }
-      if (top <= feetY + 0.9) continue;
-      if (top > feetY + MANTLE_MAX || (top >= feetY + ZOMBIE_REACH_Y && !gate) || this.ceilingAt(px, pz, top) < top + AGENT_HEIGHT) return null;
+      for (const ci of cell.c) {
+        const C = this.cyls[ci];
+        if (!C.enabled || C.base > feetY + CLIMB_MAX || (px - C.x) ** 2 + (pz - C.z) ** 2 >= C.r * C.r) continue;
+        if (C.base + C.height > top) { top = C.base + C.height; best = C; }
+      }
+      if (!best || top <= feetY + STEP_UP) continue;
+      const lip = 'lip' in best ? best.lip : null;
+      if (top > feetY + CLIMB_MAX || !climbableTag(best.tag) || (lip && dx * lip.nx + dz * lip.nz <= 0) || this.ceilingAt(px, pz, top) < top + AGENT_HEIGHT) return null;
       return { x: px, z: pz, y: top };
     }
     return null;
   }
 
-  /** Visit the tops of every solid whose footprint contains (x,z) (navigation candidates). Gates are skipped. */
-  forTopsAt(x: number, z: number, fn: (top: number) => void): void {
+  /**
+   * Visit the tops of every solid whose footprint contains (x,z) (navigation candidates) with the solid's prism id
+   * (−1 for cylinders) and whether it is climbable. Gates are skipped: their 0.5 m tops get nodes from their centreline.
+   */
+  forTopsAt(x: number, z: number, fn: (top: number, prism: number, climbable: boolean) => void): void {
     const cell = this.cellAt(x, z);
     if (!cell) return;
     for (const pi of cell.p) {
       const P = this.prisms[pi];
       if (!P.enabled || P.passBullets) continue;
       if (x < P.minX || x > P.maxX || z < P.minZ || z > P.maxZ) continue;
-      if (pointInPolygon(x, z, P.pts, P.n)) fn(this.topAt(P, x, z));
+      if (pointInPolygon(x, z, P.pts, P.n)) fn(this.topAt(P, x, z), pi, climbableTag(P.tag));
     }
     for (const ci of cell.c) {
       const C = this.cyls[ci];
-      if (C.enabled && (x - C.x) ** 2 + (z - C.z) ** 2 < C.r * C.r) fn(C.base + C.height);
+      if (C.enabled && (x - C.x) ** 2 + (z - C.z) ** 2 < C.r * C.r) fn(C.base + C.height, -1, climbableTag(C.tag));
     }
   }
 
