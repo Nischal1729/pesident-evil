@@ -333,10 +333,13 @@ export class World {
     this.fieldT -= dt;
     if (this.fieldT > 0) return;
     this.fieldT = 0.3;
-    const targets = this.survivors.filter((s) => s.alive).map((s) => ({ x: s.pos.x, y: s.pos.y, z: s.pos.z }));
+    // a survivor mantled onto a gate top has no nav node under its feet (the graph skips gates), which would leave the
+    // field empty and zombies pressing on the bars; target the gate's ground node instead, so they bash the gate down
+    const navY = (s: Survivor) => this.levels && s.pos.y > 2 && this.gates.some((g) => !g.broken && distToSegment(s.pos.x, s.pos.z, g.a[0], g.a[1], g.b[0], g.b[1]) < 0.6) ? 0 : s.pos.y;
+    const targets = this.survivors.filter((s) => s.alive).map((s) => ({ x: s.pos.x, y: navY(s), z: s.pos.z }));
     if (targets.length) this.nav.request('zombie', targets);
     const p = this.player;
-    if (p && p.alive) this.nav.request('player', [{ x: p.pos.x, y: p.pos.y, z: p.pos.z }], 12000);
+    if (p && p.alive) this.nav.request('player', [{ x: p.pos.x, y: navY(p), z: p.pos.z }], 12000);
   }
 
   // ---------------------------------------------------------------------------------------------

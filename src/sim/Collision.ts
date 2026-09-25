@@ -49,6 +49,8 @@ const GROUND_TOL = 0.15;
 export const AGENT_HEIGHT = 1.8;
 /** Highest ledge above the feet the player can mantle onto: covers the 2.4 m gates; boundary walls are 2.7 m and up. */
 export const MANTLE_MAX = 2.6;
+/** Zombies only hit a target less than this far above or below them (World's zombie reach test uses the same 1.3 m). */
+const ZOMBIE_REACH_Y = 1.3;
 
 export class StaticCollision {
   prisms: Prism[] = [];
@@ -298,22 +300,25 @@ export class StaticCollision {
   /**
    * Ledge the player can mantle onto, probing ahead along the unit direction (dx,dz). The first probe that is inside
    * something decides: a boundary wall or anything above MANTLE_MAX refuses, a top in (feetY + 0.9, feetY + MANTLE_MAX]
-   * with AGENT_HEIGHT of headroom is the ledge.
+   * with AGENT_HEIGHT of headroom is the ledge. A top ZOMBIE_REACH_Y or more above the feet must be a gate: zombies
+   * bash a gate down, but any other perch that high (ramp parapets, the OAT wall, the statue) is out of their reach for good.
    */
   ledgeAt(x: number, z: number, dx: number, dz: number, feetY: number, r: number): { x: number; z: number; y: number } | null {
     for (const s of [0.25, 0.45, 0.65]) {
       const px = x + dx * (r + s), pz = z + dz * (r + s);
       const cell = this.cellAt(px, pz);
       if (!cell) continue;
-      let top = -Infinity;
+      let top = -Infinity, gate = false;
       for (const pi of cell.p) {
         const P = this.prisms[pi];
         if (!P.enabled || px < P.minX || px > P.maxX || pz < P.minZ || pz > P.maxZ || !pointInPolygon(px, pz, P.pts, P.n)) continue;
         if (P.tag === 'wall') return null;
-        if (P.base <= feetY + MANTLE_MAX) top = Math.max(top, this.topAt(P, px, pz));
+        if (P.base > feetY + MANTLE_MAX) continue;
+        const t = this.topAt(P, px, pz);
+        if (t > top) { top = t; gate = P.passBullets; }
       }
       if (top <= feetY + 0.9) continue;
-      if (top > feetY + MANTLE_MAX || this.ceilingAt(px, pz, top) < top + AGENT_HEIGHT) return null;
+      if (top > feetY + MANTLE_MAX || (top >= feetY + ZOMBIE_REACH_Y && !gate) || this.ceilingAt(px, pz, top) < top + AGENT_HEIGHT) return null;
       return { x: px, z: pz, y: top };
     }
     return null;
