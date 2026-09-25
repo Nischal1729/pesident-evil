@@ -39,11 +39,15 @@ columns, not a full-height block; the 10th-floor balcony band and the top cornic
 | `mrdbe_rYvZomXiFkI.mp4` ("PES UNIVERSITY BE BLOCK TOUR") | 2023-08 | 0:41–2:40 entrance crowd, glass wall + logo, food point; lobby (frieze, orange wall, lifts + TV); CSE corridors (orange room plates, red department sign, TVs), lift lobbies (granite), atrium stairs, wave relief wall, hanging TVs, Formula-student cars |
 | `tour.mp4` | 2026 | tower + skybridges from GJBC (1332–1406), skyline from the east (0002, 1928) |
 | `mrdbe_SmHnHHxbpaE.mp4` | 2025 | GJBC tour (no BE block content) |
-| `be_uxqjCJBCP_g.mp4`, `be_UOVuw2QUp6g.mp4` | 2025, 2023 | campus tour 2025 and ECE branch tour (scanned for BE block, see below) |
+| `be_UOVuw2QUp6g.mp4` ("ECE Branch Tour", Vaibhaw Siddharth) | 2023-06 | 0:52–5:40 food point, portico, entrance, lobby (frieze, lifts + TV), the ECE department sign, a gallery with a "Carpe Diem" quote wall |
+| `gjbx_ZyeLAVjgiYk.mp4` ("PES University 2024 full campus tour") | 2024-03 | 8:08–8:44 lobby lift bank under the frieze, entrance at dusk, stalls under the portico; 11:44–11:48 both skybridges |
+| `gjbx_cFQAKKwyeWY.mp4` ("PES University Bangalore Campus Tour") | 2026-03 | 3:36–4:52 entrance from the drive (paved), glass wall, CSE sign on a gallery parapet, atrium from a gallery |
+| `be_uxqjCJBCP_g.mp4` (duplicate of `gjbx_uxqjCJBCP_g.mp4`), `campus_5bxHqmfj7bE.mp4`, `campus_soQwdkL9G0w.mp4`, `campus_9sKwG8IcfE0.mp4` | 2021–26 | scanned: no BE block content |
 
 Frames: `reference/frames/be/` — `be21_*`, `be23_*`, `sheets23/` (2023, incl. `s23b_*` for 6:24–17:36),
 `sheetsS/` (SmHnHHxbpaE), `v21/` (2021 exterior at 1 s steps `ext_*`, the 11th-floor map `map11_297/299`),
-`scan/` (frames pulled from the other campus tours). Satellite zoom-19 tiles: `reference/tiles/`.
+`scan/` (frames and 4 s contact sheets from the other tours: `UOVu_*`, `ZyeL_*`, `cFQA_*`). Satellite zoom-19 tiles:
+`reference/tiles/`.
 
 ## 1. Massing and levels
 
@@ -57,8 +61,9 @@ Frames: `reference/frames/be/` — `be21_*`, `be23_*`, `sheets23/` (2023, incl. 
   (≈ 42 m) — not a slot open to the roof (keys 0002, 1406, 1928).
 * The satellite's dark rectangle behind the tower's roof edge is more likely a roof light over the atrium than the
   recess. (L)
-* North of the tower the roof line in key 1928 is lower, with a glass balustrade (a roof terrace — the "13th floor
-  canteen"?). Not modelled yet. (M)
+* North of the tower, key 1928 shows a lower roof line with a glass balustrade, but it lies on the bearing of MRD's
+  east block (nearer, ≈ 20 m tall), so it may not be the BE block at all. The 2021 tour's "13th floor" is a rooftop
+  cafeteria under a steel diamond-lattice canopy with open terraces and railings (v21/int_01). Not modelled. (L)
 
 ## 2. Entrance and east face — H
 
@@ -71,14 +76,18 @@ Frames: `reference/frames/be/` — `be21_*`, `be23_*`, `sheets23/` (2023, incl. 
 * **Portico**: a deep slab at ≈ 14 m (fascia ≈ 2 m) on four columns (pink granite to ≈ 6 m, beige above), north-biased:
   the southern near column stands in front of the glass's middle; the far pair against the rough granite retaining wall
   of the OAT / MRD side.
+* **Drive surface**: asphalt with white lane lines in 2021; grey interlocking pavers in front of the entrance and under
+  the portico by 2024–26 (cFQA_0232, ZyeL_0504), where event stalls are set up. The link road itself is campus-wide
+  (`ROADS` in layout.ts), not changed here.
 * **Food point opposite**: the PES FOOD POINT shop row (red plate, yellow fascias, rolling shutters, "Campus Book Mart")
   in MRD's west face across the drive (`mrd.ts`, MRD agent).
 
 ## 3. Interior (enterable core, `buildBEInterior`) — content H, layout M
 
 Built from the 2021 / 2023 interior shots; plausible Indian-college fill where footage is missing.
-* **Lobby** (s −6…6, d 0.6…10, G): triple height; granite lift wall with two steel lifts and a TV facing the entrance
-  (under the mezzanine); the **orange wall** above the mezzanine; the **"MAHATMA GANDHI" frieze** (sketched Dandi-march
+* **Lobby** (s −6…6, d 0.6…10, G): triple height; a bank of three steel lifts on the north wall — light-grey granite
+  panels with dark joints under a dark band with a TV (ZyeL_0500, UOVu_0094) — plus the lift core's granite wall with
+  two lifts and a TV facing the entrance (under the mezzanine); the **orange wall** above the mezzanine; the **"MAHATMA GANDHI" frieze** (sketched Dandi-march
   figures, Ashoka chakra, tricolour swoosh, "150") on the bulkhead of the 2nd-floor gallery facing the doors; black
   horizontal-bar railings; a granite stair to the mezzanine along the south wall; reception counter, benches, plants.
 * **Atrium** (void s ±4.8, d 15…25 through the 1st and 2nd floors) behind the lift core: two **floating golden-timber
@@ -87,7 +96,8 @@ Built from the 2021 / 2023 interior shots; plausible Indian-college fill where f
   floor, the **wave relief wall** on the lift core.
 * **Rooms** off the galleries (north and south wings, two per wing per floor): G01 CSE office, classrooms (wooden
   3-seater benches, green board on a dais, ceiling fans, tube lights, notice board), CSE labs (rows of monitors),
-  glazed panels with black bars onto the galleries (2021 lab view), orange room plates, the red CSE department sign.
+  glazed panels with black bars onto the galleries (2021 lab view), orange room plates, the red CSE department sign
+  (1st floor) and the ECE department sign (2nd floor; ECE shares the block, UOVu_0124).
 * **Stair core** (west end): dog-leg flights with mid landings, floor numbers, WC block.
 
 Physical model: floors are prisms (G podium, 0.3 m slabs at 3.65 / 7.15), flights are segmented `addRamp`s (flat
@@ -101,7 +111,10 @@ same apparent span and position, so they are stacked (they were at x −40 and �
 
 ## 5. Open questions
 
-* The lower roof north of the tower (terrace with glass balustrade) and the "lower western wings" on the satellite.
+* The lower roof north of the tower (terrace with glass balustrade — BE or MRD?), the 13th-floor rooftop cafeteria and
+  the "lower western wings" on the satellite. A frame showing the whole east face from the north would settle it.
+* A 2025 scan claimed "ordinary floors ride on the portico" (cFQA_0232), but that frame is cut at the soffit; the
+  window bands in it belong to the facade behind.
 * The exact floor plan behind the lobby (the 11th-floor map shows a ring of rooms round an elongated central void with
   lift banks on the east side; the lower floors are modelled on that pattern).
 * Whether the portico carries anything above its slab (the satellite shows a lower weathered roof, modelled as a deck).

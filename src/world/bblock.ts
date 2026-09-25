@@ -366,7 +366,7 @@ function fitFont(g: CanvasRenderingContext2D, text: string, maxW: number, size: 
 
 /** Canvas decals for the interior (frieze, department sign, notice boards, room plates, floor numbers). */
 function decalTexture(): { tex: THREE.CanvasTexture; uv: Record<string, [number, number, number, number]> } {
-  const W = 1024, H = 512;
+  const W = 1024, H = 640;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d')!;
@@ -408,6 +408,13 @@ function decalTexture(): { tex: THREE.CanvasTexture; uv: Record<string, [number,
     g.font = `700 30px ${SANS}`; g.fillText('Department of', 256, 196);
     fitFont(g, 'Computer Science and Engineering', 488, 30, '700', SANS); g.fillText('Computer Science and Engineering', 256, 232);
     reg('cse', 0, 128, 512, 128);
+    // Electronics and Communication Engineering shares the block (2023 ECE tour, UOVu_0124)
+    g.fillStyle = '#c8322a'; g.fillRect(0, 512, 512, 128);
+    g.fillStyle = '#ffffff';
+    g.font = `600 24px ${KN}`; g.fillText('ಎಲೆಕ್ಟ್ರಾನಿಕ್ಸ್ ಮತ್ತು ಸಂವಹನ ಇಂಜಿನಿಯರಿಂಗ್ ವಿಭಾಗ', 256, 540);
+    g.font = `700 30px ${SANS}`; g.fillText('Department of', 256, 580);
+    fitFont(g, 'Electronics & Communication Engineering', 488, 30, '700', SANS); g.fillText('Electronics & Communication Engineering', 256, 616);
+    reg('ece', 0, 512, 512, 128);
   }
   // pin board: maroon felt with student posters
   {
@@ -666,7 +673,7 @@ function buildBEInterior(kit: WorldKit): void {
   }
   // CSE sign over the 1st-floor north window, pin boards in the hall
   decal('cse', -HALL.s + 0.11, 19.75, L.F1 + 2.55, 2.9, 0.72, NS);
-  decal('cse', HALL.s - 0.11, 19.75, L.F2 + 2.55, 2.9, 0.72, NEG(NS));
+  decal('ece', HALL.s - 0.11, 19.75, L.F2 + 2.55, 2.9, 0.72, NEG(NS));
 
   // ============================================================ stair core visuals
   {
@@ -726,17 +733,32 @@ function buildBEInterior(kit: WorldKit): void {
     }
     B('plaster').beam(P3at((LSTAIR.s0 + LSTAIR.s1) / 2, LSTAIR.d0, G - 0.15), P3at((LSTAIR.s0 + LSTAIR.s1) / 2, LSTAIR.d1, L.F1 - 0.2), LSTAIR.s1 - LSTAIR.s0, 0.14, C.white);
     sloped(B('metal'), LSTAIR.d0, LSTAIR.d1, LSTAIR.s0 + 0.04, G, L.F1);
-    // reception counter, black benches, potted plants, entrance mat
-    bx(B('plaster'), -5.3, -2.3, 3.6, 4.4, G, G + 1.05, col('#f3f2ee'));
-    bx(B('wood'), -5.4, -2.2, 3.5, 4.5, G + 1.05, G + 1.1, C.timberDark);
-    solid(col_, -5.4, -2.2, 3.5, 4.5, G, G + 1.1, 'prop', 'wood');
-    for (const s of [-4.6, 2.2]) { bx(B('dark'), s - 0.8, s + 0.8, 1.9, 2.4, G + 0.38, G + 0.46, C.chair); bx(B('metal'), s - 0.75, s + 0.75, 1.95, 2.35, G, G + 0.38, C.legs); }
+    // lift bank on the north wall (2024 tour ZyeL_0500 / UOVu_0094): light-grey granite panels with dark joints, three
+    // steel lifts, a dark granite band above them with a TV
+    {
+      const w = -LOBBY.s + 0.02, gr = B('granite'), mt = B('metal');
+      vqD(gr, w, 1.6, 9.4, G, G + 2.7, 1, col('#b8b6b0'));
+      vqD(gr, w + 0.01, 1.6, 9.4, G + 2.7, G + 3.35, 1, col('#3b3c3e'));
+      for (const d of [2.7, 4.5, 6.3, 8.1]) bx(gr, w, w + 0.04, d - 0.08, d + 0.08, G, G + 2.7, col('#4a4b4d'));
+      for (const d of [3.6, 5.4, 7.2]) {
+        bx(mt, w, w + 0.05, d - 0.62, d + 0.62, G, G + 2.3, col('#7b7f84'));
+        bx(mt, w, w + 0.07, d - 0.55, d + 0.55, G, G + 2.18, C.steel);
+        bx(mt, w, w + 0.08, d - 0.01, d + 0.01, G, G + 2.18, col('#6a6e73'));
+        decal('plate13', w + 0.01, d, G + 2.5, 0.36, 0.18, NS);
+      }
+      bx(B('dark'), w, w + 0.06, 4.75, 6.05, G + 2.75, G + 3.3, C.screen);
+      bx(B('lamp'), w + 0.061, w + 0.07, 4.8, 6.0, G + 2.8, G + 3.25, col('#6f9fd6'));
+    }
+    // security desk, black benches, potted plants, entrance mat
+    bx(B('plaster'), 1.0, 3.0, 5.8, 6.4, G, G + 1.0, col('#f3f2ee'));
+    bx(B('wood'), 0.95, 3.05, 5.75, 6.45, G + 1.0, G + 1.05, C.timberDark);
+    solid(col_, 0.95, 3.05, 5.75, 6.45, G, G + 1.05, 'prop', 'wood');
+    for (const s of [-2.6, 2.2]) { bx(B('dark'), s - 0.8, s + 0.8, 1.9, 2.4, G + 0.38, G + 0.46, C.chair); bx(B('metal'), s - 0.75, s + 0.75, 1.95, 2.35, G, G + 0.38, C.legs); }
     bx(B('dark'), -1.4, 1.4, 0.8, 2.6, G + 0.003, G + 0.012, col('#3a3530'));
     // TV on the south wall, lobby ceiling panels (square LEDs) + downlights under the mezzanine
     for (const s of [-3.5, 0, 3.5]) for (const d of [2.2, 4.6]) bx(B('lamp'), s - 0.5, s + 0.5, d - 0.5, d + 0.5, CEIL[2] - 0.03, CEIL[2], C.white);
     for (const s of [-4.5, -1.5, 1.5, 4.5]) for (const fy of [L.F1, L.F2]) bx(B('lamp'), s - 0.12, s + 0.12, 8.5, 8.74, fy - SLAB - 0.02, fy - SLAB, C.white);
     // pin board + departmental notice on the lobby side walls
-    decal('pinboard', -LOBBY.s + 0.01, 6.0, G + 1.6, 2.4, 0.6 * 2.4 / 2, NS);
     kit.lampPoints.push(new THREE.Vector3(P(0, 4.5)[0], CEIL[2] - 0.6, P(0, 4.5)[1]));
     for (const [s, d] of [[-5.3, 1.2], [-5.3, 9.3], [2.9, 9.3]] as V2[]) { const q = P(s, d); pottedPlant(kit, q[0], G, q[1], 1.3); }
     // mezzanine / 2nd-floor gallery railings over the lobby
