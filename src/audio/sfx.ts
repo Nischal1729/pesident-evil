@@ -36,6 +36,7 @@ export const SFX_NAMES = [
   // weapons
   'pistol_fire', 'rifle_fire', 'shotgun_fire', 'smg_fire', 'dry_fire', 'reload_mag_out', 'reload_mag_in',
   'reload_rack', 'shotgun_pump', 'shell_insert', 'bat_swing', 'bat_hit', 'weapon_switch', 'bullet_whiz',
+  'grenade_pin', 'grenade_bounce', 'grenade_explosion',
   // impacts
   'impact_flesh', 'impact_concrete', 'impact_metal', 'impact_wood', 'headshot',
   // zombies
@@ -420,6 +421,62 @@ export const RECIPES: Record<SfxName, SfxRecipe> = {
       const g = gain(c, 0);
       keys(g.gain, T0, [[0, 0], [d * 0.3, 0.35], [d, 0]]);
       chain(o, g, c.out);
+    },
+  },
+
+  grenade_pin: {
+    dur: 0.55, variants: 3, category: 'foley', level: -7, priority: 6, maxVoices: 2, refDistance: 3,
+    render: (c) => {
+      const r = c.rng;
+      // pin drawn out of the fuse (short bright scrape + snag), then the ring chinks against the lever
+      scrape(c, T0, c.out, { dur: 0.07, f0: 2600, f1: 4200, q: 3, gain: 0.35 });
+      metalClick(c, T0 + r.range(0.065, 0.08), c.out, { f: 3300 * r.range(0.95, 1.05), decay: 0.03, gain: 0.8, ratios: RATIOS.bar, tick: 0.5 });
+      metalClick(c, T0 + r.range(0.17, 0.2), c.out, { f: 5200 * r.range(0.95, 1.05), decay: 0.12, gain: 0.45, ratios: [1, 2.76, 5.4], tick: 0.2 });
+    },
+  },
+  grenade_bounce: {
+    dur: 0.35, variants: 4, category: 'impact', level: -9, priority: 5, maxVoices: 3, refDistance: 5, reverb: 0.15, pitchJitter: 0.08,
+    render: (c) => {
+      const r = c.rng;
+      // a cast-iron body knocking on concrete, with a small rattle of the lever
+      metalClick(c, T0, c.out, { f: r.range(1250, 1600), decay: 0.035, gain: 0.9, ratios: [1, 1.9, 3.1, 4.4], tick: 0.4, body: 0.7, bodyF: r.range(160, 210) });
+      burst(c, T0, c.out, { type: 'lowpass', f: 1500, tau: 0.012, gain: 0.6, attack: 0.001 });
+      metalClick(c, T0 + r.range(0.03, 0.05), c.out, { f: r.range(3200, 4200), decay: 0.012, gain: 0.25, tick: 0.3 });
+    },
+  },
+  grenade_explosion: {
+    dur: 4.2, variants: 3, category: 'weapon', level: -1, priority: 10, maxVoices: 3, refDistance: 16, rolloff: 0.55, reverb: 0.45, pitchJitter: 0.06,
+    render: (c) => {
+      const r = c.rng;
+      const t = T0;
+      const j = (x: number, amt = 0.1) => x * (1 + r.bi() * amt);
+      const echoIn = gain(c, 1);
+      echoIn.connect(c.out);
+      const body = satBus(c, echoIn, 3.2, 0.42, 0.85, 0.08);
+      // the crack: a deterministic spike + fast bright noise, outside the saturator so it pokes out on top
+      const cl = Math.ceil(0.02 * c.sr), ct = 0.0028 * c.sr, cd = new Float32Array(cl);
+      for (let i = 0; i < cl; i++) cd[i] = (i === 0 ? 1 : 0) + r.bi() * 0.6 * Math.exp(-i / ct);
+      chain(src(c, cd, t), filter(c, 'highpass', 900, 0.7), gain(c, 0.8), c.out);
+      // chest-thumping sub drop and the blast body sweeping from bright to dull
+      thump(c, t, body, { f0: j(95), f1: 26, sweep: 0.3, tau: 0.42, gain: 1.1, len: 2.6 });
+      thump(c, t + 0.004, body, { f0: j(180), f1: 55, sweep: 0.08, tau: 0.09, gain: 0.7 });
+      burst(c, t, body, { type: 'lowpass', f: j(4200), f2: 160, sweepTime: 0.7, q: 0.8, tau: j(0.3), gain: 1.1, attack: 0.0008 });
+      burst(c, t, body, { type: 'bandpass', f: j(650), q: 0.8, tau: 0.09, gain: 0.75, attack: 0.0006 });
+      burst(c, t + 0.01, body, { type: 'bandpass', f: j(1800), q: 1.1, tau: 0.05, gain: 0.45, attack: 0.0005 });
+      // rolling rumble as the pressure wave washes off the buildings
+      const rum = noise(c, t, 3.6, 'brown');
+      const rg = gain(c, 0);
+      keys(rg.gain, t, [[0, 0], [0.04, 0.85], [0.5, 0.55], [1.6, 0.22], [3.5, 0]]);
+      chain(rum, filter(c, 'lowpass', j(140), 0.9), rg, body);
+      // debris: grit and gravel pattering down, a few shrapnel pings off metal
+      crackle(c, t + 0.12, c.out, { count: 70, spread: 1.6, fLo: 1400, fHi: 6500, gain: 0.22, falloff: 1.3, decayMs: 0.8 });
+      crackle(c, t + 0.3, c.out, { count: 30, spread: 1.4, fLo: 500, fHi: 1800, gain: 0.18, falloff: 1.1, decayMs: 2.2 });
+      for (let k = 0; k < 4; k++) metalClick(c, t + r.range(0.08, 0.9), c.out, { f: r.range(2400, 5200), decay: r.range(0.02, 0.06), gain: r.range(0.06, 0.14), tick: 0.3 });
+      // slap-backs off the blocks around the quad, then a long dark tail
+      const taps = ([[0.16, 0.5, 1800], [0.29, 0.34, 1300], [0.47, 0.24, 900], [0.72, 0.15, 650], [1.05, 0.09, 500], [1.45, 0.05, 420]] as const)
+        .map(([d, g, lp]) => [d * r.range(0.85, 1.2), g * r.range(0.8, 1.1), lp] as const);
+      echoTaps(c, echoIn, taps, c.out);
+      sendReverb(c, echoIn, c.out, 0.55, { secs: 3.2, decay: 2.4, lpStart: 3500, lpEnd: 350 });
     },
   },
 
