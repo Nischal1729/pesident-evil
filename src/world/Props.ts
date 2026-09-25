@@ -8,6 +8,7 @@ import { AREAS, BUILDINGS, GATES, GLOBE_POS, GLOBE_Y, ORR, orrPoint, PLAYER_SPAW
 import { parkingSlots } from './gjb/parking';
 import { injectWorldLighting } from './materials';
 import { liftY } from './terrain';
+import { grenadeAssets } from '../render/Grenades';
 
 /**
  * Prop dressing for the campus and the Outer Ring Road.
@@ -949,7 +950,7 @@ class Dresser {
    */
   stations(): void {
     const staticB = new VBuilder();
-    const FOOT: Record<string, [number, number, number]> = { ammo: [1.95, 0.56, 1.4], health: [1.05, 0.8, 1.45], weapon: [1.42, 0.56, 1.45], repair: [1.25, 0.65, 1.4] }; // w, depth, back
+    const FOOT: Record<string, [number, number, number]> = { ammo: [1.95, 0.56, 1.4], health: [1.05, 0.8, 1.45], weapon: [1.42, 0.56, 1.45], repair: [1.25, 0.65, 1.4], grenade: [0.9, 0.56, 1.35] }; // w, depth, back
     for (const s of STATIONS) {
       let [x, z] = s.pos;
       const storey = s.y !== undefined;
@@ -983,8 +984,9 @@ class Dresser {
       if (s.kind === 'ammo') top = this.ammoStation(px, pz, yaw, fy);
       else if (s.kind === 'health') top = this.healthStation(staticB, px, pz, yaw, fy);
       else if (s.kind === 'weapon') top = this.weaponStation(staticB, s, px, pz, yaw, fy);
+      else if (s.kind === 'grenade') top = this.grenadeStation(staticB, px, pz, yaw, fy);
       else top = this.repairStation(staticB, px, pz, yaw, fy);
-      this.col.addPolygon(rectPoly(px, pz, yaw, fw, fd), s.kind === 'weapon' ? 2.0 : top + 0.05, s.kind === 'weapon' && s.item === 'smg' ? 'wood' : s.kind === 'ammo' ? 'wood' : 'metal', 'prop', fy);
+      this.col.addPolygon(rectPoly(px, pz, yaw, fw, fd), s.kind === 'weapon' ? 2.0 : top + 0.05, (s.kind === 'weapon' && s.item === 'smg') || s.kind === 'ammo' || s.kind === 'grenade' ? 'wood' : 'metal', 'prop', fy);
       const anchor = new THREE.Object3D();
       anchor.name = `station:${s.id}`;
       anchor.position.set(px, fy + top + 0.45, pz);
@@ -1122,6 +1124,38 @@ class Dresser {
       this.addStatic(gg);
     }
     return 2.0;
+  }
+
+  /** Open olive crate with a tray of eight frags on top (the game's own grenade model, merged into the static mesh). */
+  private grenadeStation(b: VBuilder, x: number, z: number, yaw: number, fy = 0): number {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, fy, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
+    b.transform(m);
+    b.set(0x4d5a32, 0.85, 0); // crate
+    b.box(0, 0.2, 0, 0.84, 0.4, 0.52);
+    b.set(0x39432a, 0.8, 0.1); // end battens and rim
+    for (const lx of [-0.4, 0.4]) b.box(lx, 0.2, 0, 0.05, 0.42, 0.54);
+    b.box(0, 0.395, 0.25, 0.84, 0.03, 0.03);
+    b.box(0, 0.395, -0.25, 0.84, 0.03, 0.03);
+    b.set(0xd9d2ae, 0.7, 0); // stencilled label
+    b.box(0, 0.24, 0.262, 0.46, 0.09, 0.006);
+    b.set(0x7a3b1c, 0.7, 0);
+    b.box(0, 0.24, 0.263, 0.08, 0.05, 0.006);
+    b.set(0x26291f, 0.9, 0); // foam tray
+    b.box(0, 0.405, 0, 0.74, 0.02, 0.42);
+    b.transform(null);
+    const src = grenadeAssets().geometry;
+    const q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+    let k = 0;
+    for (const lz of [-0.1, 0.1]) for (const lx of [-0.27, -0.09, 0.09, 0.27]) {
+      e.set(0, 0.7 + k * 1.9, 0);
+      q.setFromEuler(e);
+      p.set(lx, 0.415 + 0.0625, lz);
+      const g = src.clone();
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(m, new THREE.Matrix4().compose(p, q, one)));
+      this.addStatic(g);
+      k++;
+    }
+    return 0.56;
   }
 
   private repairStation(b: VBuilder, x: number, z: number, yaw: number, fy = 0): number {

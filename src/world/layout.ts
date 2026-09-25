@@ -726,7 +726,7 @@ export const SPAWN_ZONES: { gate: string; pts: V2[] }[] = [
 ];
 
 /** Interactable stations (COD-style). */
-export type StationKind = 'ammo' | 'health' | 'weapon' | 'repair';
+export type StationKind = 'ammo' | 'health' | 'weapon' | 'repair' | 'grenade';
 export interface StationDef {
   id: string; kind: StationKind; pos: V2; cost: number; item?: string; label: string;
   /** floor height (multi-level), default 0 */
@@ -770,6 +770,8 @@ export const STATIONS: StationDef[] = [
   { id: 'ammo_gjb_l2', kind: 'ammo', pos: [76.5, -82.0], y: GJB_L2, cost: 250, label: 'Ammo crate' }, // GJBC L2 lounge, east of the classroom doors
   { id: 'ammo_mrd', kind: 'ammo', pos: mrdAt(8.4, 6.9), y: MRD_LV.f0, face: propToward(mrdAt(8.4, 6.9), mrdAt(8.4, 8.6)), cost: 250, label: 'Ammo crate' }, // MRD lobby, back wall past the office door
   { id: 'med_huawei', kind: 'health', pos: [133.5, -31.9], y: PARKING.road, face: propToward([133.5, -31.9], [133.5, -30]), cost: 400, label: 'First-aid kit' }, // parking: Huawei lab, back wall
+  // grenade crate (tops grenades up; ammo crates do too) at the west gate, which has no ammo crate within 60 m
+  { id: 'nades_west', kind: 'grenade', pos: [-56, -101.4], face: propToward([-56, -101.4], [-56, -99.5]), cost: 200, label: 'Grenade crate' },
   { id: 'med_be', kind: 'health', pos: bePt(-16.0, 11.9), y: BE_LEVELS.G, face: propToward(bePt(-16.0, 11.9), bePt(-16.0, 10.02)), cost: 400, label: 'First-aid kit' }, // BE ground floor office, against the front wall
 ];
 

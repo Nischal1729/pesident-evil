@@ -274,7 +274,7 @@ export class Hud {
     for (const w of WALLS) { g.beginPath(); w.pts.forEach(([x, z], i) => (i ? g.lineTo(tx(x), tz(z)) : g.moveTo(tx(x), tz(z)))); g.stroke(); }
     for (const gt of GATES) { g.strokeStyle = '#ffb020'; g.lineWidth = 4; g.beginPath(); g.moveTo(tx(gt.a[0]), tz(gt.a[1])); g.lineTo(tx(gt.b[0]), tz(gt.b[1])); g.stroke(); }
     for (const st of STATIONS) {
-      g.fillStyle = st.kind === 'ammo' ? '#f2b233' : st.kind === 'health' ? '#e5484d' : '#46c46e';
+      g.fillStyle = st.kind === 'ammo' ? '#f2b233' : st.kind === 'health' ? '#e5484d' : st.kind === 'grenade' ? '#b8c46a' : '#46c46e';
       g.beginPath(); g.arc(tx(st.pos[0]), tz(st.pos[1]), 4, 0, Math.PI * 2); g.fill();
     }
     return c;

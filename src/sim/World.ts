@@ -1051,6 +1051,7 @@ export class World {
       let cost = st.cost;
       if (st.kind === 'ammo') text = `E — Refill ammo & grenades (${cost})`;
       else if (st.kind === 'health') text = `E — Patch up (${cost})`;
+      else if (st.kind === 'grenade') text = `E — Grenades (${cost})`;
       else if (st.kind === 'weapon' && st.item) {
         const owned = p.has(st.item as WeaponId);
         if (owned) { cost = Math.round(st.cost / 2); text = `E — ${WEAPONS[st.item as WeaponId].name} ammo (${cost})`; }
@@ -1112,6 +1113,10 @@ export class World {
       if (p.grenades < GRENADE.max) { p.grenades = GRENADE.max; changed = true; }
       if (!changed) { this.events.emit('message', { text: 'Ammo already full', kind: 'info' }); return; }
       this.events.emit('pickup', { playerId: p.id, kind: 'ammo', item: 'crate' });
+    } else if (st.kind === 'grenade') {
+      if (p.grenades >= GRENADE.max) { this.events.emit('message', { text: 'Grenades already full', kind: 'info' }); return; }
+      p.grenades = GRENADE.max;
+      this.events.emit('pickup', { playerId: p.id, kind: 'ammo', item: 'grenades' });
     } else if (st.kind === 'health') {
       if (p.health >= p.maxHealth) { this.events.emit('message', { text: 'Already at full health', kind: 'info' }); return; }
       p.health = p.maxHealth;

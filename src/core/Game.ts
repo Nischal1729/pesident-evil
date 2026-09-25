@@ -548,7 +548,7 @@ export class Game {
     STATIONS.forEach((s, i) => {
       m4.makeTranslation(s.pos[0], (this.multiLevel ? stationY(s) : 0) + 0.08, s.pos[1]);
       mesh.setMatrixAt(i, m4);
-      col.set(s.kind === 'ammo' ? 0xf2b233 : s.kind === 'health' ? 0xe5484d : 0x46c46e).multiplyScalar(2);
+      col.set(s.kind === 'ammo' ? 0xf2b233 : s.kind === 'health' ? 0xe5484d : s.kind === 'grenade' ? 0xb8c46a : 0x46c46e).multiplyScalar(2);
       mesh.setColorAt(i, col);
     });
     mesh.frustumCulled = false;
