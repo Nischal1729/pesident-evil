@@ -20,7 +20,7 @@ const GLAZE: V2 = [2.0, 14.0];
 
 export function buildAdmissionHall(kit: WorldKit): void {
   const k = new InteriorKit(kit, F);
-  k.castKeys = new Set(['plaster', 'stone']);
+  k.castKeys = new Set(['plaster']);
   const C = kit.collision;
   const R = (s0: number, t0: number, s1: number, t1: number): V2[] => F.rect(s0, t0, s1, t1);
   const white = col('#eeece6'), oak = col('#b8905f'), black = col('#1e2124'), frame = col('#23272b');
@@ -117,7 +117,7 @@ export function buildAdmissionHall(kit: WorldKit): void {
     m.name = 'adm:farFront'; m.matrixAutoUpdate = false; m.updateMatrix();
     far.add(m);
   }
-  k.build('interior:admission', F.at(8.8, 6.5), 80, far);
+  k.build('interior:admission', F.at(8.8, 6.5), 70, far);
 }
 
 type UV = [number, number, number, number];

@@ -403,9 +403,15 @@ export class InteriorKit {
   /** Extra objects shown with the interior (e.g. a sign mesh with its own small canvas texture). */
   extras: THREE.Object3D[] = [];
   constructor(public kit: WorldKit, public f: PlanFrame) {}
+  /**
+   * Material keys folded together inside an interior (vertex colour carries the albedo, so the look barely changes) to
+   * keep each interior at a handful of draw calls: honed granite → polished, paint / stone → plaster, glass → dark.
+   */
+  alias: Partial<Record<DetailKey, DetailKey>> = { granite: 'polished', paint: 'plaster', stone: 'plaster', glass: 'dark' };
   b(key: DetailKey): GeoBuffer {
-    let g = this.bufs.get(key);
-    if (!g) this.bufs.set(key, (g = new GeoBuffer({ color: true })));
+    const k = this.alias[key] ?? key;
+    let g = this.bufs.get(k);
+    if (!g) this.bufs.set(k, (g = new GeoBuffer({ color: true })));
     return g;
   }
   /** World-space box (rot about Y). */

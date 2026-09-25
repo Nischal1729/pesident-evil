@@ -376,9 +376,9 @@ export const FACADE_STYLES: Record<FacadeStyle | 'house', FacadeParams> = {
   gjbcCurtain: S({ wall: C('#e6e0d3'), band: C('#3c444c'), frame: C('#2b3138'), glass: C('#2c3843'), bayW: 1.5, curtain: 1, bandH: 0.28, mullions: 0, topBand: 1.0, topColor: C('#e9e3d6'), baseH: 0, litChance: 0.55, dirt: 0.1, glassRough: 0.04, glassMetal: 0.9 }),
   // GJBC NW library tower: white plaster, punched strip windows, granite plinth
   library: S({ wall: C('#f0eee8'), band: C('#e8e5de'), frame: C('#2f3a44'), glass: C('#2f3b46'), bayW: 4.2, winW: 0.82, sill: 1.0, winH: 1.55, bandH: 0, mullions: 3, curtain: 0.14, topBand: 1.2, topColor: C('#eeece6'), panel: [1.4, 4.2], baseH: 4.2, baseMode: 2, baseColor: C('#9c9c9a'), dirt: 0.25, reveal: 0.2 }),
-  // MRD refurb stone wings (SE tower, NE block): buff sandstone blocks, black-framed punched windows (3 panes), navy cornice
-  // (tour 2026 key frames 0316 / 0332: no glass curtain groups on the stone towers)
-  mrd: S({ wall: C('#c8b89e'), band: C('#bdae94'), frame: C('#23272b'), glass: C('#34414b'), bayW: 3.0, winW: 0.46, sill: 0.9, winH: 1.8, bandH: 0, mullions: 2, curtain: 0, topBand: 1.6, topColor: C('#1f2b45'), panel: [1.0, 0.5], baseH: 0, baseMode: 0, glassRough: 0.06, glassMetal: 0.55, litChance: 0.35, dirt: 0.4, reveal: 0.22 }),
+  // MRD refurb stone wings (SE tower, NE block): mostly blank buff sandstone blocks with sparse black-framed openings, navy
+  // cornice (tour 2026 key frames 0230 / 0316 / 0332: no glass curtain groups on the stone towers)
+  mrd: S({ wall: C('#c8b89e'), band: C('#bdae94'), frame: C('#23272b'), glass: C('#34414b'), bayW: 4.2, winW: 0.3, sill: 0.9, winH: 1.6, bandH: 0, mullions: 1, curtain: 0, topBand: 1.6, topColor: C('#1f2b45'), panel: [1.0, 0.5], baseH: 0, baseMode: 0, glassRough: 0.06, glassMetal: 0.55, litChance: 0.35, dirt: 0.4, reveal: 0.22 }),
   // B-Block: beige plaster, pilaster strips, near-square windows, louvre vents, pink-grey stone base (2 floors)
   bblock: S({ wall: C('#e0cfb6'), band: C('#d4c4ad'), frame: C('#2f3a40'), glass: C('#7f93a0'), bayW: 3.5, winW: 0.37, sill: 1.0, winH: 1.4, bandH: 0, mullions: 1, topBand: 1.0, topColor: C('#d8c9b3'), pilaster: 1, pilasterW: 0.55, louvre: 0.28, baseH: 7.0, baseMode: 2, baseColor: C('#a89484'), glassRough: 0.05, glassMetal: 0.7, dirt: 0.2, reveal: 0.22 }),
   // B-Block crest tower: buff stone, tiny square windows

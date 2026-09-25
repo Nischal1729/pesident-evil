@@ -157,7 +157,7 @@ const R = (s0: number, t0: number, s1: number, t1: number): V2[] => F.rect(s0, t
 export function buildMrdInterior(kit: WorldKit): void {
   const k = new InteriorKit(kit, F);
   // walls + slabs cast shadows (keeps sunlight out from under the shells); furniture and fittings do not
-  k.castKeys = new Set(['plaster', 'stone']);
+  k.castKeys = new Set(['plaster']);
   const C = kit.collision;
   const { f0: F0, f1: F1, u1: U1, u2: U2 } = L;
   const { doors } = mrdGlazing(kit);
@@ -682,7 +682,7 @@ export function buildMrdAuditorium(kit: WorldKit): void {
   const bd = BUILDINGS.find((b) => b.id === 'mrd');
   if (!bd) return;
   const k = new InteriorKit(kit, F);
-  k.castKeys = new Set(['plaster', 'stone']);
+  k.castKeys = new Set(['plaster']);
   const C = kit.collision;
   const F0 = L.f0;
   const outline = bd.poly.map((p) => toLocal(p));
@@ -836,7 +836,8 @@ export function buildMrdAuditorium(kit: WorldKit): void {
 
   let cx = 0, cz = 0;
   for (const p of bd.poly) { cx += p[0]; cz += p[1]; }
-  k.build('interior:mrd_auditorium', [cx / bd.poly.length, cz / bd.poly.length], 75);
+  // the hall has no openings to the outside (only the passage from the atrium), so it can be culled early
+  k.build('interior:mrd_auditorium', [cx / bd.poly.length, cz / bd.poly.length], 48);
 }
 
 /** Which side (for InteriorKit.wall) points into the polygon for edge a→b (frame coordinates). */

@@ -85,9 +85,11 @@ export function buildMRD(kit: WorldKit, signs: SignUVs): void {
   // big navy canopy: soffit rises from the wall to the tip, thick fascia (the tour's key frame 0332)
   {
     const cb = kit.buf('stone', mid[0], mid[1]);
+    // a thin blade rising outward (key frame 0316): 0.7 m deep at the wall, 0.4 m fascia at the tip, a lighter
+    // navy-grey soffit (the underside is lit by the steps, not black)
     const hw = W / 2 + 1.2, d = 5.6;
-    const ys0 = topY + 5.5, ys1 = topY + 6.5, yt0 = topY + 6.2, yt1 = topY + 7.2;
-    const nav = NAVY, navD = NAVY.clone().multiplyScalar(0.8);
+    const ys0 = topY + 5.5, ys1 = topY + 6.4, yt0 = topY + 6.2, yt1 = topY + 6.8;
+    const nav = NAVY, navD = col('#4a5670');
     quad3(cb, [P3d(-hw, 0, ys0), P3d(hw, 0, ys0), P3d(hw, d, ys1), P3d(-hw, d, ys1)], [-n[0] * 0.18, -0.98, -n[1] * 0.18], navD);
     quad3(cb, [P3d(-hw, 0, yt0), P3d(hw, 0, yt0), P3d(hw, d, yt1), P3d(-hw, d, yt1)], [-n[0] * 0.18, 0.98, -n[1] * 0.18], nav);
     quad3(cb, [P3d(-hw, d, ys1), P3d(hw, d, ys1), P3d(hw, d, yt1), P3d(-hw, d, yt1)], [n[0], 0, n[1]], nav);
