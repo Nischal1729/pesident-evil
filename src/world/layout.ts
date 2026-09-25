@@ -449,7 +449,7 @@ export const AREAS: AreaDef[] = [
   { id: 'frangipani_garden', kind: 'lawn', poly: [[80.6, -141], [88, -141], [88, -150.5], [91, -150.5], [96, -163], [90.5, -166], [82, -150.8]] },
   // east lawn (Student Lounge + garden) between GJBC's east promenade and the 2-wheeler parking: young trees, white low
   // walls; the reflecting pool at its north end, the parking's corten face on its east side (reference/GJB_NOTES.md §4)
-  { id: 'east_lawn', kind: 'lawn', poly: [[100.9, -104.2], [118.4, -104.2], [118.4, -30.5], [121.2, -30.5], [121.2, -4], [104.2, -3]] },
+  { id: 'east_lawn', kind: 'lawn', poly: [[104, -104.2], [118.4, -104.2], [118.4, -30.5], [121.2, -30.5], [121.2, -4], [103.5, -3], [103.1, -10], [99.6, -60], [97.0, -90], [96.7, -94], [104, -94]] },
   // 2-wheeler parking: concrete ground floor under the deck; paved pool court + strip along the corten face; north entry strip
   { id: 'parking_floor', kind: 'concrete', poly: PARKING_FOOTPRINT },
   { id: 'parking_apron', kind: 'greypaver', poly: [[101, -110.6], [PARKING.x0, -110.6], [PARKING.x0, -30.5], [118.4, -30.5], [118.4, -104.2], [100.9, -104.2]] },

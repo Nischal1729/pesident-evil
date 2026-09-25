@@ -177,7 +177,7 @@ export function buildLandscape(kit: WorldKit): void {
     kit.buf('stone', x, zc).flatPoly([[x - 0.9, zc - 0.5], [x + 0.9, zc - 0.5], [x + 0.9, zc + 0.5], [x - 0.9, zc + 0.5]], 0.075, maroon ? col('#4a1f28') : col('#4c2438'), 2);
     for (let k = 0; k < 4; k++) cycad(kit, x - 0.7 + k * 0.45, 0.05, zc + (k % 2 ? 0.18 : -0.18), maroon ? 0.85 : 0.65, maroon ? MAROON_LEAF : PURPLE_HEART);
   }
-  const troughRuns: [number, number][] = [[105.5, 118.8], [138.6, 155.9]];
+  const troughRuns: [number, number][] = [[107.6, 116.8], [138.6, 155.9]]; // gaps keep the pool court behind the west run reachable
   const tufts = tuftSet(kit);
   for (const [x0, x1] of troughRuns) {
     const zo = walkway.width / 2 + 0.62;

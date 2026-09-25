@@ -557,7 +557,8 @@ export class CampusBuilder {
     for (const p of PATHS) {
       if (p.id === 'oat_footway') continue;
       const step = p.id === 'lawn_diagonal' ? 14 : 20;
-      for (const s of samplePolyline(p.pts, step, p.width / 2 + 0.6, step / 2)) place(s.p[0], s.p[1], s.dir[1], -s.dir[0]);
+      const side = p.id === 'east_promenade' ? -1 : 1;
+      for (const s of samplePolyline(p.pts, step, side * (p.width / 2 + 0.6), step / 2)) place(s.p[0], s.p[1], side * s.dir[1], -side * s.dir[0]);
     }
     for (let t = -80; t < 220; t += 30) {
       const p = orrPoint(t, ORR.serviceOffset - ORR.serviceWidth / 2 - 1.2);
@@ -578,6 +579,15 @@ export class CampusBuilder {
     const keep = sp === 'palm' || sp === 'cloud' || sp === 'frangipani' || sp === 'sapling' || sp === 'maroon' || sp === 'ficus';
     if (!keep && hash2(x * 3.1, z * 2.7) > this.quality.treeDensity) return; // visual thinning only
     this.trees.add(sp, x, z, scale, hash2(x, z) * Math.PI * 2, this.treeBaseY(x, z));
+  }
+
+  /** Square soil pit with a thin concrete edge under a lawn tree (drawn just above the turf). */
+  private treePit(x: number, z: number, s: number): void {
+    const h = s / 2, b = this.kit.buf('stone', x, z);
+    b.flatPoly([[x - h, z - h], [x + h, z - h], [x + h, z + h], [x - h, z + h]], 0.062, col('#5a4632'), 1.5);
+    for (const [a, c] of [[[x - h, z - h], [x + h, z - h]], [[x + h, z - h], [x + h, z + h]], [[x + h, z + h], [x - h, z + h]], [[x - h, z + h], [x - h, z - h]]] as [V2, V2][]) {
+      this.kit.segBox('stone', a, c, 0, 0.1, 0.1, col('#a9a7a1'), 0, 0.05);
+    }
   }
 
   /** Trees planted in raised planters / on terraces stand on them: top of the solid (ground-based, ≤ 4 m) prism under the trunk. */
@@ -665,10 +675,10 @@ export class CampusBuilder {
       const T = PLAZA_TERRACE;
       const avoid = (x: number, z: number) => (x > T.x0 - 2 && x < T.x1 + 2 && z < T.zS + 2 && z > T.ramp.zEnd - 1.5)
         || (Math.abs(x - 105.5) < 3.5 && z < T.zN)
-        || prom.pts.some((_, i) => i > 0 && distToSegment(x, z, prom.pts[i - 1][0], prom.pts[i - 1][1], prom.pts[i][0], prom.pts[i][1]) < 6.5)
+        || prom.pts.some((_, i) => i > 0 && distToSegment(x, z, prom.pts[i - 1][0], prom.pts[i - 1][1], prom.pts[i][0], prom.pts[i][1]) < 5.2)
         || !this.clearForTree(x, z, 1.4) || !pointInPoly(x, z, CAMPUS_GROUND);
       const pick = (): TreeSpecies => { const v = r(); return v < 0.32 ? 'rain' : v < 0.52 ? 'copperpod' : v < 0.66 ? 'gulmohar' : v < 0.82 ? 'ashoka' : v < 0.92 ? 'frangipani' : 'palm'; };
-      for (const [x, z] of scatterInPolygon(pes.poly, 48, 5.2, 91, avoid)) this.addTree(pick(), x, z, 0.72 + r() * 0.33);
+      for (const [x, z] of scatterInPolygon(pes.poly, 60, 4.8, 91, avoid)) this.addTree(pick(), x, z, 0.72 + r() * 0.33);
     }
     // tiered "cloud" trees along the entry walkway (south side) and at the PES Lawn promenade
     // (try a few lateral offsets so planter walls / crossing paths don't knock whole stretches out)
@@ -686,7 +696,9 @@ export class CampusBuilder {
       for (let x = b.minX + 4; x <= b.maxX - 2; x += 9) for (let z = b.minZ + 3; z <= b.maxZ - 2; z += 11) {
         const jx = x + (hash2(x, z) - 0.5) * 3, jz = z + (hash2(z, x) - 0.5) * 4;
         if (!inside(jx, jz)) continue;
-        tryTree(hash2(jx * 2, jz) < 0.25 ? 'maroon' : 'sapling', jx, jz, 1.0 + hash2(jz, jx) * 0.5, 0.6);
+        if (!this.clearForTree(jx, jz, 0.6)) continue;
+        this.addTree(hash2(jx * 2, jz) < 0.25 ? 'maroon' : 'sapling', jx, jz, 1.0 + hash2(jz, jx) * 0.5);
+        this.treePit(jx, jz, 1.3);
       }
     }
     // mature trees along the B-Block east strip and around the Open Air Theatre
