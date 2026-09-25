@@ -48,7 +48,7 @@ export class CameraRig {
     const full = toCam.length();
     toCam.divideScalar(full);
     let allowed = full;
-    const h = this.collision.raycast(_pivot.x, _pivot.y, _pivot.z, toCam.x, toCam.y, toCam.z, full + 0.3, _hit as any);
+    const h = this.collision.raycast(_pivot.x, _pivot.y, _pivot.z, toCam.x, toCam.y, toCam.z, full + 0.3, _hit as any, true);
     if (h && h.tag !== 'ground') allowed = Math.max(0.35, h.dist - 0.3);
     // ease out, snap in
     if (allowed < this.dist) this.dist = allowed;

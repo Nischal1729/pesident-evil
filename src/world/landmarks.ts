@@ -65,7 +65,7 @@ export function buildGate(kit: WorldKit, signs: SignUVs, gates: Map<string, Gate
     pg.box(0, 2.15, 0, len, 0.12, 0.1);
     pg.box(0, 1.15, 0, len, 0.08, 0.08);
     for (const e of [-1, 1]) pg.box((e * len) / 2, 1.1, 0, 0.12, 2.2, 0.12);
-    for (let s = -len / 2 + 0.12; s <= len / 2 - 0.1; s += 0.14) pg.box(s, 1.15, 0, 0.07, 2.0, 0.035);
+    for (let s = -len / 2 + 0.12; s <= len / 2 - 0.1; s += 0.32) pg.box(s, 1.15, 0, 0.05, 2.0, 0.035);
     for (let s = -len / 2 + 0.2; s < len / 2; s += 1.8) pg.box(s, 0.05, 0, 0.18, 0.1, 0.18); // rollers
     return pg.toGeometry();
   };
