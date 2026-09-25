@@ -64,8 +64,13 @@ export class GlbCharacterLibrary {
     const files: [string, string][] = [['male', 'male.glb'], ['female', 'female.glb'], ['male_lod', 'male_lod.glb'], ['female_lod', 'female_lod.glb']];
     const results = await Promise.all(files.map(async ([k, f]) => [k, await assets.gltf(base + f)] as const));
     for (const [k, g] of results) if (g) this.templates.set(k, this.prepare(g));
-    for (const k of this.templates.keys()) this.measureNatural(k);
-    // LOD bodies share the full bodies' animation: inherit their measured clip speeds
+    // LOD bodies ship without animation (same skeleton and bone names as the full bodies): share the full bodies'
+    // clips, so zombies (which use the LOD bodies) animate instead of standing in the rest pose
+    for (const [k, t] of this.templates) {
+      const full = k.endsWith('_lod') ? this.templates.get(k.replace('_lod', '')) : undefined;
+      if (full && !t.clips.size) { t.clips = full.clips; t.upper = full.upper; t.lower = full.lower; }
+    }
+    for (const k of this.templates.keys()) if (!k.endsWith('_lod')) this.measureNatural(k);
     for (const [k, t] of this.templates) if (k.endsWith('_lod') && !t.natural.size) t.natural = this.templates.get(k.replace('_lod', ''))?.natural ?? t.natural;
     this.ready = this.templates.has('male') && this.templates.has('female');
     if (this.ready) {
