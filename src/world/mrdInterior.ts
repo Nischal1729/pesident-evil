@@ -249,10 +249,11 @@ export function buildMrdInterior(kit: WorldKit): void {
   // lintel strip over the corridor opening on the ground floor
   k.fbox('plaster', as0, F0 + 3.4, 19.2, as0 + 0.2, U1, 21.8, CREAM, 0.5);
   // skirting + yellow wall panels + navy pilasters (ground floor), doors and notice boards on both floors
-  k.fbox('polished', as0 + 0.2, F0, at0 + 0.2, as1 - 0.2, F0 + 0.12, at0 + 0.24, SKIRT);
-  k.fbox('polished', as0 + 0.2, F0, at1 - 0.24, as1 - 0.2, F0 + 0.12, at1 - 0.2, SKIRT);
+  // (broken at the passage, the auditorium doors and the corridor opening: it ran across all three doorways)
+  for (const [s0, s1] of [[as0 + 0.2, -1.6], [1.6, as1 - 0.2]] as V2[]) k.fbox('polished', s0, F0, at0 + 0.2, s1, F0 + 0.12, at0 + 0.24, SKIRT);
+  for (const [s0, s1] of [[as0 + 0.2, -6.6], [-4.2, as1 - 0.2]] as V2[]) k.fbox('polished', s0, F0, at1 - 0.24, s1, F0 + 0.12, at1 - 0.2, SKIRT);
   k.fbox('polished', as1 - 0.24, F0, at0 + 0.2, as1 - 0.2, F0 + 0.12, at1 - 0.2, SKIRT);
-  k.fbox('polished', as0 + 0.2, F0, at0 + 0.2, as0 + 0.24, F0 + 0.12, at1 - 0.2, SKIRT);
+  for (const [t0, t1] of [[at0 + 0.2, 19.2], [21.8, at1 - 0.2]] as V2[]) k.fbox('polished', as0 + 0.2, F0, t0, as0 + 0.24, F0 + 0.12, t1, SKIRT);
   for (const [s0, s1] of [[-13.5, -8.5], [-3.6, 1.0], [3.0, 7.5]] as V2[]) k.fbox('plaster', s0, F0 + 0.12, at1 - 0.23, s1, U1 - 0.4, at1 - 0.2, YELLOW, 0.5);
   // the auditorium entrance (2021 tour 5bxHqmfj7bE 1:28: black double doors under a bilingual plate in a yellow wall)
   for (const [s0, s1] of [[-7.4, -6.6], [-4.2, -3.6]] as V2[]) k.fbox('plaster', s0, F0 + 0.12, at1 - 0.23, s1, U1 - 0.4, at1 - 0.2, YELLOW, 0.5);
