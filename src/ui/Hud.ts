@@ -12,6 +12,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
   return e;
 };
 
+const _plate = new THREE.Vector3();
 /** Frag grenade silhouette for the HUD count (body, fuse head, lever, pull ring). */
 const NADE_SVG = '<svg viewBox="0 0 12 17" aria-hidden="true"><ellipse cx="6" cy="11" rx="4.3" ry="5.2" fill="currentColor"/>'
   + '<rect x="4.3" y="3.2" width="3.4" height="2.8" rx="0.6" fill="currentColor"/><path d="M7.6 3.6 L10.4 10.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
@@ -36,6 +37,13 @@ export class Hud {
   private healthFill = el('div', 'hud-health-fill');
   private healthTxt = el('div', 'hud-health-txt');
   private squad = el('div', 'hud-squad');
+  private board = el('div', 'hud-board');
+  private nameEl = el('div', 'hud-name');
+  private plates = el('div', 'hud-plates');
+  private plateEls = new Map<number, HTMLElement>();
+  private lastBoard = '';
+  /** co-op: set by Game (null in solo); ping in ms per survivor id when known */
+  coop: { rtt: (id: number) => number | undefined } | null = null;
   private damageLayer = el('div', 'hud-damage');
   private vignette = el('div', 'hud-vignette');
   private gateBar = el('div', 'hud-gate');
@@ -59,8 +67,9 @@ export class Hud {
   constructor(parent: HTMLElement) {
     this.root.append(
       this.vignette, this.damageLayer, this.waveEl, this.waveSub, this.banner, this.msgs, this.cross, this.hitmark, this.reload,
-      this.prompt, this.gateBar, this.down, this.popups, this.squad, this.fps,
+      this.prompt, this.gateBar, this.down, this.popups, this.squad, this.fps, this.plates, this.nameEl,
     );
+    this.squad.append(this.board);
     this.prompt.append(el('span'), this.promptBar);
     const wbox = el('div', 'hud-weapon');
     const ammoRow = el('div', 'hud-ammo-row');
@@ -85,20 +94,25 @@ export class Hud {
     this.offs = [];
     const ev = world.events;
     const on = <K extends keyof GameEvents>(k: K, fn: (e: GameEvents[K]) => void) => this.offs.push(ev.on(k, fn));
-    on('message', (e) => this.message(e.text, e.kind));
+    on('message', (e) => { if (!e.to || e.to === world.localPlayerId) this.message(e.text, e.kind); });
     on('hit', (e) => { if (e.attackerId === world.localPlayerId) { this.hitT = 0.18; this.hitHead = e.headshot; } });
     on('death', (e) => { if (e.kind === 'zombie' && e.killerId === world.localPlayerId) { this.hitT = 0.3; this.hitmark.classList.add('kill'); setTimeout(() => this.hitmark.classList.remove('kill'), 300); } });
     on('points', (e) => { if (e.playerId === world.localPlayerId && e.reason) this.popup(`${e.amount > 0 ? '+' : ''}${e.amount} ${e.reason}`, e.amount > 0); });
-    on('playerDamaged', (e) => this.damageFrom(e.fromDir));
+    on('playerDamaged', (e) => { if (e.playerId === world.localPlayerId) this.damageFrom(e.fromDir); });
     on('waveStart', (e) => this.bannerShow(`WAVE ${e.wave}`, e.wave === 1 ? 'They broke through the Ring Road. Hold the main gate!' : `${e.count} of them. Stay together.`));
     on('waveEnd', (e) => this.bannerShow(`WAVE ${e.wave} SURVIVED`, 'Restock at the ammo crates. Repair the gate (hold E).', 'good'));
     on('gateBroken', () => this.bannerShow('GATE BREACHED', 'Fall back and regroup!', 'bad'));
     on('grenadeExplode', (e) => { if (e.ownerId === world.localPlayerId && e.kills >= 2) this.popup(`${e.kills}× grenade multi-kill`, true); });
-    on('pickup', (e) => { if (e.kind === 'weapon') this.message(`Picked up ${WEAPONS[e.item as keyof typeof WEAPONS]?.name ?? e.item}`, 'good'); });
-    on('downed', (e) => { const s = world.survivors.find((x) => x.id === e.id); if (s && s.kind === 'npc') this.message(`${s.name} is down! Hold E near them to revive.`, 'warn'); });
+    on('pickup', (e) => { if (e.kind === 'weapon' && e.playerId === world.localPlayerId) this.message(`Picked up ${WEAPONS[e.item as keyof typeof WEAPONS]?.name ?? e.item}`, 'good'); });
+    on('downed', (e) => { const s = world.survivors.find((x) => x.id === e.id); if (s && s.id !== world.localPlayerId) this.message(`${s.name} is down! Hold E near them to revive.`, 'warn'); });
+    this.lastBoard = '';
+    for (const [, pe] of this.plateEls) pe.remove();
+    this.plateEls.clear();
+    for (const [, c] of this.squadCards) c.remove();
+    this.squadCards.clear();
   }
 
-  private message(text: string, kind: 'info' | 'warn' | 'good'): void {
+  message(text: string, kind: 'info' | 'warn' | 'good'): void {
     const m = el('div', `hud-msg ${kind}`, text);
     this.msgs.prepend(m);
     while (this.msgs.children.length > 5) this.msgs.lastChild?.remove();
@@ -139,7 +153,7 @@ export class Hud {
     // wave / prep
     if (world.state === 'prep') {
       this.waveEl.textContent = world.wave === 0 ? 'GET READY' : `WAVE ${world.wave + 1} INCOMING`;
-      this.waveSub.innerHTML = `Next wave in <b>${Math.max(0, Math.ceil(world.stateT))}s</b> · press <kbd>N</kbd> to start now`;
+      this.waveSub.innerHTML = `Next wave in <b>${Math.max(0, Math.ceil(world.stateT))}s</b>${world.role === 'client' ? '' : ' · press <kbd>N</kbd> to start now'}`;
     } else if (world.state === 'active') {
       const alive = world.zombies.reduce((n, z) => n + (z.alive ? 1 : 0), 0);
       this.waveEl.textContent = `WAVE ${world.wave}`;
@@ -209,6 +223,8 @@ export class Hud {
       this.down.innerHTML = `<div class="t">YOU'RE DOWN</div><div class="s">${reviving ? `Being revived… ${Math.round(p.reviveProgress * 100)}%` : `Bleeding out in ${Math.ceil(p.bleedout)}s — your squad is coming`}</div>`;
     } else this.down.style.display = 'none';
     this.updateSquad(world);
+    this.updateBoard(world, p);
+    this.updatePlates(world, cam);
     this.drawMinimap(world, p, camYaw);
     // fps
     this.fpsAcc += dt; this.fpsN++;
@@ -218,6 +234,50 @@ export class Hud {
       this.fpsAcc = 0; this.fpsN = 0;
     }
     void cam;
+  }
+
+  /** Your name over the health bar; in co-op, the players ranked by score (points earned, spending doesn't count). */
+  private updateBoard(world: World, me: Survivor): void {
+    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const nm = esc(me.name);
+    if (this.nameEl.dataset.n !== nm) { this.nameEl.dataset.n = nm; this.nameEl.innerHTML = `<i style="background:${me.look.shirt}"></i>${nm}`; }
+    if (!this.coop) { if (this.lastBoard) { this.board.innerHTML = ''; this.lastBoard = ''; } return; }
+    const rows = world.survivors.filter((s) => s.kind === 'player')
+      .map((s) => ({ s, score: world.score.get(s.id) ?? 0 }))
+      .sort((a, b) => b.score - a.score || b.s.kills - a.s.kills);
+    const html = `<div class="hdr"><span>#</span><span>PLAYER</span><span>SCORE</span><span>KILLS</span></div>` + rows.map(({ s, score }, i) => {
+      const st = !s.alive ? '<em class="dead">DEAD</em>' : s.downed ? '<em class="down">DOWN</em>' : '';
+      const ping = s.id === me.id ? undefined : this.coop!.rtt(s.id);
+      return `<div class="row${s.id === me.id ? ' you' : ''}"><span>${i + 1}</span><span><i style="background:${s.look.shirt}"></i>${esc(s.name)}${st}${ping !== undefined ? `<small>${ping}ms</small>` : ''}</span><span>${score.toLocaleString('en-IN')}</span><span>${s.kills}</span></div>`;
+    }).join('');
+    if (html !== this.lastBoard) { this.board.innerHTML = html; this.lastBoard = html; }
+  }
+
+  /** Name + health over other players' heads (co-op). */
+  private updatePlates(world: World, cam: THREE.PerspectiveCamera): void {
+    const seen = new Set<number>();
+    if (this.coop) {
+      const w = this.root.clientWidth || innerWidth, h = this.root.clientHeight || innerHeight;
+      for (const s of world.survivors) {
+        if (s.kind !== 'player' || s.id === world.localPlayerId || !s.alive) continue;
+        _plate.set(s.pos.x, s.pos.y + (s.downed ? 0.8 : 1.92), s.pos.z);
+        const dist = _plate.distanceTo(cam.position);
+        _plate.project(cam);
+        if (_plate.z > 1 || dist > 90 || Math.abs(_plate.x) > 1.1 || Math.abs(_plate.y) > 1.1) continue;
+        seen.add(s.id);
+        let pe = this.plateEls.get(s.id);
+        if (!pe) {
+          pe = el('div', 'hud-plate', `<span></span><div><div></div></div>`);
+          this.plates.append(pe);
+          this.plateEls.set(s.id, pe);
+        }
+        (pe.firstChild as HTMLElement).textContent = s.downed ? `${s.name} — DOWN` : s.name;
+        ((pe.lastChild as HTMLElement).firstChild as HTMLElement).style.width = `${Math.max(0, s.health / s.maxHealth) * 100}%`;
+        pe.classList.toggle('down', s.downed);
+        pe.style.transform = `translate(${((_plate.x + 1) / 2) * w}px, ${((1 - _plate.y) / 2) * h}px) translate(-50%, -100%) scale(${THREE.MathUtils.clamp(14 / Math.max(1, dist), 0.6, 1)})`;
+      }
+    }
+    for (const [id, pe] of this.plateEls) if (!seen.has(id)) { pe.remove(); this.plateEls.delete(id); }
   }
 
   private updateSquad(world: World): void {

@@ -1,8 +1,9 @@
 # Pesident Evil
 
 A third-person zombie-survival shooter set on the **PES University Ring Road campus** (100 Feet Ring Road,
-BSK III Stage, Bengaluru). You and three AI squad-mates (Rahul, Ananya and Manjunath the security guard) hold
-the campus while hordes pour in from the Outer Ring Road through the main gate. Built with three.js for the browser.
+BSK III Stage, Bengaluru). Hold the campus while hordes pour in from the Outer Ring Road through the main gate:
+solo with three AI squad-mates (Rahul, Ananya and Manjunath the security guard), or in peer-to-peer co-op with up to
+10 friends. Built with three.js for the browser.
 
 ## Run it
 
@@ -14,7 +15,8 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:5173 and click **Play**. For a production build:
+Open http://127.0.0.1:5173 and click **Play solo**, or **Co-op** to host or join a room. Set your name and look
+under **Character**. For a production build:
 
 ```bash
 npm run build
@@ -29,14 +31,14 @@ npm run build
 | Right click | Aim down sights |
 | Shift / Space | Sprint / jump |
 | R | Reload |
-| E (hold) | Interact: buy at stations, revive squad-mates, repair the gate |
+| E (hold) | Interact: buy at stations, revive squad-mates or teammates, repair the gate |
 | 1–4 / wheel | Switch weapon |
 | V or Q | Quick bat swing |
-| F | Squad: hold position / follow me |
+| F | Squad: hold position / follow me (solo) |
 | C | Swap shoulder |
 | T | Camera: near / far / high |
-| N | Start the next wave now |
-| Esc / P | Pause |
+| N | Start the next wave now (solo, or the co-op host) |
+| Esc / P | Pause (in co-op a menu; the game keeps running) |
 
 ## Gameplay
 
@@ -44,7 +46,8 @@ npm run build
   while they bash. Hold **E** at the gate between waves to repair or rebuild it.
 - Later waves bring runners (wave 3+), crawlers, brutes (wave 5+), and a second front at the **west gate** on PES
   University Road (wave 4+).
-- Points come from hits, kills, headshots and bat kills. Spend them at stations: ammo crates, first-aid kits, the
+- Points come from damage dealt (1 per 5 HP, no overkill), kills, headshots and bat kills, reviving, repairing the
+  gate and surviving waves. Spend them at stations: ammo crates, first-aid kits, the
   security locker (shotgun), the canteen stash (SMG) and the NCC armoury (INSAS rifle).
 - Downed survivors bleed out unless someone revives them. Your squad will come and revive you.
 - The day runs from late afternoon to night as the waves go on: a physically based sky with drifting cumulus (and their
@@ -57,13 +60,23 @@ npm run build
 - Jump climbs onto anything up to 1.3 m: scooters, sandbags, barricades, benches. Sandbag step stacks lead up onto the
   gates and the Outer Ring Road wall, whose tops you can walk. Zombies climb the same steps, so no perch is safe.
 
+## Co-op
+
+- One player hosts (**Co-op → Host a room**) and shares the 5-letter room code; up to 9 others join with it. The host's
+  browser runs the game, so it should be the steadiest machine and connection. It works peer to peer: the public
+  PeerJS broker only introduces the browsers (and its TURN relay steps in when a network blocks direct links).
+- There is no AI squad in co-op. A wave's total zombie health scales with players / 4 (more zombies and tougher
+  ones). Downed players can be revived by teammates; a player who dies sits out (watching a teammate) and comes back
+  when the wave is cleared. The game ends when everyone is dead.
+- The bottom-left leaderboard ranks players by score, the points they earned (spending doesn't lower it), then kills.
+  Names float over teammates' heads. Players can join a game in progress and leave at any time.
+
 ## Architecture
 
 See `docs/ARCHITECTURE.md` for the full contracts. In short:
 
 - `src/sim/` is the authoritative simulation. It is fixed-timestep (60 Hz), driven only by `PlayerInput`
-  snapshots, and emits plain-data events. That keeps co-op possible later: run the `World` on a host and feed it
-  remote inputs.
+  snapshots, and emits plain-data events. In co-op the host runs it and feeds it remote inputs (`src/net/`).
   - Horde pathfinding uses Dial's-algorithm flow fields on a layered 1 m navigation graph (one node per walkable
     surface: terrain, podiums, decks, ramps, stairs), computed in a Web Worker (`LayeredNav.ts`, `navWorker.ts`).
   - Collision is a stacked 2.5D prism/ramp/cylinder grid (walkable tops, ceilings, sloped ramps), also used for

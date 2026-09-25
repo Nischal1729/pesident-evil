@@ -4,6 +4,10 @@ import { AudioBridge } from './AudioBridge';
 import { Engine } from './Engine';
 import { emptyInput, Input, type PlayerInput } from './Input';
 import { loadHighScore, loadSettings, QUALITY, saveHighScore, saveSettings, type QualityProfile, type Settings } from './Settings';
+import { loadProfile, saveProfile } from './Profile';
+import { CoopClient, CoopHost, type Member } from '../net/Coop';
+import { normalizeCode } from '../net/Net';
+import type { CtrlMsg, StartSurvivor } from '../net/protocol';
 import { CampusBuilder, type CampusBuild } from '../world/Campus';
 import { loadWorldTextures, worldUniforms } from '../world/materials';
 import { Sky } from '../world/Sky';
@@ -12,15 +16,16 @@ import { GATES, GLOBE_POS, MAIN_GATE_PORTAL, STATIONS } from '../world/layout';
 import { Post } from '../render/Post';
 import { CameraRig } from '../render/CameraRig';
 import { CharacterManager, WeaponModels } from '../render/Characters';
+import { lookColors } from '../render/GlbCharacters';
 import { GlbCharacterLibrary } from '../render/GlbCharacters';
 import { GrenadeView } from '../render/Grenades';
 import { gateInward, stationY, World } from '../sim/World';
-import { applyTerrain, setTerrainEnabled } from '../world/terrain';
-import type { Look } from '../sim/actors';
+import { applyTerrain, setTerrainEnabled, terrainY } from '../world/terrain';
+import type { Look, Survivor } from '../sim/actors';
 import { CAM_VIEWS } from '../sim/aim';
 import { WEAPONS } from '../sim/weapons';
 import { Hud } from '../ui/Hud';
-import { Menu } from '../ui/Menu';
+import { Menu, type BoardRow, type MenuScreen } from '../ui/Menu';
 
 type GameState = 'loading' | 'menu' | 'playing' | 'paused' | 'gameover';
 
@@ -42,7 +47,6 @@ interface FxLike {
   setNight?(n: number): void;
 }
 
-const PLAYER_LOOK: Look = { body: 'male', skin: '#a36a45', hair: '#161210', shirt: '#7a1f2b', pants: '#243044', shoes: '#f2f2f2', accessory: '#2d59a8', seed: 11 };
 const SQUAD: { name: string; voice: 'male' | 'female'; weapon: 'rifle' | 'smg' | 'shotgun' | 'pistol'; acc: number; look: Look }[] = [
   { name: 'Rahul (CSE, 3rd yr)', voice: 'male', weapon: 'rifle', acc: 0.82, look: { body: 'male', skin: '#8d5a3b', hair: '#1f1712', shirt: '#2f5d9b', pants: '#2b3a55', shoes: '#222222', accessory: '#2d59a8', seed: 21 } },
   { name: 'Ananya (ECE, 2nd yr)', voice: 'female', weapon: 'smg', acc: 0.74, look: { body: 'female', skin: '#b77b52', hair: '#0e0c0b', shirt: '#b3261e', pants: '#f0e6d2', shoes: '#6b4a2e', accessory: '#2d59a8', seed: 33 } },
@@ -90,6 +94,14 @@ export class Game {
   private lastTod = -1;
   private stationMarkers: THREE.InstancedMesh | null = null;
   private clickHint: HTMLElement | null = null;
+  /** the player's name + character look (character screen) */
+  profile = loadProfile();
+  /** co-op session (hosting or joined), null in solo */
+  coop: CoopHost | CoopClient | null = null;
+  private joinCode = '';
+  private rafId = 0;
+  private hiddenTicker: Worker | null = null;
+  private preview: { root: THREE.Object3D; mixer: THREE.AnimationMixer; key: string } | null = null;
 
   async boot(): Promise<void> {
     (window as unknown as { game: Game }).game = this;
@@ -100,9 +112,18 @@ export class Game {
       onPlay: () => this.startGame(),
       onResume: () => this.resume(),
       onQuitToMenu: () => this.quitToMenu(),
-      onRestart: () => { this.quitToMenu(); this.startGame(); },
+      onRestart: () => {
+        if (this.coop?.role === 'host') { this.teardownWorld(); this.startCoopGame(); return; }
+        this.quitToMenu(); this.startGame();
+      },
       onSettings: (s) => this.applySettings(s),
-    });
+      onProfile: (p) => { saveProfile(p); this.updatePreview(); },
+      onScreen: (sc) => this.onMenuScreen(sc),
+      onHost: () => this.hostRoom(),
+      onJoin: (code) => this.joinRoom(code),
+      onStartCoop: () => this.startCoopGame(),
+      onLeaveRoom: () => this.leaveRoom(),
+    }, this.profile);
     this.menu.show('loading');
     this.hud = new Hud(ui);
     this.input = new Input(this.engine.renderer.domElement);
@@ -114,7 +135,7 @@ export class Game {
     this.engine.renderer.domElement.addEventListener('click', () => { if (this.state === 'playing' && !this.input.locked) this.input.requestLock(); });
     window.addEventListener('keydown', (e) => {
       if (this.state !== 'playing' || !this.world) return;
-      if (e.code === 'KeyN') this.world.skipPrep();
+      if (e.code === 'KeyN' && this.coop?.role !== 'client') this.world.skipPrep();
       if (e.code === 'KeyC') this.rig.shoulderSide *= -1;
       if (e.code === 'KeyT') this.rig.view = (this.rig.view + 1) % CAM_VIEWS.length;
     });
@@ -182,7 +203,24 @@ export class Game {
     this.menu.show('main');
     (window as unknown as { game: Game }).game = this;
     this.last = performance.now();
-    requestAnimationFrame(this.loop);
+    this.rafId = requestAnimationFrame(this.frame);
+    // a co-op host keeps simulating (and streaming to its players) while its tab is hidden, where rAF stops
+    document.addEventListener('visibilitychange', () => this.updateHiddenTicker());
+  }
+
+  private frame = (t: number): void => { this.rafId = 0; this.loop(t); };
+
+  private updateHiddenTicker(): void {
+    const want = document.hidden && this.coop?.role === 'host' && !!this.world;
+    if (want && !this.hiddenTicker) {
+      const url = URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 16)'], { type: 'text/javascript' }));
+      this.hiddenTicker = new Worker(url);
+      this.hiddenTicker.onmessage = () => { if (document.hidden) this.loop(performance.now()); };
+    } else if (!want && this.hiddenTicker) {
+      this.hiddenTicker.terminate();
+      this.hiddenTicker = null;
+      this.last = performance.now();
+    }
   }
 
   /**
@@ -251,32 +289,43 @@ export class Game {
     }
   }
 
-  private async startGame(): Promise<void> {
+  /** A fresh World for solo, co-op host or co-op client (a client only mirrors the host's). */
+  private prepareWorld(role: 'solo' | 'host' | 'client', difficulty: number): World {
     if (!this.audio.ready) {
       this.audio.init().then(() => this.applySettings(this.settings, false)).catch((e) => console.warn('[audio] init failed', e));
     }
+    this.clearPreview();
     // reset collision state of gates (in case of restart)
     for (const [, g] of this.campus.gates) g.prismIds.forEach((id) => this.campus.collision.setPrismEnabled(id, true));
-    const world = new World(this.campus.collision, { maxZombies: this.q.maxZombies, difficulty: 1, multiLevel: this.multiLevel });
+    const world = new World(this.campus.collision, { maxZombies: this.q.maxZombies, difficulty, multiLevel: this.multiLevel, role });
     const gp = new Map<string, number[]>();
     for (const [id, g] of this.campus.gates) gp.set(id, g.prismIds);
     world.init(gp);
-    world.addPlayer('You', PLAYER_LOOK);
-    SQUAD.forEach((m, i) => world.addNpc(m.name, m.voice, m.look, m.weapon, i, m.acc));
+    return world;
+  }
+
+  /** Hook a prepared World (players added) up to the camera, input, HUD, audio and FX, and start playing. */
+  private enterWorld(world: World): void {
     this.world = world;
-    this.input.yaw = world.player!.yaw;
+    const me = world.player;
+    this.input.yaw = me?.yaw ?? 0;
     this.input.pitch = -0.05;
     this.input.resetRecoil();
+    this.acc = 0;
     this.detach.push(this.audio.attach(world));
+    this.hud.coop = this.coop ? { rtt: (id) => (this.coop?.role === 'host' ? this.coop.rttOf(id) : this.coop?.rtt.get(id)) } : null;
     this.hud.attach(world);
     this.attachFx(world);
-    world.events.on('gameOver', (e) => this.onGameOver(e.wave, e.kills, e.points));
-    world.events.on('playerDamaged', (e) => { this.rig.addShake(Math.min(0.6, e.amount / 40)); this.post.hit(Math.min(1, e.amount / 30)); });
+    world.events.on('gameOver', (e) => this.onGameOver(e.wave));
+    world.events.on('playerDamaged', (e) => {
+      if (e.playerId !== world.localPlayerId) return;
+      this.rig.addShake(Math.min(0.6, e.amount / 40));
+      this.post.hit(Math.min(1, e.amount / 30));
+    });
     this.hud.show(true);
     this.menu.show('none');
     this.state = 'playing';
     this.input.requestLock();
-    world.startGame();
     if (!this.clickHint) {
       this.clickHint = document.createElement('div');
       this.clickHint.className = 'click-to-play';
@@ -284,6 +333,126 @@ export class Game {
       document.getElementById('ui')!.append(this.clickHint);
     }
     this.clickHint.style.display = 'none';
+    this.updateHiddenTicker();
+  }
+
+  private async startGame(): Promise<void> {
+    const world = this.prepareWorld('solo', 1);
+    world.addPlayer(this.profile.name, this.profile.look);
+    SQUAD.forEach((m, i) => world.addNpc(m.name, m.voice, m.look, m.weapon, i, m.acc));
+    this.menu.coopRole = null;
+    this.enterWorld(world);
+    world.startGame();
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  // Co-op
+  // -----------------------------------------------------------------------------------------------
+  private hostRoom(): void {
+    this.leaveRoom(false);
+    const host = new CoopHost(this.profile, {
+      onReady: () => this.refreshLobby(),
+      onRoster: () => this.refreshLobby(),
+      onError: (msg) => { this.leaveRoom(false); this.menu.coopFailed(msg); },
+      onJoinInGame: (m) => this.hostAddMember(m),
+      onLeaveInGame: (m) => {
+        this.world?.removeSurvivor(m.survivorId);
+        this.inputs.delete(m.survivorId);
+        this.hud.message(`${m.profile.name} left the game.`, 'info');
+        this.retuneDifficulty();
+      },
+    });
+    this.coop = host;
+    this.refreshLobby();
+  }
+
+  private joinRoom(code: string): void {
+    this.leaveRoom(false);
+    this.joinCode = normalizeCode(code);
+    const fail = (msg: string) => { this.leaveRoom(false); this.menu.coopFailed(msg); };
+    this.coop = new CoopClient(this.joinCode, this.profile, {
+      onRoster: () => this.refreshLobby(),
+      onStart: (msg) => this.clientStart(msg),
+      onJoin: (ss) => { this.world?.addMirrorSurvivor(ss.id, ss.kind, ss.name, ss.voice, ss.look); if (this.world) this.hud.message(`${ss.name} joined the game.`, 'info'); },
+      onLeave: (id) => {
+        const s = this.world?.survivors.find((q) => q.id === id);
+        if (s) this.hud.message(`${s.name} left the game.`, 'info');
+        this.world?.removeSurvivor(id);
+      },
+      onEnd: (reason) => fail(reason),
+    }, fail);
+    this.refreshLobby();
+  }
+
+  private refreshLobby(): void {
+    const c = this.coop;
+    if (!c) { this.menu.setLobby(null); return; }
+    if (c.role === 'host') this.menu.setLobby({ role: 'host', code: c.code, players: c.roster(), status: c.code ? 'Share the code with your friends, then press Start.' : 'Contacting the matchmaking server…', inGame: c.inGame });
+    else this.menu.setLobby({ role: 'client', code: this.joinCode, players: c.roster, status: c.link ? '' : 'Connecting…', inGame: false });
+  }
+
+  /** Co-op has no AI squad: zombie strength follows the head count (coopDifficulty). */
+  private retuneDifficulty(): void {
+    const w = this.world;
+    if (!w || this.coop?.role !== 'host') return;
+    const d = coopDifficulty(w.survivors.filter((q) => q.kind === 'player').length);
+    w.opts.difficulty = d.count;
+    w.opts.hpDifficulty = d.hp;
+  }
+
+  private startCoopGame(): void {
+    const host = this.coop;
+    if (!host || host.role !== 'host' || !host.code) return;
+    const n = 1 + host.members.size;
+    const d = coopDifficulty(n);
+    const world = this.prepareWorld('host', d.count);
+    world.opts.hpDifficulty = d.hp;
+    const entry = (s: Survivor, peer?: string): StartSurvivor => ({ id: s.id, kind: s.kind === 'npc' ? 'npc' : 'player', name: s.name, look: s.look, voice: s.voice, peer });
+    const list: StartSurvivor[] = [entry(world.addPlayer(this.profile.name, this.profile.look), 'host')];
+    for (const m of host.members.values()) {
+      const s = world.addPlayer(m.profile.name, m.profile.look);
+      m.survivorId = s.id;
+      list.push(entry(s, m.peer));
+    }
+    host.beginGame(world, list, d.count, this.q.maxZombies);
+    this.menu.coopRole = 'host';
+    this.enterWorld(world);
+    world.startGame();
+  }
+
+  private hostAddMember(m: Member): StartSurvivor | null {
+    const w = this.world;
+    if (!w) return null;
+    const s = w.addPlayer(m.profile.name, m.profile.look);
+    w.placeNearTeam(s);
+    this.retuneDifficulty();
+    this.hud.message(`${s.name} joined the game.`, 'info');
+    return { id: s.id, kind: 'player', name: s.name, look: s.look, voice: s.voice, peer: m.peer };
+  }
+
+  private clientStart(msg: Extract<CtrlMsg, { t: 'start' }>): void {
+    const client = this.coop;
+    if (!client || client.role !== 'client') return;
+    if (this.world) this.teardownWorld();
+    const world = this.prepareWorld('client', msg.difficulty);
+    for (const ss of msg.survivors) world.addMirrorSurvivor(ss.id, ss.kind, ss.name, ss.voice, ss.look);
+    world.localPlayerId = msg.yourId;
+    client.beginGame(world);
+    this.menu.coopRole = 'client';
+    this.enterWorld(world);
+  }
+
+  /** Leave co-op entirely (close the room when hosting). */
+  private leaveRoom(showMenu = true): void {
+    const inGame = !!this.world;
+    if (this.world) this.teardownWorld();
+    this.coop?.destroy();
+    this.coop = null;
+    this.menu.coopRole = null;
+    this.menu.setLobby(null);
+    this.updateHiddenTicker();
+    if (inGame || showMenu) { this.state = 'menu'; this.hud.show(false); this.input.exitLock(); }
+    if (showMenu) this.menu.show('main');
   }
 
   private attachFx(world: World): void {
@@ -293,8 +462,10 @@ export class Game {
     const dir = new THREE.Vector3();
     let lastRecoilT = -1; // a shotgun trigger pull emits several local 'shot' events in one tick; kick once
     off.push(ev.on('shot', (e) => {
+      // a co-op client drew its own shots already (World.predictShot): skip the host's echo of them
+      if (world.role === 'client' && e.shooterId === world.localPlayerId && !e.predicted) return;
       // recoil moves the aim, so it must not depend on the FX module having loaded
-      if (e.shooterId === world.localPlayerId && world.time !== lastRecoilT) {
+      if (e.shooterId === world.localPlayerId && (e.predicted || world.time !== lastRecoilT)) {
         lastRecoilT = world.time;
         this.input.addRecoil(WEAPONS[e.weapon as keyof typeof WEAPONS]?.recoil ?? 0.02, world.player!.aiming);
       }
@@ -328,14 +499,28 @@ export class Game {
     this.detach.push(() => off.forEach((o) => o()));
   }
 
-  private onGameOver(wave: number, kills: number, points: number): void {
-    const hs = loadHighScore();
-    if (!hs || wave > hs.wave || (wave === hs.wave && points > hs.points)) saveHighScore({ wave, kills, points });
+  private onGameOver(wave: number): void {
+    const w = this.world;
+    const me = w?.player;
+    if (!w || !me) return;
+    const kills = me.kills;
+    let board: BoardRow[] | null = null;
+    let points = w.points.get(me.id) ?? 0;
+    if (this.coop) {
+      points = w.score.get(me.id) ?? 0;
+      board = w.survivors.filter((s) => s.kind === 'player')
+        .map((s) => ({ name: s.name, score: w.score.get(s.id) ?? 0, kills: s.kills, you: s.id === me.id, color: s.look.shirt }))
+        .sort((a, b) => b.score - a.score || b.kills - a.kills);
+    } else {
+      const hs = loadHighScore();
+      if (!hs || wave > hs.wave || (wave === hs.wave && points > hs.points)) saveHighScore({ wave, kills, points });
+    }
     setTimeout(() => {
+      if (this.world !== w) return;
       this.state = 'gameover';
       this.input.exitLock();
       this.hud.show(false);
-      this.menu.gameOver(wave, kills, points);
+      this.menu.gameOver(wave, kills, points, board);
     }, 2500);
   }
 
@@ -352,7 +537,19 @@ export class Game {
     this.last = performance.now();
   }
 
+  /** Pause-menu / game-over "quit": solo returns to the menu; in co-op it leaves (or, hosting, closes) the room. */
   private quitToMenu(): void {
+    if (this.coop) { this.leaveRoom(); return; }
+    this.teardownWorld();
+    this.hud.show(false);
+    this.state = 'menu';
+    this.input.exitLock();
+    this.menu.show('main');
+  }
+
+  /** Drop the current World and everything hooked to it (views, listeners, pickups, gate poses). */
+  private teardownWorld(): void {
+    this.coop?.endGame();
     this.detach.forEach((d) => d());
     this.detach = [];
     if (this.world) {
@@ -368,10 +565,8 @@ export class Game {
       this.poseGate(id, 0);
       this.gateAnim.set(id, 0);
     }
-    this.hud.show(false);
-    this.state = 'menu';
-    this.input.exitLock();
-    this.menu.show('main');
+    this.inputs.clear();
+    this.updateHiddenTicker();
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -386,16 +581,21 @@ export class Game {
     const e = this.engine;
     e.renderer.info.reset();
     const w = this.world;
-    if (w && (this.state === 'playing' || this.state === 'gameover')) {
-      if (this.state === 'playing') {
+    const host = this.coop?.role === 'host' ? this.coop : null;
+    const client = this.coop?.role === 'client' ? this.coop : null;
+    // co-op can't pause: behind the pause menu the game keeps running (with no input from this player)
+    const ticking = this.state === 'playing' || (!!this.coop && this.state === 'paused');
+    const headless = document.hidden; // hidden co-op host: simulate and stream, draw nothing
+    if (w && (ticking || this.state === 'gameover')) {
+      if (ticking) {
         this.acc += dt;
         this.input.updateRecoil(dt);
         let first = true;
         let steps = 0;
         while (this.acc >= this.fixed && steps < 5) {
           this.input.sample(this.pin, first);
-          if (!this.input.locked) { this.pin.fire = false; this.pin.aim = false; this.pin.moveX = this.pin.moveZ = 0; }
-          if (this.pin.command) w.toggleNpcMode();
+          if (!this.input.locked || this.state !== 'playing') { this.pin.fire = false; this.pin.aim = false; this.pin.moveX = this.pin.moveZ = 0; }
+          if (this.pin.command && !this.coop) w.toggleNpcMode(); // co-op has no AI squad
           // aim from where this frame's render camera will be: the last frame's rig offset moved to the player's
           // position at the start of this tick, plus the share of the tick's movement the interpolated render shows
           // (all of it for a tick that isn't the frame's last; none after the 5-step clamp zeroes acc)
@@ -403,24 +603,42 @@ export class Game {
           this.pin.camAlpha = steps === 4 ? 0 : rest < this.fixed ? rest / this.fixed : 1;
           this.rig.aimOrigin(w.player!.pos, this.pin.yaw, this.pin.pitch, _camO);
           this.pin.camX = _camO.x; this.pin.camY = _camO.y; this.pin.camZ = _camO.z;
-          this.inputs.set(w.localPlayerId, this.pin);
-          w.update(this.fixed, this.inputs);
+          if (client) {
+            // our own movement runs here (no lag); the host takes the pose, everything else comes back in snapshots
+            if (client.ready) {
+              w.predictLocal(this.fixed, this.pin);
+              w.predictShot(this.fixed, this.pin);
+              client.sendInput(this.pin, w.player!, !!w.player!.mantle);
+            }
+          } else {
+            this.inputs.set(w.localPlayerId, this.pin);
+            host?.fillInputs(this.inputs);
+            w.update(this.fixed, this.inputs);
+            host?.afterTick(w);
+          }
           this.pin.command = false;
           first = false;
           this.acc -= this.fixed;
           steps++;
         }
         if (steps === 5) this.acc = 0;
-      } else {
+      } else if (!client) {
         w.update(dt, new Map());
+        host?.afterTick(w);
       }
+      client?.interpolate(dt);
+    }
+    if (headless) { if (!this.rafId) this.rafId = requestAnimationFrame(this.frame); return; }
+    if (w && (ticking || this.state === 'gameover')) {
       const alpha = this.acc / this.fixed;
-      const p = w.player!;
+      const me = w.player!;
+      // co-op: while dead, watch a living teammate until the wave ends
+      const p = me.alive || !this.coop ? me : (w.survivors.find((s) => s.kind === 'player' && s.alive) ?? me);
       this.chars.sync(w, alpha, dt, e.camera.position);
       this.grenades.update(w, alpha, dt);
-      const pp = new THREE.Vector3().lerpVectors(p.prev, p.pos, alpha);
+      const pp = new THREE.Vector3().lerpVectors(p.prev, p.pos, p === me ? alpha : 1);
       const sprinting = this.pin.sprint && this.pin.moveZ > 0 && Math.hypot(p.vel.x, p.vel.z) > 5;
-      this.rig.update(dt, pp, this.input.yaw, this.input.pitch, p.aiming && !p.downed, sprinting, p.downed);
+      this.rig.update(dt, pp, this.input.yaw, this.input.pitch, p === me && p.aiming && !p.downed, sprinting, p.downed);
       this.updateGates(dt, w);
       this.updatePickups(dt, w);
       this.audio.update(dt, w, e.camera);
@@ -429,10 +647,10 @@ export class Game {
       this.setTime(w.timeOfDay);
       this.fx?.update(dt);
       this.sky.prepare(this.engine.camera);
-      this.post.render(dt, p.alive ? THREE.MathUtils.clamp(1 - p.health / 40, 0, 1) : 1);
+      this.post.render(dt, me.alive ? THREE.MathUtils.clamp(1 - me.health / 40, 0, 1) : p !== me ? 0.35 : 1);
     } else {
       this.menuT += dt;
-      this.menuCamera(this.menuT);
+      if (this.preview) this.previewCamera(); else this.menuCamera(this.menuT);
       this.sky.follow(this.engine.camera.position);
       this.setTime(0.06);
       this.fx?.update(dt);
@@ -441,7 +659,8 @@ export class Game {
     }
     for (const u of this.campus.updatables) u(dt, this.lastTod);
     this.pulseStations();
-    requestAnimationFrame(this.loop);
+    this.preview?.mixer.update(dt);
+    if (!this.rafId) this.rafId = requestAnimationFrame(this.frame);
   };
 
   /** Debug/testing: advance the simulation synchronously (works in background tabs). */
@@ -466,6 +685,60 @@ export class Game {
     this.post.setExposure(1 + (this.sky.exposure - 1) * 0.6);
     this.post.setNight(worldUniforms.uNight.value);
     this.fx?.setNight?.(worldUniforms.uNight.value);
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  // Character screen: the chosen look, standing on the entry road in front of a fixed camera
+  // -----------------------------------------------------------------------------------------------
+  private static readonly PREVIEW_AT = new THREE.Vector3(124.5, 0, -118.5);
+
+  private onMenuScreen(sc: MenuScreen): void {
+    if (sc === 'character') this.updatePreview();
+    else this.clearPreview();
+  }
+
+  private clearPreview(): void {
+    if (!this.preview) return;
+    this.preview.mixer.stopAllAction();
+    this.preview.root.removeFromParent();
+    this.preview = null;
+  }
+
+  private updatePreview(): void {
+    if (this.menu.current !== 'character' || !this.charLib.ready) return;
+    const look = this.profile.look;
+    const key = look.body;
+    const geo = this.charLib.variant(key, lookColors(look, false));
+    const prev = this.preview;
+    if (prev && prev.key === key) {
+      prev.root.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) (o as THREE.SkinnedMesh).geometry = geo; });
+      return;
+    }
+    this.clearPreview();
+    const { root, template } = this.charLib.instantiate(key, geo);
+    const holder = new THREE.Group();
+    holder.add(root);
+    const at = Game.PREVIEW_AT;
+    holder.position.set(at.x, this.multiLevel ? terrainY(at.x, at.z) : 0, at.z);
+    holder.rotation.y = 0.35;
+    holder.scale.setScalar((key === 'female' ? 1.62 : 1.75) / Math.max(0.1, template.height));
+    holder.traverse((o) => { o.castShadow = true; });
+    const mixer = new THREE.AnimationMixer(root);
+    const idle = template.clips.get('Idle') ?? [...template.clips.values()][0];
+    if (idle) mixer.clipAction(idle).play();
+    this.engine.scene.add(holder);
+    this.preview = { root: holder, mixer, key };
+  }
+
+  private previewCamera(): void {
+    const cam = this.engine.camera;
+    const at = this.preview!.root.position;
+    // the menu panel covers the left of the screen: frame the body at ~45% right of centre, whatever the aspect
+    if (Math.abs(cam.fov - 40) > 0.1) { cam.fov = 40; cam.updateProjectionMatrix(); }
+    const d = 3.8;
+    const off = Math.tan(THREE.MathUtils.degToRad(20)) * d * cam.aspect * 0.45;
+    cam.position.set(at.x - off, at.y + 1.35, at.z + d);
+    cam.lookAt(at.x - off, at.y + 1.0, at.z);
   }
 
   private menuCamera(t: number): void {
@@ -561,6 +834,15 @@ export class Game {
     const m = this.stationMarkers.material as THREE.MeshBasicMaterial;
     m.opacity = 0.45 + Math.sin(performance.now() * 0.004) * 0.25;
   }
+}
+
+/**
+ * Co-op zombie scaling for n players (no AI squad). Solo's team is the player + 3 AI, so a wave's total zombie health
+ * (count × health) is n / 4 of solo's, split between more zombies (f^0.6) and tougher ones (f^0.4).
+ */
+export function coopDifficulty(n: number): { count: number; hp: number } {
+  const f = Math.max(1, n) / 4;
+  return { count: Math.pow(f, 0.6), hp: Math.pow(f, 0.4) };
 }
 
 function nextFrame(): Promise<void> {

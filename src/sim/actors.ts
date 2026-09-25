@@ -108,6 +108,12 @@ export class Survivor extends Actor {
   prevFire = false;
   infiniteReserve = false;
   stepAcc = 0;
+  /** Co-op: bumped when the host moves this player (spawn, respawn), so the owning client snaps to it. */
+  teleportSeq = 0;
+  /** Co-op client bookkeeping for its local player, sent to the host with the next input: fall damage, jump, land. */
+  pendingFall = 0;
+  netJumped = false;
+  netLanded = false;
 
   constructor(kind: 'player' | 'npc', name: string, voice: 'male' | 'female', look: Look) {
     super(kind);

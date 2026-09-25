@@ -28,6 +28,7 @@ export class AudioBridge {
     const play = (n: SfxName, position?: THREE.Vector3, volume?: number, pitch?: number) => { if (this.ready) a.play(n, { position, volume, pitch }); };
     const isLocal = (id: number) => id === world.localPlayerId;
     offs.push(ev.on('shot', (e) => {
+      if (world.role === 'client' && isLocal(e.shooterId) && !e.predicted) return; // played when predicted
       const n: SfxName = e.weapon === 'pistol' ? 'pistol_fire' : e.weapon === 'shotgun' ? 'shotgun_fire' : e.weapon === 'smg' ? 'smg_fire' : 'rifle_fire';
       play(n, isLocal(e.shooterId) ? undefined : e.origin, isLocal(e.shooterId) ? 0.85 : 1);
     }));
@@ -44,7 +45,7 @@ export class AudioBridge {
     }));
     offs.push(ev.on('death', (e) => {
       if (e.kind === 'zombie') play('zombie_death', e.position, 0.9);
-      else if (e.kind === 'player') play('player_death');
+      else if (e.kind === 'player' && isLocal(e.id)) play('player_death');
     }));
     offs.push(ev.on('zombieGroan', (e) => {
       const now = performance.now();
@@ -78,8 +79,12 @@ export class AudioBridge {
     offs.push(ev.on('grenadeExplode', (e) => play('grenade_explosion', e.position)));
     offs.push(ev.on('footstep', (e) => { if (isLocal(e.actorId)) play('footstep_concrete', undefined, e.loud ? 0.5 : 0.3); else play('footstep_concrete', e.position, 0.25); }));
     offs.push(ev.on('land', (e) => { if (isLocal(e.actorId)) play('jump_land', undefined, 0.6); }));
-    offs.push(ev.on('playerDamaged', () => play('player_hurt')));
-    offs.push(ev.on('pickup', (e) => play(e.kind === 'ammo' ? 'pickup_ammo' : e.kind === 'health' ? 'pickup_health' : 'pickup_weapon')));
+    offs.push(ev.on('playerDamaged', (e) => { if (isLocal(e.playerId)) play('player_hurt'); }));
+    offs.push(ev.on('pickup', (e) => {
+      const pos = isLocal(e.playerId) ? undefined : world.survivors.find((s) => s.id === e.playerId)?.pos;
+      if (!isLocal(e.playerId) && !pos) return;
+      play(e.kind === 'ammo' ? 'pickup_ammo' : e.kind === 'health' ? 'pickup_health' : 'pickup_weapon', pos, isLocal(e.playerId) ? 1 : 0.6);
+    }));
     offs.push(ev.on('points', (e) => { if (e.amount >= 50) play('points_ding', undefined, 0.35); }));
     offs.push(ev.on('waveStart', () => play('wave_start')));
     offs.push(ev.on('waveEnd', () => play('wave_end')));

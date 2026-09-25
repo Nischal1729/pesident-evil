@@ -18,7 +18,7 @@ src/
   render/            post-processing, character views, fx (muzzle flash, blood, decals, tracers)
   audio/             AudioManager (procedural WebAudio SFX + ambience)
   ui/                HUD, menus (HTML/CSS overlay)
-  net/               (future) co-op transport; sim is input-driven so a host can run it
+  net/               co-op: PeerJS transport (Net), wire format (protocol, snapshot), session logic (Coop)
 public/
   models/characters/ GLBs from tools/blender/characters.py
   models/weapons/    GLBs from tools/blender/weapons.py
@@ -61,13 +61,37 @@ reference/           tour-video frames, CAMPUS_NOTES.md (layout + look reference
   or `?wet=1` in the URL) inside an `onBeforeCompile` hook. It is the default hook of every MeshStandardMaterial;
   a material with its own hook must call it at the end of that hook.
 
-## Simulation / co-op readiness
+## Simulation and co-op
 
 * Fixed-timestep simulation (60 Hz) in `sim/`, rendering interpolates. Sim never reads DOM input directly.
 * Each player is driven by a `PlayerInput` struct (move x/z, yaw, pitch, fire, aim, reload, interact, jump,
-  sprint, crouch, weaponSlot). Local input builds it; a future net layer can send it to a host.
-* Entities have numeric ids. Gameplay emits events (`shot`, `hit`, `death`, `waveStart`, ...) on an event bus;
-  audio/fx/UI subscribe. Events are plain data so they can be networked later.
+  sprint, weaponSlot, …). Entities have numeric ids. Gameplay emits plain-data events (`shot`, `hit`, `death`,
+  `waveStart`, …) on an event bus; audio/fx/UI subscribe.
+* `World.role`: `solo` and `host` run everything; a co-op `client` World is a mirror. It builds no nav graph and runs
+  no director or damage; it only moves its own player (`predictLocal` → `movePlayer`, zero-lag movement) and predicts
+  its own shot FX (`predictShot`).
+
+### Co-op (`src/net/`)
+
+* Transport (`Net.ts`): PeerJS. The host registers the peer id `pesident-evil-v1-<ROOM>`; the public broker only
+  introduces browsers. Each link has the reliable PeerJS data connection (raw: JSON control messages, batched events)
+  and a pre-negotiated unordered, no-retransmit `RTCDataChannel` (id 100) for binary snapshots and inputs.
+* Host (`CoopHost`): holds the room and roster; on start it adds a `Survivor` per member (no AI squad) and sends each
+  client `start` (its survivor id + everyone's name/look). Every host tick `fillInputs` turns each client's latest
+  input packet into a `PlayerInput` (one-shot actions are wrapping press counters, so a lost packet loses nothing);
+  every 3rd tick (20 Hz) `writeSnapshot` goes to all clients with the tick's events (`EventBus.tap`).
+* Remote players move on their own machine: the input carries their pose, and `World.applyPose` takes it as given,
+  except when it predates the host's last teleport of that player (`Survivor.teleportSeq`: spawn, respawn), so a
+  stale pose can't undo a respawn.
+* Client (`CoopClient`): buffers snapshots and writes the host state at (newest − 100 ms) into its mirror World
+  (`applySnapshot`: positions interpolated into both `pos` and `prev`; the local player keeps its own pose and
+  locomotion), replays events into the mirror's bus, sends its input at 30 Hz, and pushes its player out of the
+  zombies it draws. Gate collision follows the host's broken flag (`clientGateChanged`).
+* Scaling (`coopDifficulty`): with f = players / 4, wave size × f^0.6, zombie health and gate damage × f^0.4.
+  Snapshots are ~2.2 KB for 80 zombies, ~1.3 KB deflated. Each tick's snapshot and event batch (field names in a
+  per-batch shape table, not per event) are compressed once and shared by every client: about 26 KB/s per client,
+  plus ~1.4 KB/s per player firing. Reliable sends/receives are queued so compressed batches keep their order.
+* A hidden host tab keeps simulating through a Worker timer (rAF stops in hidden tabs) and skips drawing.
 
 ## Asset contracts (Blender → three.js)
 

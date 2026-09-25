@@ -63,7 +63,7 @@ kbd { font-family: Inter, sans-serif; font-weight: 700; font-size: 0.85em; paddi
 .hud-health-fill { height: 100%; background: linear-gradient(90deg, #3fb56a, #7fdc8d); width: 100%; transition: width 0.2s; }
 .hud-health-fill.low { background: linear-gradient(90deg, #b3261e, #e5484d); }
 .hud-health-txt { position: absolute; right: 6px; top: -1px; font-size: 12px; font-weight: 800; }
-.hud-squad { position: absolute; left: 26px; bottom: 54px; display: flex; flex-direction: column; gap: 6px; }
+.hud-squad { position: absolute; left: 26px; bottom: 72px; display: flex; flex-direction: column; gap: 6px; }
 .hud-card { background: var(--glass); padding: 6px 10px; border-radius: 6px; width: 220px; backdrop-filter: blur(4px); border-left: 3px solid #4fa3ff; }
 .hud-card .n { font-weight: 700; font-size: 13px; }
 .hud-card .b { height: 4px; background: rgba(255,255,255,0.15); margin: 4px 0; border-radius: 2px; overflow: hidden; }
@@ -126,3 +126,56 @@ kbd { font-family: Inter, sans-serif; font-weight: 700; font-size: 0.85em; paddi
 .m-form input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
 .m-note { font-size: 11px; opacity: 0.55; }
 .click-to-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--glass); padding: 18px 28px; border-radius: 10px; font-weight: 700; letter-spacing: 1px; pointer-events: none; }
+
+/* ---------------- Character / co-op menus ---------------- */
+.m-char .m-form { min-width: 0; width: min(440px, 86vw); }
+.m-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 14px; }
+.m-row > span { min-width: 76px; }
+.m-sw { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.menu .m-sw button { min-width: 0; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); transform: none; }
+.menu .m-sw button.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.m-seg { display: flex; gap: 6px; }
+.menu .m-seg button { min-width: 0; padding: 6px 14px; font-size: 13px; }
+.menu .m-seg button.on { background: var(--accent); color: #151515; border-color: var(--accent); }
+.m-form input[type=text] { background: #1b1e24; color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 8px 10px; border-radius: 4px; font: 600 15px Inter, sans-serif; width: 220px; }
+.m-err { margin: 10px 0; padding: 8px 12px; border-left: 3px solid var(--danger); background: rgba(229,72,77,0.12); font-size: 14px; max-width: 520px; }
+.m-join { display: flex; gap: 8px; }
+.m-join input { width: 128px; background: #1b1e24; color: #fff; border: 1px solid rgba(255,255,255,0.28); border-radius: 4px; font: 700 20px 'Bebas Neue', Inter, sans-serif; letter-spacing: 6px; text-align: center; padding: 8px; text-transform: uppercase; }
+.menu .m-join button { min-width: 0; }
+.m-code { display: flex; align-items: center; gap: 16px; margin: 6px 0 18px; }
+.m-code span { font-size: 12px; letter-spacing: 3px; opacity: 0.7; }
+.m-code b { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 56px; letter-spacing: 10px; color: var(--accent); line-height: 1; }
+.menu .m-code button { min-width: 0; padding: 8px 16px; font-size: 13px; }
+.m-players { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; min-width: 300px; }
+.m-players div { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; background: var(--glass); padding: 8px 12px; border-radius: 4px; }
+.m-players i, .m-board i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255,255,255,0.5); margin-right: 8px; vertical-align: -1px; }
+.m-players em { font-style: normal; font-size: 11px; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; }
+.m-board { margin: 8px auto 4px; border-collapse: collapse; font-size: 15px; min-width: 360px; }
+.m-board td { padding: 5px 12px; text-align: left; }
+.m-board td:first-child { opacity: 0.6; }
+.m-board td:nth-child(3) { font-weight: 800; color: var(--accent); text-align: right; font-variant-numeric: tabular-nums; }
+.m-board td:last-child { opacity: 0.7; font-size: 13px; }
+.m-board tr.you td { background: rgba(242,178,51,0.12); }
+.menu button:disabled { opacity: 0.4; cursor: default; }
+
+/* ---------------- Co-op HUD ---------------- */
+.hud-name { position: absolute; left: 26px; bottom: 46px; font-weight: 800; font-size: 15px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+.hud-name i, .hud-board i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255,255,255,0.6); flex: none; }
+.hud-board:empty { display: none; }
+.hud-board { background: var(--glass); backdrop-filter: blur(4px); border-radius: 6px; padding: 6px 8px; width: 300px; font-size: 13px; margin-bottom: 4px; }
+.hud-board .hdr, .hud-board .row { display: grid; grid-template-columns: 18px 1fr 64px 42px; gap: 6px; align-items: center; padding: 2px 4px; }
+.hud-board .hdr { font-size: 10px; letter-spacing: 1.5px; opacity: 0.6; }
+.hud-board .row span:nth-child(2) { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
+.hud-board .row span:nth-child(3) { text-align: right; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+.hud-board .row span:nth-child(4) { text-align: right; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.hud-board .hdr span:nth-child(3), .hud-board .hdr span:nth-child(4) { text-align: right; }
+.hud-board .row.you { background: rgba(242,178,51,0.14); border-radius: 3px; }
+.hud-board em { font-style: normal; font-size: 9px; font-weight: 800; letter-spacing: 1px; padding: 1px 4px; border-radius: 2px; }
+.hud-board em.down { background: var(--accent); color: #151515; }
+.hud-board em.dead { background: #555; }
+.hud-board small { font-size: 10px; opacity: 0.5; font-weight: 400; }
+.hud-plates { position: absolute; inset: 0; overflow: hidden; }
+.hud-plate { position: absolute; left: 0; top: 0; text-align: center; font-weight: 800; font-size: 14px; white-space: nowrap; transform-origin: 50% 100%; }
+.hud-plate > div { width: 64px; height: 4px; margin: 3px auto 0; background: rgba(0,0,0,0.5); border-radius: 2px; overflow: hidden; }
+.hud-plate > div > div { height: 100%; background: #7fdc8d; }
+.hud-plate.down span { color: var(--accent); }
