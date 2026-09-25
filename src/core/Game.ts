@@ -303,9 +303,11 @@ export class Game {
   }
 
   // -----------------------------------------------------------------------------------------------
-  private loop = (): void => {
-    const now = performance.now();
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+  private loop = (now: number): void => {
+    // the rAF timestamp is the frame's start time; performance.now() here would add the callback's scheduling
+    // jitter to dt, and with it to the fixed-step count and the interpolation alpha. `last` can be a later
+    // performance.now() (boot, resume), hence the clamp at 0.
+    const dt = Math.min(0.1, Math.max(0, now - this.last) / 1000);
     this.last = now;
     worldUniforms.uTime.value += dt;
     const e = this.engine;
