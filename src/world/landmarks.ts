@@ -50,17 +50,25 @@ export function buildGate(kit: WorldKit, signs: SignUVs, gates: Map<string, Gate
   }
   // median island between the IN and OUT leaves: kerbed, guard booth, boom barrier inside the IN lane
   const M = G.median;
-  kit.box('stone', (M.x0 + M.x1) / 2, 0.13, (M.z0 + M.z1) / 2, M.x1 - M.x0, 0.26, M.z1 - M.z0, 0, col('#a8a49c'));
-  // the 1.1 m block runs through the gate line between the leaves: survivors on it are held back at that line
-  // (+X is out onto the forecourt), so the median is no way out of the campus
-  const medianId = kit.collision.addPolygon([[M.x0, M.z0], [M.x1, M.z0], [M.x1, M.z1], [M.x0, M.z1]], 1.1, 'concrete', 'median');
-  kit.collision.setLip(medianId, 1, 0, x);
-  kit.box('plaster', M.x0 + 2.2, 1.35, (M.z0 + M.z1) / 2, 1.3, 2.4, 1.25, 0, WHITE);
-  kit.box('plaster', M.x0 + 2.2, 2.62, (M.z0 + M.z1) / 2, 1.6, 0.14, 1.5, 0, col('#2d59a8'));
-  kit.box('glass', M.x0 + 2.2, 1.7, (M.z0 + M.z1) / 2, 1.34, 0.7, 1.29, 0, col('#34424e'));
+  const mz = (M.z0 + M.z1) / 2, mw = M.z1 - M.z0;
+  kit.box('stone', (M.x0 + M.x1) / 2, 0.13, mz, M.x1 - M.x0, 0.26, mw, 0, col('#a8a49c'));
+  // the kerb is a step (anyone crosses between the lanes over it); only the 1.2 m nose between the leaves is a 1.1 m
+  // block: survivors on it are held back at the gate line (+X is out onto the forecourt), so the median is no way out
+  // of the campus and zombies still have to break a leaf. (The whole 10 m kerb used to be an invisible 1.1 m wall.)
+  kit.collision.addPolygon([[M.x0, M.z0], [M.x1, M.z0], [M.x1, M.z1], [M.x0, M.z1]], 0.26, 'concrete', 'median');
+  const nose = 0.6;
+  const noseId = kit.collision.addPolygon([[x - nose, M.z0], [x + nose, M.z0], [x + nose, M.z1], [x - nose, M.z1]], 1.1, 'concrete', 'median');
+  kit.collision.setLip(noseId, 1, 0, x);
+  kit.box('plaster', x, 0.68, mz, nose * 2, 0.84, mw - 0.1, 0, WHITE, 0.5);
+  for (const s of [-1, 1]) for (let k = 0; k < 3; k++) kit.box('paint', x + s * (nose + 0.005), 0.45 + k * 0.28, mz, 0.01, 0.14, mw - 0.1, 0, col('#e8b21e'));
+  kit.box('plaster', M.x0 + 2.2, 1.35, mz, 1.3, 2.4, 1.25, 0, WHITE);
+  kit.box('plaster', M.x0 + 2.2, 2.62, mz, 1.6, 0.14, 1.5, 0, col('#2d59a8'));
+  kit.box('glass', M.x0 + 2.2, 1.7, mz, 1.34, 0.7, 1.29, 0, col('#34424e'));
+  kit.collision.addPolygon([[M.x0 + 1.55, mz - 0.63], [M.x0 + 2.85, mz - 0.63], [M.x0 + 2.85, mz + 0.63], [M.x0 + 1.55, mz + 0.63]], 2.7, 'concrete', 'wall');
   kit.signQuad(signs.guardBooth, M.x0 + 2.2, 2.25, M.z1 + 0.01, 1.1, 0.35, 0, 1, true);
   const boomX = M.x0 + 0.5;
   kit.box('stone', boomX, 0.55, M.z1 - 0.25, 0.35, 1.1, 0.35, 0, col('#c1261c'));
+  kit.collision.addPolygon([[boomX - 0.18, M.z1 - 0.43], [boomX + 0.18, M.z1 - 0.43], [boomX + 0.18, M.z1 - 0.07], [boomX - 0.18, M.z1 - 0.07]], 1.1, 'metal', 'wall');
   for (let k = 0; k < 8; k++) kit.box('stone', boomX, 1.0, M.z1 + 0.5 + k, 0.1, 0.1, 1, 0, k % 2 ? col('#f2f2ee') : col('#c1261c'));
   // gate leaves (moving parts): IN = south lane, OUT = north lane; plus the west gate (two leaves)
   const panelMat = new THREE.MeshStandardMaterial({ color: 0x3a3d40, metalness: 0.65, roughness: 0.45 });
