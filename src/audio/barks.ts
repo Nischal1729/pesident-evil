@@ -3,50 +3,59 @@
  *
  * speechSynthesis cannot be routed through WebAudio, so it can't be spatialised: we
  * approximate by scaling utterance volume with distance to the listener and skipping
- * barks that are too far away. Voices: Indian-English preferred (macOS "Rishi" / "Veena",
- * Windows "Ravi" / "Heera", Edge "Prabhat" / "Neerja"), then any English voice.
+ * barks that are too far away.
+ *
+ * Voice preference, per gender, is en-IN first, then other Indian locales, then any
+ * English voice (see `score`):
+ *   male:   Rishi or any en-IN male (macOS "Rishi", Windows "Ravi", Edge "Prabhat").
+ *   female: an en-IN female if one is installed (Veena, Heera, Neerja, ...), else an
+ *           hi-IN voice (macOS "Lekha" reads English passably), else any other
+ *           Indian-locale voice (kn/ta/te-IN, e.g. macOS "Vani"), else natural English.
+ * A kn-IN voice scores with the other Indian locales rather than above en-IN: we have
+ * no installed Kannada voice to confirm it reads Latin-script English rather than
+ * transliterating into Kannada script.
  */
 
 export const BARKS = {
   reloading: [
     'Reloading, cover me macha!',
-    'Changing mag, swalpa cover maadi!',
-    'Reloading! Hold them, guru!',
+    'One minute, changing mag!',
+    'Reloading! Ask him to cover me, guru!',
     'Out! Reloading, reloading!',
-    'Give me two seconds da, reloading!',
-    'Mag empty, cover me yaar!',
-    "Reloading, don't let them near me!",
-    'Hold on, reloading. Slower than the college Wi-Fi, this.',
+    'Give me two seconds da, mag empty!',
+    'Cover me yaar, mag is empty only!',
+    "Don't come near, I am reloading!",
+    'Reloading. Slower than hostel Wi-Fi, no?',
   ],
   spotted: [
-    "They're coming through the main gate!",
-    'Zombies near the food court!',
-    'Contact! Over by GJB!',
-    'Arre, more of them on the Ring Road!',
+    'They are coming, coming, through the main gate!',
+    'Zombies near the food court, full crowd there!',
+    'Contact! Near GJB, come fast!',
+    'What da, more of them on Ring Road!',
     'Sprinter! Sprinter coming fast!',
     'Behind you, maga!',
-    'Big group coming in, get ready!',
-    "They're near the library, watch it!",
+    'Big group coming, get ready fast!',
+    'They are near the library only, careful!',
     'Aiyyo, look at that crowd. Worse than Silk Board!',
   ],
   hurt: [
-    "I'm hurt, I'm hurt!",
+    'I am hurt, I am hurt!',
     'Aiyyo! It bit me!',
-    'Need a medkit, quick!',
-    'Ah! That one got me!',
-    "I'm bleeding here, macha!",
-    "Help me, guru, I'm going down!",
+    'Need a medkit, fast!',
+    'Ah! That one got me, no?',
+    'I am bleeding here, macha!',
+    "Help me guru, I'm going down!",
     'Ow! Get it off me!',
   ],
   kill: [
-    'Sorted!',
+    'Sorted, no?',
     'One down, guru!',
     'Sakkath shot!',
     'Bombat! Got him!',
     'Stay down, da!',
-    "That's one less for the attendance register.",
+    'One less for the attendance register, only.',
     'Attendance shortage. Detained!',
-    'Down he goes!',
+    'Down he goes, simply.',
     'Headshot, maga!',
   ],
   revive: [
@@ -54,55 +63,55 @@ export const BARKS = {
     "Hold on, I've got you!",
     "Don't you dare die before ESA, macha!",
     'Up, up! Back on your feet!',
-    'Stay with me, guru!',
+    'Stay with me, guru. One minute!',
     "Come on, I'm not submitting your assignment for you!",
-    "Easy, easy, I'm helping you up.",
+    'Easy, easy, I am helping you up only.',
   ],
   downed: [
-    "I'm down! Somebody help!",
-    "Macha, I'm down! Revive me!",
-    "Can't get up! Help, yaar!",
-    "Aiyyo, I'm down, I'm down!",
-    'Tell my amma I tried to study!',
-    'Need a hand here, guru!',
-    'Somebody pick me up, please!',
+    'I am down! Somebody help!',
+    'Macha, I am down! Revive me, no?',
+    "Can't get up, help yaar!",
+    'Aiyyo, I am down, I am down!',
+    'Tell my amma I tried to study, only.',
+    'Need a hand here, guru. Come fast!',
+    'Somebody pick me up, please. One minute!',
   ],
   waveClear: [
-    "Is it over? Please tell me it's over.",
+    "Is it over? Please tell me it's over, no?",
     'Worse than ESA week, this.',
-    'Phew! Somebody get me a filter coffee.',
-    "Sorted! That's the wave, guys.",
+    'Phew! Somebody get me filter coffee, fast.',
+    "Sorted! That's the wave only, guys.",
     'Bombat, we survived!',
-    'Okay, breathe. Everybody still here?',
+    'Okay, simply breathe. Everybody still here?',
     "I'd rather write three back-to-back exams than do that again.",
-    'Canteen break, five minutes, then we go again.',
+    'Canteen break, one minute, then we go again.',
   ],
   waveStart: [
-    'Here they come again!',
-    "That's the bell! Everyone to your positions!",
+    'Here they come again, full crowd!',
+    "That's the bell! Everyone to positions, fast!",
     'Next period starts now, guys!',
-    "Get ready, macha, they're coming!",
-    'Main gate! Hold the main gate!',
-    'Chalo, chalo, positions!',
+    'Get ready, macha, they are coming, coming!',
+    'Main gate! Hold the main gate, no?',
+    'Chalo, chalo, positions only!',
     "Arre, didn't this class just end?",
-    'Ring Road is full of them, get ready!',
+    'Ring Road is full of them, get ready fast!',
   ],
   lowAmmo: [
-    'Running low on ammo!',
+    'Running low on ammo, only!',
     'Almost out, anyone have spare mags?',
     'Last mag, macha!',
-    'Ammo, ammo! I need ammo!',
-    'Few rounds left, yaar!',
-    'Need to find an ammo crate, quick!',
+    'Ammo, ammo! I need ammo, fast!',
+    'Few rounds left, yaar. Simply manage!',
+    'Need to find an ammo crate, fast!',
     'Swalpa ammo kodi, anyone?',
   ],
   thanks: [
     'Thanks, macha!',
-    'Thank you, guru, owe you one!',
+    'Thank you, guru. Owe you one, no?',
     'Nice save, da!',
     'Lifesaver! Canteen treat on me.',
-    'Sakkath! Thanks!',
-    "You're the best, yaar.",
+    'Sakkath! Thanks only!',
+    'You are the best, yaar. Simply.',
     'I owe you a masala dosa for that one.',
     'Thanks! Proxy attendance for you, all semester.',
   ],
@@ -124,6 +133,8 @@ export type VoiceGender = 'male' | 'female';
 
 export interface SayOptions {
   voice?: VoiceGender;
+  /** Speaker's name (any casing/suffix, e.g. "Rahul (CSE, 3rd yr)"); looked up in CHARACTER_TUNING. */
+  character?: string;
   position?: { x: number; y: number; z: number };
   /** Higher priority barks jump the queue and may interrupt a lower one (default 1). */
   priority?: number;
@@ -131,9 +142,26 @@ export interface SayOptions {
   volume?: number;
 }
 
+/**
+ * Per-character rate/pitch multipliers, applied on top of the gender base pitch, so
+ * squadmates don't all sound alike on a single installed voice per gender. Keyed by
+ * the first word of `SayOptions.character`, lowercased.
+ */
+export const CHARACTER_TUNING: Record<string, { rate: number; pitch: number }> = {
+  rahul: { rate: 1.0, pitch: 1.0 },
+  ananya: { rate: 1.06, pitch: 1.06 },
+  manjunath: { rate: 0.88, pitch: 0.84 },
+};
+
+function tuningFor(character: string | undefined): { rate: number; pitch: number } | undefined {
+  const key = character?.match(/[a-z]+/i)?.[0]?.toLowerCase();
+  return key ? CHARACTER_TUNING[key] : undefined;
+}
+
 interface QueuedBark {
   text: string;
   gender: VoiceGender;
+  tuning?: { rate: number; pitch: number };
   pos?: { x: number; y: number; z: number };
   priority: number;
   volume: number;
@@ -141,7 +169,7 @@ interface QueuedBark {
 }
 
 const IN_MALE = ['rishi', 'ravi', 'prabhat', 'hemant', 'aarav', 'arjun', 'kunal', 'madhur', 'kumar', 'raj'];
-const IN_FEMALE = ['veena', 'heera', 'neerja', 'isha', 'lekha', 'kalpana', 'aditi', 'raveena', 'sangeeta', 'kajal', 'swara', 'ananya', 'priya', 'pallavi'];
+const IN_FEMALE = ['veena', 'heera', 'neerja', 'isha', 'lekha', 'kalpana', 'aditi', 'raveena', 'sangeeta', 'kajal', 'swara', 'ananya', 'priya', 'pallavi', 'vani', 'soumya'];
 const EN_MALE = ['daniel', 'alex', 'fred', 'tom', 'aaron', 'arthur', 'oliver', 'gordon', 'lee', 'reed', 'eddy', 'guy', 'david', 'mark', 'george', 'james', 'ryan', 'thomas', 'rocko', 'grandpa', 'evan', 'nathan'];
 const EN_FEMALE = ['samantha', 'victoria', 'karen', 'moira', 'tessa', 'fiona', 'serena', 'kate', 'susan', 'zira', 'allison', 'ava', 'nicky', 'martha', 'catherine', 'hazel', 'libby', 'sonia', 'jenny', 'aria', 'emma', 'flo', 'sandy', 'shelley', 'grandma', 'zoe', 'joelle', 'kathy'];
 const NOVELTY = ['bad news', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical', 'pipe organ', 'trinoids', 'whisper', 'zarvox', 'albert', 'bahh', 'jester', 'organ', 'superstar', 'wobble', 'junior', 'ralph'];
@@ -150,11 +178,18 @@ const ROBOTIC = ['eddy', 'flo', 'grandma', 'grandpa', 'reed', 'rocko', 'sandy', 
 /** Natural-sounding fallbacks when no en-IN voice of the wanted gender is installed. */
 const NATURAL: Record<string, number> = { samantha: 8, daniel: 8, karen: 6, moira: 6, tessa: 6, serena: 6, arthur: 5, oliver: 5, kate: 4, catherine: 3 };
 
-function isEnIN(v: SpeechSynthesisVoice): boolean {
-  return v.lang.replace('_', '-').toLowerCase().startsWith('en-in');
-}
-function isEnglish(v: SpeechSynthesisVoice): boolean {
-  return v.lang.toLowerCase().startsWith('en');
+/**
+ * Locale preference tier: en-IN, then hi-IN (Lekha reads English fine), then the
+ * other Indian locales we might see installed (kn/ta/te-IN, e.g. Vani, Soumya),
+ * then any other English voice. Non-English, non-Indian voices are disqualified.
+ */
+function localeTier(v: SpeechSynthesisVoice): number {
+  const l = v.lang.replace('_', '-').toLowerCase();
+  if (l.startsWith('en-in')) return 3;
+  if (l.startsWith('hi-in')) return 2;
+  if (/^(kn|ta|te)-in/.test(l)) return 1;
+  if (l.startsWith('en')) return 0;
+  return -1;
 }
 function genderOf(v: SpeechSynthesisVoice): VoiceGender | null {
   const n = v.name.toLowerCase();
@@ -167,10 +202,9 @@ function genderOf(v: SpeechSynthesisVoice): VoiceGender | null {
 
 function score(v: SpeechSynthesisVoice, want: VoiceGender): number {
   const n = v.name.toLowerCase();
-  let s = 0;
-  if (isEnIN(v)) s += 100;
-  else if (isEnglish(v)) s += 20;
-  else return -1000;
+  const tier = localeTier(v);
+  if (tier < 0) return -1000;
+  let s = tier * 30;
   if (NOVELTY.some((k) => n.includes(k))) s -= 200;
   if (ROBOTIC.some((k) => n.startsWith(k))) s -= 15;
   for (const [k, bonus] of Object.entries(NATURAL)) if (n.startsWith(k)) s += bonus;
@@ -180,6 +214,24 @@ function score(v: SpeechSynthesisVoice, want: VoiceGender): number {
   if (v.localService) s += 5;
   if (n.includes('premium') || n.includes('enhanced') || n.includes('natural')) s += 8;
   return s;
+}
+
+/** Pure voice selection, kept separate from Barker so it's testable without a real SpeechSynthesis. */
+export function pickVoices(voices: readonly SpeechSynthesisVoice[]): Record<VoiceGender, SpeechSynthesisVoice | null> {
+  const chosen: Record<VoiceGender, SpeechSynthesisVoice | null> = { male: null, female: null };
+  for (const g of ['male', 'female'] as const) {
+    let best: SpeechSynthesisVoice | null = null;
+    let bs = -Infinity;
+    for (const v of voices) {
+      const s = score(v, g);
+      if (s > bs) {
+        bs = s;
+        best = v;
+      }
+    }
+    chosen[g] = bs > -100 ? best : null;
+  }
+  return chosen;
 }
 
 export class Barker {
@@ -217,18 +269,7 @@ export class Barker {
   loadVoices(): void {
     if (!this.synth) return;
     this.voices = this.synth.getVoices();
-    for (const g of ['male', 'female'] as const) {
-      let best: SpeechSynthesisVoice | null = null;
-      let bs = -Infinity;
-      for (const v of this.voices) {
-        const s = score(v, g);
-        if (s > bs) {
-          bs = s;
-          best = v;
-        }
-      }
-      this.chosen[g] = bs > -100 ? best : null;
-    }
+    this.chosen = pickVoices(this.voices);
   }
 
   say(text: string, opts: SayOptions = {}): void {
@@ -242,6 +283,7 @@ export class Barker {
     const item: QueuedBark = {
       text,
       gender: opts.voice ?? (Math.random() < 0.5 ? 'male' : 'female'),
+      tuning: tuningFor(opts.character),
       pos,
       priority: opts.priority ?? 1,
       volume: opts.volume ?? 1,
@@ -303,8 +345,8 @@ export class Barker {
       u.lang = 'en-IN';
     }
     u.volume = Math.min(1, vol);
-    u.rate = 1.02 + Math.random() * 0.14;
-    u.pitch = pitch * (0.94 + Math.random() * 0.12);
+    u.rate = (item.tuning?.rate ?? 1) * (1.02 + Math.random() * 0.14);
+    u.pitch = pitch * (item.tuning?.pitch ?? 1) * (0.94 + Math.random() * 0.12);
     this.current = u;
     this.currentPriority = item.priority;
     const done = (): void => {

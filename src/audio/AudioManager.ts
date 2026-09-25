@@ -602,15 +602,15 @@ export class AudioManager {
 
   /* ============================================================= barks == */
 
-  say(line: string, opts: { voice?: 'male' | 'female'; position?: Vector3; priority?: number; volume?: number } = {}): void {
-    const o: SayOptions = { voice: opts.voice, priority: opts.priority, volume: opts.volume };
+  say(line: string, opts: { voice?: 'male' | 'female'; character?: string; position?: Vector3; priority?: number; volume?: number } = {}): void {
+    const o: SayOptions = { voice: opts.voice, character: opts.character, priority: opts.priority, volume: opts.volume };
     if (opts.position) o.position = { x: opts.position.x, y: opts.position.y, z: opts.position.z };
     this.barker.volume = this.volumes.master * (this.voiceVolume ?? 1);
     this.barker.say(line, o);
   }
 
   /** Convenience: speak a random line from a BARKS category. */
-  bark(category: BarkCategory, opts: { voice?: VoiceGender; position?: Vector3; priority?: number } = {}): void {
+  bark(category: BarkCategory, opts: { voice?: VoiceGender; character?: string; position?: Vector3; priority?: number } = {}): void {
     this.say(randomBark(category), opts);
   }
 
