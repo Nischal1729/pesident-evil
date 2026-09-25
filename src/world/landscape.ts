@@ -165,22 +165,34 @@ export function buildLandscape(kit: WorldKit): void {
   // PES Lawn promenade: fountain-grass beds both sides (granite kerbs), granite block benches are props
   grassBed(kit, promenade.pts, promenade.width / 2 + 1.5, 2.6, 11, { avoid: (x, z) => inRoad(x, z, 0.3) });
   grassBed(kit, promenade.pts, -(promenade.width / 2 + 1.6), 2.8, 12, { avoid: (x, z) => x < 104 });
-  // entry south walkway: grass bed between road and walkway, planter wall + murraya hedge on the other side
-  grassBed(kit, walkway.pts, -(walkway.width / 2 + 1.0), 1.7, 13, { avoid: (x, z) => inRoad(x, z, 0.15) });
-  // purple-heart / maroon ground cover in front of the grass along the walkway (1920)
-  for (let x = 108; x < 150; x += 7) {
+  // entry south walkway (2026 tour 1920, GJB tour 0:24–0:36): fountain grass with maroon / purple-heart clumps between the
+  // road kerb and the walkway (positive samplePolyline offsets are north of this east→west path), and on the other side a
+  // raised grey concrete trough (charcoal coping) planted with fountain grass, broken for the 2-wheeler parking's north
+  // entry strip; the mesh shelter stands behind its east run
+  grassBed(kit, walkway.pts, walkway.width / 2 + 1.0, 1.7, 13, { avoid: (x, z) => inRoad(x, z, 0.15) });
+  for (let x = 108; x < 158; x += 5.5 + hash2(x, 3) * 3) {
     const zc = walkPathZ(walkway.pts, x) - walkway.width / 2 - 1.0;
-    kit.buf('stone', x, zc).flatPoly([[x - 1.2, zc - 0.6], [x + 1.2, zc - 0.6], [x + 1.2, zc + 0.6], [x - 1.2, zc + 0.6]], 0.075, col('#4c2438'), 2);
-    for (let k = 0; k < 4; k++) cycad(kit, x - 0.9 + k * 0.6, 0.05, zc + (k % 2 ? 0.2 : -0.2), 0.7, PURPLE_HEART);
+    if (inRoad(x, zc, 0.6)) continue;
+    const maroon = hash2(x, 7) < 0.45;
+    kit.buf('stone', x, zc).flatPoly([[x - 0.9, zc - 0.5], [x + 0.9, zc - 0.5], [x + 0.9, zc + 0.5], [x - 0.9, zc + 0.5]], 0.075, maroon ? col('#4a1f28') : col('#4c2438'), 2);
+    for (let k = 0; k < 4; k++) cycad(kit, x - 0.7 + k * 0.45, 0.05, zc + (k % 2 ? 0.18 : -0.18), maroon ? 0.85 : 0.65, maroon ? MAROON_LEAF : PURPLE_HEART);
   }
-  // raised planter wall with a white-flowering hedge on the south side of the walkway (gaps for access)
-  const wallRuns: [number, number][] = [[106, 116], [121, 131], [136, 144]];
-  for (const [x0, x1] of wallRuns) {
-    const a: V2 = [x0, walkPathZ(walkway.pts, x0) + walkway.width / 2 + 0.7], b: V2 = [x1, walkPathZ(walkway.pts, x1) + walkway.width / 2 + 0.7];
-    kit.segBox('stone', a, b, 0, 0.55, 1.0, col('#a19e98'), 0, 0.02);
-    kit.segBox('stone', a, b, 0.55, 0.62, 1.12, col('#3c3e40'));
-    hedgeBox(kit, 'murraya', a, b, 0.6, 1.35, 0.8);
-    kit.collision.addSegment(a, b, 1.0, 1.1, 'concrete', 'planter');
+  const troughRuns: [number, number][] = [[105.5, 118.8], [138.6, 155.9]];
+  const tufts = tuftSet(kit);
+  for (const [x0, x1] of troughRuns) {
+    const zo = walkway.width / 2 + 0.62;
+    const a: V2 = [x0, walkPathZ(walkway.pts, x0) + zo], b: V2 = [x1, walkPathZ(walkway.pts, x1) + zo];
+    kit.segBox('stone', a, b, 0, 0.5, 1.05, col('#9f9c96'), 0, 0.02);
+    kit.segBox('stone', a, b, 0.5, 0.56, 1.15, col('#3c3e40'));
+    kit.segBox('stone', a, b, 0.56, 0.58, 0.8, col('#3d3226'));
+    kit.collision.addSegment(a, b, 1.05, 0.56, 'concrete', 'planter');
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), dx = (b[0] - a[0]) / L, dz = (b[1] - a[1]) / L;
+    const r = rng(Math.floor(x0 * 13));
+    for (let s = 0.35; s < L - 0.3; s += 0.42) {
+      const o = (r() - 0.5) * 0.45, t = s + (r() - 0.5) * 0.2;
+      const h = 0.75 + r() * 0.55, w = 0.7 + r() * 0.3;
+      kit.addInst(tufts, new THREE.Vector3(a[0] + dx * t - dz * o, 0.56, a[1] + dz * t + dx * o), r() * Math.PI * 2, new THREE.Vector3(w, h, w), col('#ffffff').multiplyScalar(0.85 + r() * 0.25));
+    }
   }
   // entry-road north verge: grass bed between the road and the promenade
   // (covered by the promenade's south bed)

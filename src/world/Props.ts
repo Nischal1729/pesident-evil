@@ -1101,7 +1101,7 @@ class Dresser {
   /** Entry-road frame at the main gate: (a = metres inward from the gate line, o = lateral, + = right of inbound). */
   private gateRoadFrame(): { at: (a: number, o: number) => { x: number; z: number; face: number }; road: (typeof ROADS)[number]; laneFree: (x: number, z: number, yaw: number, w: number, l: number) => boolean } | null {
     const g = GATES.find((q) => q.id === 'main');
-    const road = ROADS.find((r) => r.median);
+    const road = ROADS.find((r) => r.id === 'entry');
     if (!g || !road) return null;
     const f = gateFrame(g);
     const pl = polyline(road.pts);
@@ -1239,10 +1239,11 @@ class Dresser {
   }
 
   // ------------------------------------------------------------------ entry boulevard median: angle-parked scooters
+  /** Scooters angle-parked along a lane divider (`pts`). The 2026 entry road has none, so Campus passes no points. */
   medianScooters(pts: V2[]): void {
     if (pts.length < 2) return;
     const pl = polyline(pts);
-    const road = ROADS.find((r) => r.median);
+    const road = ROADS.find((r) => r.id === 'entry');
     const mh = (road?.median ?? 2.4) / 2;
     const f = this.footprint('bike');
     if (!f) return;
@@ -1291,7 +1292,7 @@ class Dresser {
     for (const bld of near) {
       let row = 0;
       ROADS.forEach((rd) => {
-        if (rd.kind !== 'asphalt' || rd.median) return;
+        if (rd.kind !== 'asphalt' || rd.id === 'entry') return;
         for (const side of [-1, 1]) {
           for (const smp of samplePolyline(rd.pts, 2.7, 0, 1.35)) {
             if (row >= 11) return;
@@ -1310,7 +1311,7 @@ class Dresser {
     // parallel-parked / abandoned cars along the kerbs near the two blocks (never both sides at once)
     let n = 0;
     ROADS.forEach((rd, ri) => {
-      if (rd.kind !== 'asphalt' || rd.median) return;
+      if (rd.kind !== 'asphalt' || rd.id === 'entry') return;
       let prev = false;
       for (const smp of samplePolyline(rd.pts, 6.6, 0, 3.3)) {
         if (n >= 22) return;
@@ -1366,7 +1367,7 @@ class Dresser {
       }
     }
     ROADS.forEach((rd, ri) => {
-      if (n >= 3 || rd.kind !== 'asphalt' || rd.median || rd.width < 7) return;
+      if (n >= 3 || rd.kind !== 'asphalt' || rd.id === 'entry' || rd.width < 7) return;
       if (rd.id !== undefined && rd.id !== 'bus_bay') return;
       for (const smp of samplePolyline(rd.pts, 3, 0, 6)) {
         if (n >= 3) return;
@@ -1386,39 +1387,23 @@ class Dresser {
         }
       }
     });
-  }
-
-  /** Motorcycle strips along the entry road's walkway-side kerb (OSM motorcycle_parking), nose to the kerb. */
-  kerbScooters(): void {
-    const road = ROADS.find((r) => r.median);
-    const main = GATES.find((g) => g.id === 'main');
-    const f = this.footprint('bike');
-    if (!road || !main || !f) return;
-    const gm: V2 = [(main.a[0] + main.b[0]) / 2, (main.a[1] + main.b[1]) / 2];
+    // one waiting at the entry road's south (walkway-side) kerb, nose toward the gate (2026 tour 0530), just west of the
+    // player spawn
+    const ei = ROADS.findIndex((r) => r.id === 'entry');
     const walk = AREAS.find((a) => a.id === 'entry_south_walkway');
-    const pl = polyline(road.pts);
-    const a60 = 60 * DEG;
-    const reach = (f.l / 2) * Math.sin(a60) + (f.w / 2) * Math.cos(a60);
-    const R = rng(911);
-    // which side is the walkway? (fallback: south, +z)
-    const probe = pl.at(pl.length / 2);
-    let side = 1;
-    const ln: V2 = [-probe.d[1], probe.d[0]];
-    if (walk) side = distToPoly(probe.p[0] + ln[0] * 9, probe.p[1] + ln[1] * 9, walk.poly) < distToPoly(probe.p[0] - ln[0] * 9, probe.p[1] - ln[1] * 9, walk.poly) ? 1 : -1;
-    else side = ln[1] > 0 ? 1 : -1;
-    let s = 4;
-    while (s < pl.length - 2) {
-      const n = 4 + Math.floor(R() * 8);
-      for (let k = 0; k < n; k++, s += 1.1 + R() * 0.2) {
-        const { p, d } = pl.at(s);
-        if (Math.hypot(p[0] - gm[0], p[1] - gm[1]) < 34) continue; // the divider rows own the gate end
-        if (Math.abs(s - pl.length / 2) < 5) continue; // crossing to the walkway at mid-road
-        const out: V2 = [-d[1] * side, d[0] * side];
-        const fx = out[0] * Math.sin(a60) + d[0] * Math.cos(a60), fz = out[1] * Math.sin(a60) + d[1] * Math.cos(a60);
-        const off = road.width / 2 - 0.12 - reach;
-        this.place('bike', p[0] + out[0] * off, p[1] + out[1] * off, yawTo(fx, fz) + (R() - 0.5) * 0.14, { color: SCOOTER_PAINT[Math.floor(R() * SCOOTER_PAINT.length)], margin: -0.05, laneOk: true, solid: { shape: 'seg', surface: 'metal', h: 1.1, pad: -0.2 } });
+    if (ei >= 0 && walk) {
+      const rd = ROADS[ei];
+      for (const smp of samplePolyline(rd.pts, 1.5, 0, 0.75)) {
+        if (smp.p[0] > 118 || smp.p[0] < 108) continue;
+        let nx = -smp.dir[1], nz = smp.dir[0];
+        if (distToPoly(smp.p[0] + nx * 8, smp.p[1] + nz * 8, walk.poly) > distToPoly(smp.p[0] - nx * 8, smp.p[1] - nz * 8, walk.poly)) { nx = -nx; nz = -nz; }
+        const off = rd.width / 2 - 0.3 - fb.w / 2;
+        const yaw = yawTo(-smp.dir[0], -smp.dir[1]) + (R() - 0.5) * 0.03; // the polyline runs from the gate westward
+        if (this.place('college_bus', smp.p[0] + nx * off, smp.p[1] + nz * off, yaw, { margin: 0.1, laneOk: true, solid: { shape: 'rect', surface: 'metal' } })) {
+          this.roadVehicles.push({ road: ei, s: this.alongRoad(ei, smp.p), side: 1 });
+          break;
+        }
       }
-      s += R() < 0.3 ? 10 + R() * 10 : 3 + R() * 5;
     }
   }
 
@@ -1887,7 +1872,6 @@ export async function buildProps(assets: Assets, collision: StaticCollision, opt
   d.forecourt();
   d.orr();
   d.medianScooters(opts.medianPts);
-  d.kerbScooters();
   d.collegeBuses();
   d.campusCars();
   d.foodCourt();
