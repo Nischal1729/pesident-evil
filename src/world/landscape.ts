@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { hash2, pointInPoly, polylineToStrip, rng, samplePolyline } from './geom';
+import { hash2, pointInPoly, polylineToStrip, rng, samplePolyline, scatterInPolygon } from './geom';
 import { col, type DetailKey, type WorldKit } from './kit';
-import { AREAS, GLOBE_POS, LOW_WALLS, PATHS, ROADS, type V2 } from './layout';
+import { AREAS, GLOBE_POS, GLOBE_Y, LOW_WALLS, MRD_POOL, PATHS, PLAZA_TERRACE, ROADS, type V2 } from './layout';
 import type { TreeSpecies } from './trees';
 import { foliageMaterial, fountainGrassGeometry, frondShrubGeometry, hedgeCardGeometry, leafyShrubGeometry } from './vegetation/shrubs';
 
@@ -165,28 +165,41 @@ export function buildLandscape(kit: WorldKit): void {
   // PES Lawn promenade: fountain-grass beds both sides (granite kerbs), granite block benches are props
   grassBed(kit, promenade.pts, promenade.width / 2 + 1.5, 2.6, 11, { avoid: (x, z) => inRoad(x, z, 0.3) });
   grassBed(kit, promenade.pts, -(promenade.width / 2 + 1.6), 2.8, 12, { avoid: (x, z) => x < 104 });
-  // entry south walkway: grass bed between road and walkway, planter wall + murraya hedge on the other side
-  grassBed(kit, walkway.pts, -(walkway.width / 2 + 1.0), 1.7, 13, { avoid: (x, z) => inRoad(x, z, 0.15) });
-  // purple-heart / maroon ground cover in front of the grass along the walkway (1920)
-  for (let x = 108; x < 150; x += 7) {
+  // entry south walkway (2026 tour 1920, GJB tour 0:24–0:36): fountain grass with maroon / purple-heart clumps between the
+  // road kerb and the walkway (positive samplePolyline offsets are north of this east→west path), and on the other side a
+  // raised grey concrete trough (charcoal coping) planted with fountain grass, broken for the 2-wheeler parking's north
+  // entry strip; the mesh shelter stands behind its east run
+  grassBed(kit, walkway.pts, walkway.width / 2 + 1.0, 1.7, 13, { avoid: (x, z) => inRoad(x, z, 0.15) });
+  for (let x = 108; x < 158; x += 5.5 + hash2(x, 3) * 3) {
     const zc = walkPathZ(walkway.pts, x) - walkway.width / 2 - 1.0;
-    kit.buf('stone', x, zc).flatPoly([[x - 1.2, zc - 0.6], [x + 1.2, zc - 0.6], [x + 1.2, zc + 0.6], [x - 1.2, zc + 0.6]], 0.075, col('#4c2438'), 2);
-    for (let k = 0; k < 4; k++) cycad(kit, x - 0.9 + k * 0.6, 0.05, zc + (k % 2 ? 0.2 : -0.2), 0.7, PURPLE_HEART);
+    if (inRoad(x, zc, 0.6)) continue;
+    const maroon = hash2(x, 7) < 0.45;
+    kit.buf('stone', x, zc).flatPoly([[x - 0.9, zc - 0.5], [x + 0.9, zc - 0.5], [x + 0.9, zc + 0.5], [x - 0.9, zc + 0.5]], 0.075, maroon ? col('#4a1f28') : col('#4c2438'), 2);
+    for (let k = 0; k < 4; k++) cycad(kit, x - 0.7 + k * 0.45, 0.05, zc + (k % 2 ? 0.18 : -0.18), maroon ? 0.85 : 0.65, maroon ? MAROON_LEAF : PURPLE_HEART);
   }
-  // raised planter wall with a white-flowering hedge on the south side of the walkway (gaps for access)
-  const wallRuns: [number, number][] = [[106, 116], [121, 131], [136, 144]];
-  for (const [x0, x1] of wallRuns) {
-    const a: V2 = [x0, walkPathZ(walkway.pts, x0) + walkway.width / 2 + 0.7], b: V2 = [x1, walkPathZ(walkway.pts, x1) + walkway.width / 2 + 0.7];
-    kit.segBox('stone', a, b, 0, 0.55, 1.0, col('#a19e98'), 0, 0.02);
-    kit.segBox('stone', a, b, 0.55, 0.62, 1.12, col('#3c3e40'));
-    hedgeBox(kit, 'murraya', a, b, 0.6, 1.35, 0.8);
-    kit.collision.addSegment(a, b, 1.0, 1.1, 'concrete', 'planter');
+  const troughRuns: [number, number][] = [[107.6, 116.8], [138.6, 155.9]]; // gaps keep the pool court behind the west run reachable
+  const tufts = tuftSet(kit);
+  for (const [x0, x1] of troughRuns) {
+    const zo = walkway.width / 2 + 0.62;
+    const a: V2 = [x0, walkPathZ(walkway.pts, x0) + zo], b: V2 = [x1, walkPathZ(walkway.pts, x1) + zo];
+    kit.segBox('stone', a, b, 0, 0.5, 1.05, col('#9f9c96'), 0, 0.02);
+    kit.segBox('stone', a, b, 0.5, 0.56, 1.15, col('#3c3e40'));
+    kit.segBox('stone', a, b, 0.56, 0.58, 0.8, col('#3d3226'));
+    kit.collision.addSegment(a, b, 1.05, 0.56, 'concrete', 'planter');
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), dx = (b[0] - a[0]) / L, dz = (b[1] - a[1]) / L;
+    const r = rng(Math.floor(x0 * 13));
+    for (let s = 0.35; s < L - 0.3; s += 0.42) {
+      const o = (r() - 0.5) * 0.45, t = s + (r() - 0.5) * 0.2;
+      const h = 0.75 + r() * 0.55, w = 0.7 + r() * 0.3;
+      kit.addInst(tufts, new THREE.Vector3(a[0] + dx * t - dz * o, 0.56, a[1] + dz * t + dx * o), r() * Math.PI * 2, new THREE.Vector3(w, h, w), col('#ffffff').multiplyScalar(0.85 + r() * 0.25));
+    }
   }
   // entry-road north verge: grass bed between the road and the promenade
   // (covered by the promenade's south bed)
 
-  // east plaza: raised planters with frangipani + mixed shrubs, trench drain across the plaza
-  for (const [x0, z0, x1, z1] of [[95, -149.5, 111, -146], [104, -143.5, 112.5, -139.5]] as [number, number, number, number][]) {
+  // east plaza: open paving (2026 tour 0216) with raised planters of frangipani + mixed shrubs either side of the terrace stair's foot, and the
+  // steel trench drain running N–S across the promenade just east of the ramp foot (2026 tour 0208, sheet 2:08 tile 3)
+  for (const [x0, z0, x1, z1] of [[95, -149.5, PLAZA_TERRACE.stair.x0 - 0.6, -146], [PLAZA_TERRACE.stair.x1 + 0.6, -149.5, 112.5, -146]] as [number, number, number, number][]) {
     kit.box('stone', (x0 + x1) / 2, 0.25, (z0 + z1) / 2, x1 - x0, 0.5, z1 - z0, 0, col('#a6a39c'));
     kit.box('stone', (x0 + x1) / 2, 0.52, (z0 + z1) / 2, x1 - x0 + 0.1, 0.06, z1 - z0 + 0.1, 0, col('#3c3e40'));
     kit.box('stone', (x0 + x1) / 2, 0.56, (z0 + z1) / 2, x1 - x0 - 0.4, 0.04, z1 - z0 - 0.4, 0, col('#3d3226'));
@@ -194,7 +207,27 @@ export function buildLandscape(kit: WorldKit): void {
     const r = rng(x0 * 7);
     for (let i = 0; i < (x1 - x0) * (z1 - z0) / 1.6; i++) cycad(kit, x0 + 0.4 + r() * (x1 - x0 - 0.8), 0.56, z0 + 0.4 + r() * (z1 - z0 - 0.8), 1.0 + r() * 0.8);
   }
-  kit.box('metal', 99, 0.075, -131.2, 22, 0.02, 0.35, 0, col('#2c2e30'));
+  kit.box('metal', 112.6, 0.075, -135, 0.35, 0.02, 9, 0, col('#2c2e30'));
+  plazaTerrace(kit);
+  reflectingPool(kit);
+  // a dense, colourful planting band behind the loop road's east kerb along the frangipani garden (2026 tour 4:00,
+  // mrd26_0240): mixed shrubs, maroon and lime clumps, purple-heart edging at the kerb
+  {
+    const loop = ROADS.find((r) => r.id === 'mrd_loop');
+    if (loop) {
+      const r = rng(4001);
+      for (const off of [4.0, 5.1]) {
+        for (const smp of samplePolyline(loop.pts, 0.7, off, 0.35)) {
+          const [x, z] = smp.p;
+          if (z > -141 || z < -168 || Math.hypot(x - GLOBE_POS[0], z - GLOBE_POS[1]) < 4.4 || kit.collision.blocked(x, z, 0.3)) continue;
+          const v = r();
+          const tint = off < 4.5 ? (v < 0.7 ? PURPLE_HEART : MAROON_LEAF) : v < 0.2 ? MAROON_LEAF : v < 0.35 ? new THREE.Color(1.3, 1.35, 0.6) : undefined;
+          cycad(kit, x + (r() - 0.5) * 0.3, 0.05, z + (r() - 0.5) * 0.3, off < 4.5 ? 0.55 + r() * 0.2 : 1.0 + r() * 0.6, tint);
+        }
+      }
+    }
+  }
+  pesLawnUnderstorey(kit);
 
   // frangipani garden: purple Tradescantia beds + shrubs; the globe stands in a planted bed at its east end
   const fg = AREAS.find((a) => a.id === 'frangipani_garden');
@@ -202,7 +235,7 @@ export function buildLandscape(kit: WorldKit): void {
     const r = rng(256);
     for (let i = 0; i < 9; i++) {
       const x = 81 + r() * 12, z = -163 + r() * 21;
-      if (!pointInPoly(x, z, fg.poly) || Math.hypot(x - GLOBE_POS[0], z - GLOBE_POS[1]) < 3.5) continue;
+      if (!pointInPoly(x, z, fg.poly) || Math.hypot(x - GLOBE_POS[0], z - GLOBE_POS[1]) < 5.2) continue;
       const rr = 1.2 + r() * 1.4;
       const ring: V2[] = [];
       for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; ring.push([x + Math.cos(a) * rr * 1.3, z + Math.sin(a) * rr]); }
@@ -216,14 +249,15 @@ export function buildLandscape(kit: WorldKit): void {
       }
     }
   }
-  // globe bed: low granite ring planter + shrubs; the globe (its own plinth) is placed by Props
+  // globe bed (2026 tour 0216 / 0401, GJB tour 1:44): the gold globe on its green-grey plinth, lifted on a white drum with
+  // a dark granite coping, in a low granite ring planter beside the white stair tower of the GJBC front-ramp landing (the
+  // ring is open on the west, where the tower stands). The globe (its own plinth) is placed by Props at GLOBE_Y.
   {
     const [gx, gz] = GLOBE_POS;
-    const R = 3.6;
-    const seg = 20;
+    const R = 3.6, seg = 20;
     for (let k = 0; k < seg; k++) {
       const a0 = (k / seg) * Math.PI * 2, a1 = ((k + 1) / seg) * Math.PI * 2;
-      if (a0 > Math.PI * 0.85 && a0 < Math.PI * 1.15) continue; // a step-in gap facing the plaza (west side is the tower)
+      if (a0 > Math.PI * 0.7 && a0 < Math.PI * 1.3) continue; // open towards the landing's stair tower (west)
       const p0: V2 = [gx + Math.cos(a0) * R, gz + Math.sin(a0) * R], p1: V2 = [gx + Math.cos(a1) * R, gz + Math.sin(a1) * R];
       kit.segBox('polished', p0, p1, 0, 0.45, 0.45, col('#4e5a55'), 0, 0.05, 0.5);
     }
@@ -231,8 +265,16 @@ export function buildLandscape(kit: WorldKit): void {
     for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2; ring.push([gx + Math.cos(a) * (R - 0.2), gz + Math.sin(a) * (R - 0.2)]); }
     kit.buf('stone', gx, gz).flatPoly(ring, 0.08, col('#4a2a3c'), 2);
     const r = rng(84);
-    for (let i = 0; i < 14; i++) { const a = r() * Math.PI * 2, rr = 2.2 + r() * 1.1; cycad(kit, gx + Math.cos(a) * rr, 0.08, gz + Math.sin(a) * rr, 1.1 + r() * 0.6); }
-    kit.collision.addCircle(gx, gz, 1.8, 3.2, 'metal', 'globe');
+    for (let i = 0; i < 14; i++) {
+      const a = r() * Math.PI * 2, rr = 2.4 + r() * 0.9;
+      if (Math.cos(a) < -0.6) continue;
+      cycad(kit, gx + Math.cos(a) * rr, 0.08, gz + Math.sin(a) * rr, 1.1 + r() * 0.6);
+    }
+    // white drum under the plinth, dark granite coping
+    kit.buf('plaster', gx, gz).cylinder(gx, 0, gz, 1.85, GLOBE_Y, 20, col('#efeee9'));
+    kit.buf('polished', gx, gz).cylinder(gx, GLOBE_Y - 0.02, gz, 1.95, 0.08, 20, col('#2e3032'));
+    kit.collision.addCircle(gx, gz, 1.95, GLOBE_Y + 0.06, 'concrete', 'wall');
+    kit.collision.addCircle(gx, gz, 1.55, 3.2, 'metal', 'globe', GLOBE_Y);
   }
 
   // terraced garden (below the Law terrace): stepped granite planter boxes with charcoal coping
@@ -264,6 +306,152 @@ export function buildLandscape(kit: WorldKit): void {
   forecourtPlanters(kit);
 }
 
+// ------------------------------------------------------------------------------------------------ east plaza terrace
+/**
+ * Terrace on the east plaza's north side (layout PLAZA_TERRACE): white-plastered retaining walls with a granite coping,
+ * a 6 m granite stair up from the plaza between white cheek walls, a white pavilion with dark glazing on its north-east
+ * corner, planting beds on top and a ramp down north onto the PES Lawn path. Walkable (podium + stair/ramp prisms).
+ */
+function plazaTerrace(kit: WorldKit): void {
+  const T = PLAZA_TERRACE, y = T.y;
+  const white = col('#efeee9'), coping = col('#8e8c86'), granite = col('#b4b3ae'), riser = col('#9d9c97');
+  const rect = (x0: number, z0: number, x1: number, z1: number): V2[] => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+  // podium: white walls + granite floor
+  const cx = (T.x0 + T.x1) / 2, cz = (T.zS + T.zN) / 2, w = T.x1 - T.x0, d = T.zS - T.zN;
+  kit.box('plaster', cx, y / 2, cz, w, y, d, 0, white, 0.5);
+  kit.buf('granite', cx, cz).flatPoly(rect(T.x0 + 0.15, T.zN + 0.15, T.x1 - 0.15, T.zS - 0.15), y + 0.01, granite, 1.2);
+  kit.collision.addPolygon(rect(T.x0, T.zN, T.x1, T.zS), y, 'concrete', 'landing');
+  // parapets on the terrace edges (openings at the stair head and the ramp head), granite coping
+  const P = T.pavilion;
+  const para: [V2, V2][] = [
+    [[T.x0, T.zS], [T.stair.x0, T.zS]], [[T.stair.x1, T.zS], [T.x1, T.zS]],
+    [[T.x0, T.zS], [T.x0, T.zN]], [[T.x1, T.zS], [T.x1, P.zS]], [[T.x0, T.zN], [T.ramp.x0, T.zN]],
+  ];
+  for (const [a, b] of para) {
+    kit.segBox('plaster', a, b, y, y + 0.9, 0.25, white, 0, 0.125, 0.5);
+    kit.segBox('granite', a, b, y + 0.9, y + 0.98, 0.34, coping, 0, 0.17);
+    kit.collision.addSegment(a, b, 0.25, 0.98, 'concrete', 'wall', y);
+  }
+  // stair (15 risers) between white cheek walls; collides as one sloped flight
+  {
+    const { x0, x1, zFoot } = T.stair, n = 15, run = T.zS - zFoot; // negative (rises northwards)
+    for (let k = 0; k < n; k++) {
+      const za = zFoot + (run * k) / n, zb = zFoot + (run * (k + 1)) / n, top = (y * (k + 1)) / n;
+      kit.box('granite', (x0 + x1) / 2, top / 2, (za + zb) / 2, x1 - x0, top, Math.abs(zb - za) + 0.005, 0, k % 2 ? granite : riser, 0.8);
+    }
+    kit.collision.addRamp(rect(x0, T.zS, x1, zFoot), [(x0 + x1) / 2, zFoot], [(x0 + x1) / 2, T.zS], 0, y, 'concrete', 'stair');
+    for (const xs of [x0 - 0.15, x1 + 0.15]) {
+      // cheek wall: stepped in three blocks so its top follows the flight (1 m above the nosing line)
+      for (let k = 0; k < 3; k++) {
+        const za = zFoot + (run * k) / 3, zb = zFoot + (run * (k + 1)) / 3, h = (y * (k + 1)) / 3 + 1.0;
+        kit.box('plaster', xs, h / 2, (za + zb) / 2, 0.3, h, Math.abs(zb - za), 0, white, 0.5);
+        kit.box('granite', xs, h + 0.04, (za + zb) / 2, 0.38, 0.08, Math.abs(zb - za), 0, coping);
+        kit.collision.addPolygon(rect(xs - 0.15, Math.min(za, zb), xs + 0.15, Math.max(za, zb)), h + 0.08, 'concrete', 'wall');
+      }
+    }
+  }
+  // ramp down north onto the lawn path, with white cheek walls
+  {
+    const { x0, x1, zEnd } = T.ramp;
+    const b = kit.buf('granite', (x0 + x1) / 2, (T.zN + zEnd) / 2);
+    const len = T.zN - zEnd, sl = y / len, nl = Math.hypot(1, sl);
+    const i0 = b.vert(x0, y, T.zN, 0, 1 / nl, sl / nl, 0, 0, granite), i1 = b.vert(x1, y, T.zN, 0, 1 / nl, sl / nl, (x1 - x0) / 1.2, 0, granite);
+    const i2 = b.vert(x1, 0.06, zEnd, 0, 1 / nl, sl / nl, (x1 - x0) / 1.2, len / 1.2, granite), i3 = b.vert(x0, 0.06, zEnd, 0, 1 / nl, sl / nl, 0, len / 1.2, granite);
+    b.quad(i0, i3, i2, i1);
+    kit.collision.addRamp(rect(x0, zEnd, x1, T.zN), [(x0 + x1) / 2, T.zN], [(x0 + x1) / 2, zEnd], y, 0, 'concrete', 'ramp');
+    for (const xs of [x0 - 0.15, x1 + 0.15]) {
+      for (let k = 0; k < 4; k++) {
+        const za = T.zN - (len * k) / 4, zb = T.zN - (len * (k + 1)) / 4, h = y * (1 - k / 4) + 0.9;
+        kit.box('plaster', xs, h / 2, (za + zb) / 2, 0.3, h, Math.abs(zb - za), 0, white, 0.5);
+        kit.box('granite', xs, h + 0.04, (za + zb) / 2, 0.38, 0.08, Math.abs(zb - za), 0, coping);
+        kit.collision.addPolygon(rect(xs - 0.15, Math.min(za, zb), xs + 0.15, Math.max(za, zb)), h + 0.08, 'concrete', 'wall');
+      }
+    }
+  }
+  // pavilion: white box with dark glazing on its south and west faces, thin roof slab
+  {
+    const px = (P.x0 + T.x1) / 2, pz = (P.zS + T.zN) / 2, pw = T.x1 - P.x0, pd = P.zS - T.zN;
+    kit.box('plaster', px + 0.3, y + P.h / 2, pz - 0.3, pw - 0.6, P.h, pd - 0.6, 0, white, 0.5);
+    kit.box('glass', px + 0.3, y + 1.45, P.zS - 0.28, pw - 1.6, 2.5, 0.06, 0, col('#2f3a44'));
+    kit.box('glass', P.x0 + 0.02, y + 1.45, pz - 0.3, 0.06, 2.5, pd - 1.8, 0, col('#2f3a44'));
+    kit.box('plaster', px, y + P.h + 0.12, pz, pw + 0.5, 0.24, pd + 0.5, 0, col('#f6f5f1'), 0.5);
+    kit.collision.addPolygon(rect(P.x0, T.zN, T.x1, P.zS), P.h + 0.36, 'concrete', 'wall', y);
+  }
+  // planting bed on the terrace (frangipani + shrubs) along its west half
+  {
+    const bx0 = T.x0 + 1.2, bx1 = T.stair.x0 - 1.0, bz0 = T.zN + 1.2, bz1 = T.zS - 1.2;
+    kit.box('stone', (bx0 + bx1) / 2, y + 0.2, (bz0 + bz1) / 2, bx1 - bx0, 0.4, bz1 - bz0, 0, col('#a6a39c'));
+    kit.box('stone', (bx0 + bx1) / 2, y + 0.42, (bz0 + bz1) / 2, bx1 - bx0 + 0.1, 0.05, bz1 - bz0 + 0.1, 0, col('#3c3e40'));
+    kit.collision.addPolygon(rect(bx0, bz0, bx1, bz1), 0.44, 'concrete', 'planter', y);
+    const r = rng(2161);
+    for (let i = 0; i < 16; i++) cycad(kit, bx0 + 0.4 + r() * (bx1 - bx0 - 0.8), y + 0.44, bz0 + 0.4 + r() * (bz1 - bz0 - 0.8), 1.0 + r() * 0.7);
+    kit.addTree('frangipani', bx0 + 1.6, (bz0 + bz1) / 2, 1.0, false);
+    kit.addTree('frangipani', bx1 - 1.4, bz0 + 1.3, 0.9, false);
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ MRD reflecting pool
+/** Black-granite reflecting pool along the loop road's east kerb opposite MRD's steps (layout MRD_POOL). */
+function reflectingPool(kit: WorldKit): void {
+  const { c, u, len, wid } = MRD_POOL;
+  const n: V2 = [-u[1], u[0]];
+  const at = (a: number, b: number): V2 => [c[0] + u[0] * a + n[0] * b, c[1] + u[1] * a + n[1] * b];
+  const rot = Math.atan2(-u[1], u[0]);
+  const black = col('#26282a');
+  // rim (four granite kerbs) and the dark basin floor
+  const edges: [V2, V2][] = [
+    [at(-len / 2, -wid / 2), at(len / 2, -wid / 2)], [at(-len / 2, wid / 2), at(len / 2, wid / 2)],
+    [at(-len / 2, -wid / 2), at(-len / 2, wid / 2)], [at(len / 2, -wid / 2), at(len / 2, wid / 2)],
+  ];
+  for (const [a, b] of edges) kit.segBox('polished', a, b, 0, 0.5, 0.32, black, 0, 0.16, 0.5);
+  kit.box('polished', c[0], 0.1, c[1], len - 0.3, 0.2, wid - 0.3, rot, col('#141516'));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(len - 0.32, wid - 0.32).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x1b2f36, roughness: 0.04, metalness: 0.85 }));
+  water.position.set(c[0], 0.42, c[1]);
+  water.rotation.y = rot;
+  water.receiveShadow = true;
+  water.matrixAutoUpdate = false; water.updateMatrix();
+  kit.group.add(water);
+  kit.collision.addPolygon([at(-len / 2, -wid / 2), at(len / 2, -wid / 2), at(len / 2, wid / 2), at(-len / 2, wid / 2)], 0.5, 'concrete', 'fountain');
+  // the planted bed between the pool and the road kerb (seen beyond the pool from the plaza, GJB tour 1:48): shrubs
+  // with a purple-heart edge towards the road
+  const r = rng(1520);
+  for (let s = -len / 2 + 0.5; s < len / 2 - 0.3; s += 0.75) {
+    const p = at(s + (r() - 0.5) * 0.3, -(wid / 2 + 0.9 + r() * 0.3));
+    cycad(kit, p[0], 0.05, p[1], 1.1 + r() * 0.5);
+    const q = at(s + (r() - 0.5) * 0.3, -(wid / 2 + 2.1));
+    cycad(kit, q[0], 0.05, q[1], 0.55 + r() * 0.2, PURPLE_HEART);
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ PES Lawn understorey
+/**
+ * The PES Lawn is a planted garden grove under a dense tree canopy (Google satellite), not an open lawn: shrub clumps
+ * under the trees (Campus.placeTrees fills the canopy), kept off the promenade beds, the terrace and the lawn path.
+ */
+function pesLawnUnderstorey(kit: WorldKit): void {
+  const lawn = AREAS.find((a) => a.id === 'pes_lawn');
+  const prom = PATHS.find((p) => p.id === 'pes_lawn_promenade');
+  if (!lawn || !prom) return;
+  const T = PLAZA_TERRACE;
+  const skip = (x: number, z: number): boolean => {
+    if (x > T.x0 - 1.5 && x < T.x1 + 1.5 && z < T.zS + 1.5 && z > T.ramp.zEnd - 1) return true;
+    if (Math.abs(x - 105.5) < 3 && z < T.zN) return true;
+    if (prom.pts.some((_, i) => i > 0 && distSeg(x, z, prom.pts[i - 1], prom.pts[i]) < 8.5)) return true;
+    return kit.collision.blocked(x, z, 0.6);
+  };
+  const r = rng(4077);
+  for (const [x, z] of scatterInPolygon(lawn.poly, 170, 1.6, 4078, skip)) {
+    const tint = r() < 0.15 ? MAROON_LEAF : undefined;
+    cycad(kit, x, 0.05, z, 1.0 + r() * 0.9, tint);
+  }
+}
+
+function distSeg(x: number, z: number, a: V2, b: V2): number {
+  const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1;
+  const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / l2));
+  return Math.hypot(a[0] + dx * t - x, a[1] + dz * t - z);
+}
+
 function walkPathZ(pts: V2[], x: number): number {
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i];
@@ -276,12 +464,21 @@ function walkPathZ(pts: V2[], x: number): number {
 function shelters(kit: WorldKit): void {
   const white = col('#f1f1ee'), steel = col('#6f757b');
   // (the old single-storey bike canopy is replaced by the 2-level 2-wheeler parking, src/world/gjb/parking.ts)
-  // steel mesh shelter on a raised plinth near the gate walkway
+  // steel mesh shelter on a raised plinth near the gate walkway (2026 tour 1920, GJB tour 2:02): a light cage of white
+  // square-tube posts and rails with chain-link panels, a flat sheet roof with a white fascia
   {
     const x0 = 145.5, x1 = 155.3, z0 = -117.2, z1 = -111.2, h = 3.2;
+    const frame = col('#dcdedf');
     kit.box('stone', (x0 + x1) / 2, 0.25, (z0 + z1) / 2, x1 - x0, 0.5, z1 - z0, 0, col('#b3aea6'));
-    kit.box('metal', (x0 + x1) / 2, h + 0.05, (z0 + z1) / 2, x1 - x0 + 0.6, 0.12, z1 - z0 + 0.6, 0, col('#9ea3a7'));
-    for (const x of [x0, (x0 + x1) / 2, x1]) for (const z of [z0, z1]) kit.box('metal', x, h / 2 + 0.25, z, 0.12, h - 0.5, 0.12, 0, steel);
+    kit.box('metal', (x0 + x1) / 2, h + 0.03, (z0 + z1) / 2, x1 - x0 + 0.6, 0.06, z1 - z0 + 0.6, 0, col('#b9bdc0'));
+    for (const z of [z0 - 0.3, z1 + 0.3]) kit.box('metal', (x0 + x1) / 2, h - 0.05, z, x1 - x0 + 0.6, 0.22, 0.05, 0, frame);
+    for (const x of [x0 - 0.3, x1 + 0.3]) kit.box('metal', x, h - 0.05, (z0 + z1) / 2, 0.05, 0.22, z1 - z0 + 0.6, 0, frame);
+    for (let x = x0; x <= x1 + 0.01; x += (x1 - x0) / 4) for (const z of [z0, z1]) kit.box('metal', x, h / 2 + 0.25, z, 0.08, h - 0.5, 0.08, 0, frame);
+    for (const z of [(z0 + z1) / 2]) kit.box('metal', x0, h / 2 + 0.25, z, 0.08, h - 0.5, 0.08, 0, frame);
+    for (const y of [0.55, 1.6, h - 0.12]) {
+      for (const z of [z0, z1]) kit.box('metal', (x0 + x1) / 2, y, z, x1 - x0, 0.05, 0.05, 0, frame);
+      kit.box('metal', x0, y, (z0 + z1) / 2, 0.05, 0.05, z1 - z0, 0, frame);
+    }
     const mesh = kit.instSet('chainLink', () => {
       const g = new THREE.PlaneGeometry(1, 1);
       const tex = chainLinkTexture();
@@ -341,7 +538,7 @@ function chainLinkTexture(): THREE.CanvasTexture {
   c.width = c.height = S;
   const g = c.getContext('2d')!;
   g.clearRect(0, 0, S, S);
-  g.strokeStyle = 'rgba(200,205,210,1)'; g.lineWidth = 2;
+  g.strokeStyle = 'rgba(214,218,222,1)'; g.lineWidth = 1.2;
   for (let k = -S; k < S * 2; k += 8) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + S, S); g.stroke(); g.beginPath(); g.moveTo(k + S, 0); g.lineTo(k, S); g.stroke(); }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;

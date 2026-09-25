@@ -7,7 +7,7 @@ import { buildGJBC } from './gjbc';
 import { Chunked, col, WorldKit } from './kit';
 import { buildLandscape } from './landscape';
 import {
-  AREAS, BUILDINGS, CAMPUS_BOUNDS, ENTRY_DIVIDER, GLOBE_POS, MRD_DRUM, NO_TREE_ZONES, ORR, ORR_NORMAL, orrPoint, PATHS, QUAD, ROADS, WALLS,
+  AREAS, BUILDINGS, CAMPUS_BOUNDS, GLOBE_POS, MAIN_GATE_X, MRD_DRUM, NO_TREE_ZONES, ORR, ORR_NORMAL, orrPoint, PATHS, PLAZA_TERRACE, QUAD, ROADS, WALLS,
   type BuildingDef, type FacadeStyle, type V2,
 } from './layout';
 import { asphaltMaterial, barcodePaverTexture, facadeMaterial, FACADE_STYLES, greyPaverTexture, pbrMaterial, radialTexture, setLampLights, worldUniforms, type WorldTextures } from './materials';
@@ -23,11 +23,12 @@ interface OsmData {
   roads: { kind: string; name: string; width: number; pts: V2[]; layer: number; bridge: boolean }[];
 }
 
-/** The playable campus ground (inside the compound walls). The main gate line is the edge (176,−120.6)→(176,−144.6). */
+const GX = MAIN_GATE_X;
+/** The playable campus ground (inside the compound walls). The main gate line is the edge (GX,−120.6)→(GX,−144.6). */
 export const CAMPUS_GROUND: V2[] = [
-  [176, -144.6], [172, -147.5], [150, -158.8], [107.2, -180.2], [70, -199], [42, -214], [26, -221], [-4, -220], [-46, -215], [-72, -205],
+  [GX, -144.6], [GX - 1, -151.61], [150, -158.8], [107.2, -180.2], [70, -199], [42, -214], [26, -221], [-4, -220], [-46, -215], [-72, -205],
   // east side: around the HPC lab / food point, then along the 2-wheeler parking's back wall (layout.ts PARKING.backX) to the gate building
-  [-72, 142], [80, 142], [80, 86], [127.8, 62], [154, 12], [154, -30.3], [137.72, -30.3], [137.72, -110.8], [156.2, -110.8], [156.2, -120.5], [176, -120.6],
+  [-72, 142], [80, 142], [80, 86], [127.8, 62], [154, 12], [154, -30.3], [137.72, -30.3], [137.72, -110.8], [156.2, -110.8], [156.2, -120.5], [GX, -120.6],
 ];
 
 export interface LampInfo { pos: THREE.Vector3; }
@@ -86,7 +87,7 @@ export class CampusBuilder {
   private gates: CampusBuild['gates'] = new Map();
   private kit!: WorldKit;
   private signs!: SignUVs;
-  /** Points along the entry-road lane divider just inside the main gate (scooters are angle-parked beside it). */
+  /** Points along an entry-road lane divider (angle-parked scooters). The 2026 entry road has no divider: stays empty. */
   medianPts: V2[] = [];
 
   constructor(private tex: WorldTextures, private trees: TreeSystem, private quality: { treeDensity: number; viewDistance: number }) {}
@@ -200,12 +201,11 @@ export class CampusBuilder {
     }
     // gate aprons (inside flare + outside link to the ORR service road)
     const aprons: V2[][] = [
-      [[176, -141.4], [176, -122.4], [168, -123.6], [160, -124.8], [158, -125.4], [158, -137.2], [166, -139.6]],
-      [[176, -141.4], [176, -122.4], [184, -122.2], [196, -126.2], [206, -131.2], [192, -138.8], [183, -142.8]],
+      [[GX, -141.4], [GX, -122.4], [GX - 8, -123.6], [GX - 16, -124.8], [GX - 18, -125.4], [GX - 18, -137.2], [GX - 10, -139.6]],
+      [[GX, -141.4], [GX, -122.4], [184, -122.2], [196, -126.2], [206, -131.2], [192, -138.8], [183, -142.8], [172, -146.9], [GX, -146]],
     ];
     for (const ap of aprons) { asphalt.get('road', ap[0][0], ap[0][1]).flatPoly(ap, 0.061, undefined, 6); strips.push(ap); this.roadPolys.push(ap); }
     // kerbs: alternating black & white 0.5 m blocks (textured strip), broken where another road crosses
-    const kerb = this.kit;
     const inOther = (x: number, z: number, self: number) => strips.some((s, i) => i !== self && pointInPoly(x, z, s));
     ROADS.forEach((r, ri) => {
       if (!r.kerb) return;
@@ -220,20 +220,6 @@ export class CampusBuilder {
         flush();
       }
     });
-    // entry-road lane divider (raised, kerbed) just inside the gate
-    {
-      const road = ROADS.find((r) => r.id === 'entry')!;
-      const samples = samplePolyline(road.pts, 1, 0, 0.5).filter((s) => s.p[0] >= ENTRY_DIVIDER.x0 && s.p[0] <= ENTRY_DIVIDER.x1);
-      const line = samples.map((s) => s.p);
-      this.medianPts = line.map((p) => [p[0], p[1]] as V2);
-      if (line.length > 1) {
-        const { left, right } = polylineToStrip(line, ENTRY_DIVIDER.width);
-        const poly: V2[] = [...left, ...right.slice().reverse()];
-        kerb.buf('stone', line[0][0], line[0][1]).flatPoly(poly, 0.2, col('#8f8a82'), 2);
-        this.kerbStrip(left, 0.22);
-        this.kerbStrip(right, 0.22);
-      }
-    }
     // OSM neighbourhood roads (context), excluding those inside campus and the ORR (authored separately)
     for (const r of (osm as OsmData).roads) {
       if (r.kind === 'trunk' || r.kind === 'trunk_link' || r.bridge) continue;
@@ -406,7 +392,7 @@ export class CampusBuilder {
       if (h.pts.some(([x, z]) => orrDist(x, z) < Math.abs(ORR.serviceOffset) + ORR.serviceWidth / 2 + 2)) continue;
       if (h.pts.some(([x, z]) => pointInPoly(x, z, CAMPUS_GROUND))) continue;
       // keep the gate forecourt clear
-      if (c[0] > 172 && c[0] < 222 && c[1] > -150 && c[1] < -118) continue;
+      if (c[0] > GX - 2 && c[0] < 222 && c[1] > -152 && c[1] < -118) continue;
       const floorH = 3.1;
       const levels = h.levels;
       // collision for every house (quality-independent sim); visuals only within the view distance
@@ -571,7 +557,8 @@ export class CampusBuilder {
     for (const p of PATHS) {
       if (p.id === 'oat_footway') continue;
       const step = p.id === 'lawn_diagonal' ? 14 : 20;
-      for (const s of samplePolyline(p.pts, step, p.width / 2 + 0.6, step / 2)) place(s.p[0], s.p[1], s.dir[1], -s.dir[0]);
+      const side = p.id === 'east_promenade' ? -1 : 1;
+      for (const s of samplePolyline(p.pts, step, side * (p.width / 2 + 0.6), step / 2)) place(s.p[0], s.p[1], side * s.dir[1], -side * s.dir[0]);
     }
     for (let t = -80; t < 220; t += 30) {
       const p = orrPoint(t, ORR.serviceOffset - ORR.serviceWidth / 2 - 1.2);
@@ -592,6 +579,15 @@ export class CampusBuilder {
     const keep = sp === 'palm' || sp === 'cloud' || sp === 'frangipani' || sp === 'sapling' || sp === 'maroon' || sp === 'ficus';
     if (!keep && hash2(x * 3.1, z * 2.7) > this.quality.treeDensity) return; // visual thinning only
     this.trees.add(sp, x, z, scale, hash2(x, z) * Math.PI * 2, this.treeBaseY(x, z));
+  }
+
+  /** Square soil pit with a thin concrete edge under a lawn tree (drawn just above the turf). */
+  private treePit(x: number, z: number, s: number): void {
+    const h = s / 2, b = this.kit.buf('stone', x, z);
+    b.flatPoly([[x - h, z - h], [x + h, z - h], [x + h, z + h], [x - h, z + h]], 0.062, col('#5a4632'), 1.5);
+    for (const [a, c] of [[[x - h, z - h], [x + h, z - h]], [[x + h, z - h], [x + h, z + h]], [[x + h, z + h], [x - h, z + h]], [[x - h, z + h], [x - h, z - h]]] as [V2, V2][]) {
+      this.kit.segBox('stone', a, c, 0, 0.1, 0.1, col('#a9a7a1'), 0, 0.05);
+    }
   }
 
   /** Trees planted in raised planters / on terraces stand on them: top of the solid (ground-based, ≤ 4 m) prism under the trunk. */
@@ -663,15 +659,27 @@ export class CampusBuilder {
       for (const [x, z] of scatterInPolygon(poly, n, minD, seed, (x, z) => !this.clearForTree(x, z, 1.2) || !pointInPoly(x, z, CAMPUS_GROUND))) this.addTree(pick(), x, z, s0 + r() * (s1 - s0));
     };
     // yellow copperpods along the ring-road wall behind the PES Lawn
-    for (const s of samplePolyline([[104, -176.5], [150, -154], [168, -147.5]], 9, 0, 4)) tryTree(r() < 0.75 ? 'copperpod' : 'rain', s.p[0] + (r() - 0.5), s.p[1] + (r() - 0.5), 0.85 + r() * 0.3);
+    for (const s of samplePolyline([[104, -176.5], [150, -154], [GX - 4, -149.6]], 9, 0, 4)) tryTree(r() < 0.75 ? 'copperpod' : 'rain', s.p[0] + (r() - 0.5), s.p[1] + (r() - 0.5), 0.85 + r() * 0.3);
     // big dense ficus at the gate (south side, over the shelter) and a rain tree by the north pillar
     this.addTree('ficus', 152, -113.5, 0.8);
-    this.addTree('rain', 163, -151, 0.9);
+    this.addTree('rain', GX - 5.5, -150.3, 0.9);
     // frangipani garden + east plaza planters
     cluster(87, -153, 7, 9, () => 'frangipani', 0.8, 1.15, 3.2, 81);
-    for (const [x, z] of [[99, -147.8], [107.5, -147.8], [108.2, -141.5]] as V2[]) this.addTree('frangipani', x, z, 1.0, false);
-    // PES Lawn: mature Tabebuia / Pongamia / rain trees
-    cluster(128, -160, 20, 12, () => (r() < 0.4 ? 'rain' : r() < 0.6 ? 'gulmohar' : 'copperpod'), 0.7, 1.0, 8, 91);
+    for (const [x, z] of [[99, -147.8], [110.8, -147.8], [108.2, -141.5]] as V2[]) this.addTree('frangipani', x, z, 1.0, false);
+    // PES Lawn: a garden grove under an almost closed canopy (Google satellite), not an open lawn: mature rain trees,
+    // copperpods, gulmohars and ashokas with a few frangipani and palms, kept off the plaza terrace, its ramp and path
+    // and the young trees along the promenade's north bed
+    const pes = AREAS.find((a) => a.id === 'pes_lawn');
+    const prom = PATHS.find((p) => p.id === 'pes_lawn_promenade');
+    if (pes && prom) {
+      const T = PLAZA_TERRACE;
+      const avoid = (x: number, z: number) => (x > T.x0 - 2 && x < T.x1 + 2 && z < T.zS + 2 && z > T.ramp.zEnd - 1.5)
+        || (Math.abs(x - 105.5) < 3.5 && z < T.zN)
+        || prom.pts.some((_, i) => i > 0 && distToSegment(x, z, prom.pts[i - 1][0], prom.pts[i - 1][1], prom.pts[i][0], prom.pts[i][1]) < 5.2)
+        || !this.clearForTree(x, z, 1.4) || !pointInPoly(x, z, CAMPUS_GROUND);
+      const pick = (): TreeSpecies => { const v = r(); return v < 0.28 ? 'rain' : v < 0.4 ? 'copperpod' : v < 0.55 ? 'gulmohar' : v < 0.8 ? 'ashoka' : v < 0.92 ? 'frangipani' : 'palm'; };
+      for (const [x, z] of scatterInPolygon(pes.poly, 60, 4.8, 91, avoid)) this.addTree(pick(), x, z, 0.72 + r() * 0.33);
+    }
     // tiered "cloud" trees along the entry walkway (south side) and at the PES Lawn promenade
     // (try a few lateral offsets so planter walls / crossing paths don't knock whole stretches out)
     const tryAround = (sp: TreeSpecies, x: number, z: number, sc: number, clear: number, dz: number[]) => {
@@ -688,7 +696,9 @@ export class CampusBuilder {
       for (let x = b.minX + 4; x <= b.maxX - 2; x += 9) for (let z = b.minZ + 3; z <= b.maxZ - 2; z += 11) {
         const jx = x + (hash2(x, z) - 0.5) * 3, jz = z + (hash2(z, x) - 0.5) * 4;
         if (!inside(jx, jz)) continue;
-        tryTree(hash2(jx * 2, jz) < 0.25 ? 'maroon' : 'sapling', jx, jz, 1.0 + hash2(jz, jx) * 0.5, 0.6);
+        if (!this.clearForTree(jx, jz, 0.6)) continue;
+        this.addTree(hash2(jx * 2, jz) < 0.25 ? 'maroon' : 'sapling', jx, jz, 1.0 + hash2(jz, jx) * 0.5);
+        this.treePit(jx, jz, 1.3);
       }
     }
     // mature trees along the B-Block east strip and around the Open Air Theatre

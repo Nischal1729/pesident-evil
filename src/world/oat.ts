@@ -204,10 +204,13 @@ export function buildOAT(kit: WorldKit, signs?: SignUVs): void {
   }
   // terrace planters (hedge boxes) along the MRD faces + trees
   hedgeBox(kit, 'hedge', [31.5, -144.4], [17, -151.2], OAT_TOP, OAT_TOP + 0.9, 1.4);
-  for (const [t, rr, s] of [[0.28, 21.5, 1.25], [0.72, 23.5, 1.35], [1.1, 22, 1.2], [1.42, 20.6, 1.3]] as number[][]) {
+  for (const [t, rr, s] of [[0.28, 21.5, 1.25], [0.72, 23.5, 1.35], [1.1, 22, 1.2], [1.42, 20.6, 1.3], [0.5, 26, 1.15], [0.95, 27, 1.25], [1.3, 24.5, 1.1]] as number[][]) {
     const p = arcPt(c, rr, t);
     kit.addTree('rain', p[0], p[1], s);
   }
+
+  // big trees in the verge between PES University Rd and the OAT's rubble walls (GJBC north arcade view, 0636)
+  for (const [x, z, s] of [[16.5, -119.6, 1.2], [25.5, -120.2, 1.3]] as number[][]) kit.addTree('rain', x, z, s);
 
   // ---------------------------------------------------------------- the big tree growing out of the tiers, in a raised planter box
   {

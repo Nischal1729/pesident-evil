@@ -3,7 +3,7 @@ import { GeoBuffer } from './buildings';
 import { normalizeWinding, rng } from './geom';
 import { col, type WorldKit } from './kit';
 import { hedgeBox } from './landscape';
-import { BUILDINGS, FOUNTAIN_POS, GATES, MAIN_GATE_PORTAL, pesRdZ, PLAYER_SPAWN, type V2 } from './layout';
+import { BUILDINGS, FOUNTAIN_POS, GATES, MAIN_GATE_PORTAL, MAIN_GATE_X, pesRdZ, PLAYER_SPAWN, type V2 } from './layout';
 import { netTexture } from './materials';
 import type { SignUVs } from './signs';
 import { buildBBlockBits } from './bblock';
@@ -39,12 +39,14 @@ export function buildGate(kit: WorldKit, signs: SignUVs, gates: Map<string, Gate
   kit.signQuad(signs.gatePillarText, sp.cx + sp.size / 2 + 0.02, 4.4, sp.cz - sp.size / 2 + 0.7, 6.6, 0.82, 1, 0, true, -Math.PI / 2);
   kit.signQuad(signs.gatePillarText, sp.cx - sp.size / 2 - 0.02, 4.4, sp.cz - sp.size / 2 + 0.7, 6.6, 0.82, -1, 0, true, -Math.PI / 2);
   kit.signQuad(signs.gateBanner, np.cx + np.size / 2 + 0.03, 5.4, np.cz, 3.2, 4.0, 1, 0, false);
-  // pedestrian door (dark slatted gate) + red sign plate in the south pillar, both faces
+  // pedestrian door (dark slatted gate) + red sign plate in the south pillar, both faces, in the pillar's exposed north
+  // half (its south half is merged into the mural tower), in line with the south walkway
+  const dz = sp.cz - sp.size / 4;
   for (const s of [1, -1]) {
     const fx = sp.cx + s * (sp.size / 2 + 0.03);
-    kit.box('metal', fx, 1.15, sp.cz - 0.2, 0.06, 2.3, 1.3, 0, STEEL_GATE);
-    for (let k = 0; k < 6; k++) kit.box('metal', fx + s * 0.03, 1.15, sp.cz - 0.75 + k * 0.22, 0.04, 2.2, 0.08, 0, col('#26292c'));
-    kit.box('stone', fx, 2.85, sp.cz - 0.2, 0.05, 0.35, 0.6, 0, col('#c1261c'));
+    kit.box('metal', fx, 1.15, dz, 0.06, 2.3, 1.3, 0, STEEL_GATE);
+    for (let k = 0; k < 6; k++) kit.box('metal', fx + s * 0.03, 1.15, dz - 0.55 + k * 0.22, 0.04, 2.2, 0.08, 0, col('#26292c'));
+    kit.box('stone', fx, 2.85, dz, 0.05, 0.35, 0.6, 0, col('#c1261c'));
   }
   // median island between the IN and OUT leaves: kerbed, guard booth, boom barrier inside the IN lane
   const M = G.median;
@@ -112,13 +114,16 @@ export function buildGate(kit: WorldKit, signs: SignUVs, gates: Map<string, Gate
 export function buildMurals(kit: WorldKit, signs: SignUVs): void {
   const adm = BUILDINGS.find((b) => b.id === 'admission');
   if (!adm) return;
-  // outer mural: along the outside north face (admission block x 178.3–184, mural wing x 184–199.8)
-  const x0 = 178.3, xm = 184, x1 = 199.8;
+  // outer mural: along the outside north face, from the gate's south pillar to the end of the mural wing (admission
+  // block to x 184, mural wing x 184–199.8). One continuous painting: seen from the forecourt (looking south) the texture
+  // runs from u0 at the east end to u1 at the pillar, so the "Community Development" lettering sits by the gate (GJB tour
+  // 0:02–0:14).
+  const x0 = MAIN_GATE_PORTAL.southPillar.cx + MAIN_GATE_PORTAL.southPillar.size / 2 + 0.3, xm = 184, x1 = 199.8;
   const zAt = (x: number) => (x <= xm ? -120.55 - ((x - 156.2) / 27.8) * 0.05 : -120.6 - ((x - 184) / 16) * 0.6);
   const [u0, v0, u1, v1] = signs.muralOuter;
-  const f = (xm - x0) / (x1 - x0);
-  kit.signQuad([u0, v0, u0 + (u1 - u0) * f, v1], (x0 + xm) / 2, 6.0, zAt((x0 + xm) / 2) - 0.04, xm - x0, 10.6, 0, -1, false);
-  kit.signQuad([u0 + (u1 - u0) * f, v0, u1, v1], (xm + x1) / 2, 6.0, zAt((xm + x1) / 2) - 0.04, x1 - xm, 10.6, -0.0375, -1, false);
+  const uM = u1 - (u1 - u0) * ((xm - x0) / (x1 - x0));
+  kit.signQuad([uM, v0, u1, v1], (x0 + xm) / 2, 6.0, zAt((x0 + xm) / 2) - 0.04, xm - x0, 10.6, 0, -1, false);
+  kit.signQuad([u0, v0, uM, v1], (xm + x1) / 2, 6.0, zAt((xm + x1) / 2) - 0.04, x1 - xm, 10.6, -0.0375, -1, false);
   // protruding wooden cubes (relief)
   const r = rng(1020);
   for (let i = 0; i < 52; i++) {
@@ -128,8 +133,17 @@ export function buildMurals(kit: WorldKit, signs: SignUVs): void {
     const tan = col('#c89a62').multiplyScalar(0.85 + r() * 0.25);
     kit.box('wood', x, y, zAt(x) - s / 2 - 0.02, s, s, s, x > xm ? 0.0375 : 0, tan, 0.5);
   }
-  // inner mural: blue pixel-tile wall with compass rose + graduates on the campus-facing west face
+  // inner mural: blue pixel-tile wall with compass rose + graduates on the campus-facing west face, wrapping round onto
+  // the tower's north face between its west corner and the gate (GJB tour 0:22–0:30, 2026 tour 0022): the lower part of
+  // the tile field (below the motto) with the graduates along its foot
   kit.signQuad(signs.muralInner, 156.2 - 0.03, 7.0, (-120.5 + -106.6) / 2, 13.4, 13.4, -1, 0, false);
+  {
+    const [a0, b0, a1, b1] = signs.muralInner;
+    const xe = MAIN_GATE_PORTAL.southPillar.cx - MAIN_GATE_PORTAL.southPillar.size / 2 - 0.05, w = xe - 156.3;
+    const t = 0.32; // cut below the motto / compass rose (fraction of the tile height from the top)
+    const h = 13.4 * (1 - t);
+    kit.signQuad([a0, b0, a0 + (a1 - a0) * Math.min(1, w / 13.4), b1 - (b1 - b0) * t], (156.3 + xe) / 2, 0.3 + h / 2, -120.5 - 0.03, w, h, 0, -1, false);
+  }
 }
 
 // =================================================================================================== PES sign bridge, ramp, landing
@@ -146,7 +160,7 @@ export { buildBBlockBits, buildMRD, buildOAT };
 // =================================================================================================== fountains + misc
 export function buildFountains(kit: WorldKit): void {
   const conc = col('#c9c3b8');
-  for (const [fx, fz, rr] of [[FOUNTAIN_POS[0], FOUNTAIN_POS[1], 3.2], [4, 36, 2.2]] as [number, number, number][]) {
+  for (const [fx, fz, rr] of [[FOUNTAIN_POS[0], FOUNTAIN_POS[1], 1.9]] as [number, number, number][]) {
     kit.buf('stone', fx, fz).cylinder(fx, 0, fz, rr, 0.55, 28, conc);
     kit.buf('stone', fx, fz).cylinder(fx, 0, fz, 0.35, 1.4, 10, conc);
     const water = new THREE.Mesh(new THREE.CircleGeometry(rr - 0.25, 28).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x1f3a44, roughness: 0.05, metalness: 0.9 }));
@@ -163,10 +177,14 @@ export function buildMisc(kit: WorldKit, signs: SignUVs): void {
   kit.box('plaster', 118, 37.6, 48.6, 7.2, 2.6, 0.4, 0.1, col('#fbfbf8'));
   kit.signQuad(signs.fBlockRoof, 118.02, 37.6, 48.38, 6.8, 2.5, -0.1, -1, true);
   kit.box('metal', 118, 35.6, 48.8, 6, 1.4, 0.2, 0.1, col('#555'));
-  // security cabin: blue door facing the road
-  kit.box('stone', 168.25, 1.05, -141.95, 0.9, 2.1, 0.08, 0, col('#2d59a8'));
-  // low hedge beside the security cabin, inside the north pillar
-  hedgeBox(kit, 'hedge', [171.2, -145.9], [173.6, -145.9], 0, 1.0, 0.8);
+  // security cabin (layout 'cabin_gate', just inside the north pillar): blue door facing the gate apron
+  const cab = BUILDINGS.find((b) => b.id === 'cabin_gate');
+  if (cab) {
+    const xs = cab.poly.map((p) => p[0]), zs = cab.poly.map((p) => p[1]);
+    kit.box('stone', (Math.min(...xs) + Math.max(...xs)) / 2, 1.05, Math.max(...zs) + 0.05, 0.9, 2.1, 0.08, 0, col('#2d59a8'));
+  }
+  // low hedge between the cabin and the north pillar
+  hedgeBox(kit, 'hedge', [MAIN_GATE_X - 4.8, -145.9], [MAIN_GATE_X - 2.4, -145.9], 0, 1.0, 0.8);
 }
 
 /** All landmark builders in dependency order. */

@@ -180,6 +180,23 @@ export const PARKING_FOOTPRINT: V2[] = [[PARKING.x0, PARKING.z0], [PARKING.x1, P
  * over the drive-through (→ covered plaza → Quad) and a glazed L1 bridge crosses the MRD loop road into MRD.
  */
 export const FRONT_RAMP = { xFoot: 110, xTop: 86, z0: -136.3, z1: -131.9, landing: { x0: 78.9, x1: 86, zN: -137.8 } };
+/**
+ * Raised terrace on the north side of the east plaza (2026 tour 0216 / sheet 2:08: a wide granite stair climbs north
+ * from the plaza between white cheek walls to a white pavilion; Google satellite: the paved strip x ≈ 103–113 running
+ * north from the plaza into the PES Lawn path). Walkable: stair up from the plaza, ramp down north onto the lawn path.
+ */
+export const PLAZA_TERRACE = {
+  x0: 96, x1: 114, zS: -153.4, zN: -162, y: 2.4,
+  stair: { x0: 102.5, x1: 108.5, zFoot: -148.2 },
+  ramp: { x0: 103, x1: 108, zEnd: -173 },
+  pavilion: { x0: 108.5, x1: 114, zS: -157, h: 3.4 },
+};
+/**
+ * Black-granite reflecting pool in the garden east of the MRD loop road, facing MRD's grand steps across the road with a
+ * planted bed between it and the kerb (GJB tour 1:44–1:52; 2026 tour 4:00; OSM amenity=fountain x 80–91, z −148…−130).
+ * Centre, unit long axis (parallel to the road), length, width.
+ */
+export const MRD_POOL = { c: [91.0, -148.0] as V2, u: [0.469, -0.884] as V2, len: 11, wid: 4 };
 /** Areas where the campus tree scatter must not put trees (the parking floor is walkable, so collision alone won't stop it). */
 export const NO_TREE_ZONES: V2[][] = [
   // the parking (and the paved strip along its corten face) + its north entry strip
@@ -319,8 +336,9 @@ export const BUILDINGS: BuildingDef[] = [
     roof: { tanks: 3 },
   },
   {
+    // just inside the main gate, west of the north pillar (MAIN_GATE_X − 9.5 … − 6), blue door facing the gate apron
     id: 'cabin_gate', name: 'Security Cabin', style: 'admin', floors: 1, floorH: 2.8,
-    poly: [[166.5, -145.4], [170, -145.4], [170, -142], [166.5, -142]],
+    poly: [[154.5, -145.4], [158, -145.4], [158, -142], [154.5, -142]],
     sign: { text: 'SECURITY', edge: 2, offset: 0.2, color: '#2d59a8' },
   },
   {
@@ -339,8 +357,16 @@ export const MRD_DRUM = { center: [59.5, -153.5] as V2, radius: 4.2, height: 22.
 // Gates (breakable). Zombies must break them; players can repair.
 // The main gate has two sliding leaves (IN = south lane, OUT = north lane) with a solid median island.
 // ---------------------------------------------------------------------------------------------
+/**
+ * x of the main-gate line. Google satellite (z20/z21 tiles, reference/frames/campus/gsat_gate*.jpg), the user's Google
+ * Maps screenshot and the GJB tour (0:00–0:30: the pedestrian door in the south pillar opens onto the walkway along the
+ * mural tower's north face) put the portal at the WEST end of the "Admission Enquiry" block, its south pillar merged
+ * with the NE corner of the 4-storey mural tower (x ≈ 155–168). It was at x = 176 before (the OSM carriageway ends).
+ */
+export const MAIN_GATE_X = 164;
+const GX = MAIN_GATE_X;
 export const GATES: GateDef[] = [
-  { id: 'main', a: [176, -141.25], b: [176, -122.5], hp: 1500, activeFromWave: 1 },
+  { id: 'main', a: [GX, -141.25], b: [GX, -122.5], hp: 1500, activeFromWave: 1 },
   { id: 'west', a: [-72, -110.5], b: [-72, -96.5], hp: 900, activeFromWave: 4 },
 ];
 
@@ -349,23 +375,24 @@ export const GATES: GateDef[] = [
  * Legacy fields (x, zN, zS, pillarW, pillarD, height, beamH) are kept for older callers.
  */
 export const MAIN_GATE_PORTAL = {
-  x: 176, zN: -143, zS: -120.5, pillarW: 3.5, pillarD: 4, height: 10.6, beamH: 2.6,
+  x: GX, zN: -143, zS: -120.5, pillarW: 3.5, pillarD: 4, height: 10.6, beamH: 2.6,
   beamBottom: 8.0, beamThick: 4,
-  northPillar: { cx: 176, cz: -143, size: 3.5 },
-  southPillar: { cx: 176, cz: -120.5, size: 4 },
+  northPillar: { cx: GX, cz: -143, size: 3.5 },
+  southPillar: { cx: GX, cz: -120.5, size: 4 },
   lanes: [
     { id: 'in', z0: -130.75, z1: -122.5 },
     { id: 'out', z0: -141.25, z1: -132.25 },
   ],
-  median: { x0: 171, x1: 181, z0: -132.25, z1: -130.75 },
+  median: { x0: GX - 5, x1: GX + 5, z0: -132.25, z1: -130.75 },
 };
 
 // ---------------------------------------------------------------------------------------------
 // Compound walls (the play boundary). Gaps = gates.
 // ---------------------------------------------------------------------------------------------
 export const WALLS: WallDef[] = [
-  // along the Outer Ring Road: white plaster next to the gate, then rough-dressed granite blocks
-  { kind: 'plaster', height: 2.6, pts: [[176, -144.6], [172, -147.5], [150, -158.8]] },
+  // along the Outer Ring Road: white plaster next to the gate (a short return from the north pillar to the ring-road
+  // line, which runs along the service road's inner edge), then rough-dressed granite blocks
+  { kind: 'plaster', height: 2.6, pts: [[GX, -144.6], [GX - 1, -151.61], [150, -158.8]] },
   { kind: 'stone', height: 2.5, pts: [[150, -158.8], [107.2, -180.2], [70, -199], [42, -214], [26, -221], [-4, -220], [-46, -215], [-72, -205]] },
   // west boundary (construction hoarding beyond), with the west gate gap on PES University Rd
   { kind: 'stone', height: 2.5, pts: [[-72, -205], [-72, -110.5]] },
@@ -387,12 +414,10 @@ export const LOW_WALLS: { a: V2; b: V2; height: number }[] = [
 // ---------------------------------------------------------------------------------------------
 // Roads (inside campus) and paved/lawn areas
 // ---------------------------------------------------------------------------------------------
-/** Entry-road lane divider (raised kerb median, scooters angle-parked beside it) just inside the gate. */
-export const ENTRY_DIVIDER = { x0: 150, x1: 170.5, width: 1.2 };
-
 export const ROADS: RoadDef[] = [
-  // Entry road from the main gate: two one-way carriageways, ~12 m (black & white kerbs)
-  { id: 'entry', kind: 'asphalt', width: 12, kerb: true, median: ENTRY_DIVIDER.width, pts: [[179, -131.9], [168, -131.6], [152, -131], [130, -128], [110, -125.4], [96, -124.2], [86, -123.6]] },
+  // Entry road from the main gate, ~12 m, one undivided carriageway with black & white kerbs (2026 tour 0022 / 0530 /
+  // 1952 and the GJB tour show no lane divider or scooter rows inside the gate; buses park along the south kerb)
+  { id: 'entry', kind: 'asphalt', width: 12, kerb: true, pts: [[GX + 3, -131.9], [GX - 8, -131.6], [152, -131], [130, -128], [110, -125.4], [96, -124.2], [86, -123.6]] },
   // PES University Rd: through the GJBC drive-through, along the covered plaza, between GJBC and B-Block, to the west gate
   { id: 'pes_univ_rd', kind: 'asphalt', width: 8, kerb: true, pts: PES_RD },
   // Loop road: MRD east entrance → round MRD and B-Block → back to PES University Rd
@@ -410,14 +435,17 @@ export const ROADS: RoadDef[] = [
 /** Pedestrian paths (strips are also exported as paved AREAS). */
 export const PATHS: PathDef[] = [
   // PES Lawn promenade (striped "barcode" pavers, fountain-grass beds each side) → east plaza → ramp
-  { id: 'pes_lawn_promenade', surface: 'plaza', width: 6, pts: [[166, -143.2], [150, -142], [130, -139], [110, -136.8], [100, -136.2]] },
-  // south-side walkway along the entry road to the gate (pedestrian door in the south pillar)
-  { id: 'entry_south_walkway', surface: 'plaza', width: 3.5, pts: [[174, -122.2], [156, -122.2], [150, -121.3], [140, -119.3], [120, -117.1], [104, -115.6]] },
+  { id: 'pes_lawn_promenade', surface: 'plaza', width: 6, pts: [[GX - 11, -142.5], [150, -142], [130, -139], [110, -136.8], [100, -136.2]] },
+  // south-side walkway along the entry road to the gate: along the mural tower's north face to the pedestrian door in
+  // the south pillar
+  { id: 'entry_south_walkway', surface: 'plaza', width: 3.5, pts: [[GX - 2, -122.2], [156, -122.2], [150, -121.3], [140, -119.3], [120, -117.1], [104, -115.6]] },
   // GJBC east promenade (grey two-tone pavers), forecourt → Law terrace stair → F-Block
   { id: 'east_promenade', surface: 'greypaver', width: 9, pts: [[90.5, -113], [92, -95], [95, -60], [98.5, -10], [101, 20], [102.5, 44]] },
   // diagonal path across the east lawn
   // diagonal path across the east lawn to the parking's middle door
   { id: 'lawn_diagonal', surface: 'greypaver', width: 3, pts: [[100.6, -50], [118.4, -64]] },
+  // PES Lawn path: from the plaza terrace's north ramp through the garden towards the ring-road wall (satellite)
+  { id: 'pes_lawn_north', surface: 'paver', width: 4, pts: [[105.5, -172.6], [105.5, -179]] },
   // footway round the Open Air Theatre
   { id: 'oat_footway', surface: 'paver', width: 2.5, pts: [[38, -117.5], [37, -123], [34.5, -131], [34, -138], [36, -143]] },
 ];
@@ -426,12 +454,12 @@ const pathPoly = (p: PathDef): V2[] => { const s = polylineToStrip(p.pts, p.widt
 
 export const AREAS: AreaDef[] = [
   // PES Lawn (the big lawn between MRD and the ring road)
-  { id: 'pes_lawn', kind: 'lawn', poly: [[91, -150.5], [114, -150.5], [114, -142.5], [130, -145], [150, -148], [165, -150.2], [150, -158.4], [107.2, -179.6], [96, -173.5]] },
+  { id: 'pes_lawn', kind: 'lawn', poly: [[91, -150.5], [PLAZA_TERRACE.x0, -150.5], [PLAZA_TERRACE.x0, PLAZA_TERRACE.zS], [PLAZA_TERRACE.x1, PLAZA_TERRACE.zS], [114, -142.5], [130, -145], [150, -148], [GX - 3, -149.2], [GX - 3.5, -151.9], [150, -158.4], [107.2, -179.6], [96, -173.5]] },
   // frangipani garden between the MRD loop road and the east plaza (the gold globe stands at its east end)
   { id: 'frangipani_garden', kind: 'lawn', poly: [[80.6, -141], [88, -141], [88, -150.5], [91, -150.5], [96, -163], [90.5, -166], [82, -150.8]] },
   // east lawn (Student Lounge + garden) between GJBC's east promenade and the 2-wheeler parking: young trees, white low
   // walls; the reflecting pool at its north end, the parking's corten face on its east side (reference/GJB_NOTES.md §4)
-  { id: 'east_lawn', kind: 'lawn', poly: [[100.9, -104.2], [118.4, -104.2], [118.4, -30.5], [121.2, -30.5], [121.2, -4], [104.2, -3]] },
+  { id: 'east_lawn', kind: 'lawn', poly: [[104, -104.2], [118.4, -104.2], [118.4, -30.5], [121.2, -30.5], [121.2, -4], [103.5, -3], [103.1, -10], [99.6, -60], [97.0, -90], [96.7, -94], [104, -94]] },
   // 2-wheeler parking: concrete ground floor under the deck; paved pool court + strip along the corten face; north entry strip
   { id: 'parking_floor', kind: 'concrete', poly: PARKING_FOOTPRINT },
   { id: 'parking_apron', kind: 'greypaver', poly: [[101, -110.6], [PARKING.x0, -110.6], [PARKING.x0, -30.5], [118.4, -30.5], [118.4, -104.2], [100.9, -104.2]] },
@@ -448,7 +476,7 @@ export const AREAS: AreaDef[] = [
   // GJBC east forecourt (bus drop-off)
   { id: 'gjbc_east_forecourt', kind: 'greypaver', poly: [[86.2, -117.2], [104, -115.3], [104, -94], [86.8, -94]] },
   // east plaza (striped pavers) — the ramp rises west from here
-  { id: 'east_plaza', kind: 'plaza', poly: [[84, -150.5], [114, -150.5], [114, -130.2], [104, -129.8], [88, -129.8], [84, -137]] },
+  { id: 'east_plaza', kind: 'plaza', poly: [[84, -150.5], [PLAZA_TERRACE.x0, -150.5], [PLAZA_TERRACE.x0, PLAZA_TERRACE.zS], [PLAZA_TERRACE.x1, PLAZA_TERRACE.zS], [114, -130.2], [104, -129.8], [88, -129.8], [84, -137]] },
   // Pie R Cube plaza
   { id: 'pie_r_cube', kind: 'paver', poly: [[-10, 21], [18, 21], [18, 45], [3, 49], [-6, 49]] },
   // terraced garden below the Law terrace (granite planter tiers, palms)
@@ -456,7 +484,7 @@ export const AREAS: AreaDef[] = [
   // food point apron
   { id: 'food_apron', kind: 'concrete', poly: [[121.5, -30], [133.4, -30], [133.4, -3], [121.5, -3]] },
   // outside forecourt (grey interlocking pavers) between the gate and the ORR service road
-  { id: 'gate_forecourt', kind: 'concrete', poly: [[176, -146.6], [176, -120.6], [184, -120.8], [214, -122], [216, -122.4], [216, -128.4], [196, -139], [182, -146.6]] },
+  { id: 'gate_forecourt', kind: 'concrete', poly: [[GX, -150.6], [GX, -120.6], [184, -120.8], [214, -122], [216, -122.4], [216, -128.4], [196, -139], [182, -146.6], [172, -148.8]] },
   // pedestrian path strips
   ...PATHS.map((p): AreaDef => ({ id: p.id, kind: p.surface === 'greypaver' ? 'greypaver' : p.surface === 'plaza' ? 'plaza' : 'paver', poly: pathPoly(p) })),
 ];
@@ -469,7 +497,10 @@ export const PLAYER_SPAWN_YAW = -Math.PI / 2 - 0.05; // facing east toward the g
 export const NPC_SPAWNS: V2[] = [[122, -131], [124, -119.5], [116, -127]];
 /** The gold PES armillary globe (model placed by Props.ts; it brings its own plinth). */
 export const GLOBE_POS: V2 = [84.4, -140];
-export const FOUNTAIN_POS: V2 = [106, -156];
+/** Height of the white drum the globe's plinth stands on (landscape.ts globe bed). */
+export const GLOBE_Y = 0.9;
+/** The Pie R Cube fountain (OSM amenity=fountain x 12–15, z 25–28). The old PES Lawn fountain is gone: the lawn is a garden grove. */
+export const FOUNTAIN_POS: V2 = [13.5, 26.5];
 /**
  * Sandbag step stacks (placed by Props.ts) up onto gate and compound-wall tops, every rise ≤ CLIMB_MAX (1.3 m).
  * `at` lies on the gate / wall centreline, `in` is the inward unit normal, `gap` the clearance (m) from the centreline
@@ -477,8 +508,8 @@ export const FOUNTAIN_POS: V2 = [106, -156];
  * pitch on a 0.69 m bag: 2 layers = 1.26 m, 4 layers = 2.40 m under the 2.62 / 2.72 m wall copings).
  */
 export const STEP_STACKS: { id: string; at: V2; in: V2; gap: number; layers: number[] }[] = [
-  { id: 'main_out', at: [176, -136.5], in: [-1, 0], gap: 0.27, layers: [2] },
-  { id: 'main_in', at: [176, -126.2], in: [-1, 0], gap: 0.27, layers: [2] },
+  { id: 'main_out', at: [GX, -136.5], in: [-1, 0], gap: 0.27, layers: [2] },
+  { id: 'main_in', at: [GX, -126.2], in: [-1, 0], gap: 0.27, layers: [2] },
   { id: 'west', at: [-72, -107.7], in: [1, 0], gap: 0.27, layers: [2] },
   { id: 'orr_plaster', at: [159.55, -153.89], in: [-0.4569, 0.8896], gap: 0.23, layers: [4, 2] },
   { id: 'orr_stone', at: [126.74, -170.43], in: [-0.4472, 0.8944], gap: 0.23, layers: [4, 2] },
@@ -499,10 +530,10 @@ export const STATIONS: StationDef[] = [
   { id: 'ammo_court', kind: 'ammo', pos: [64, -81], cost: 250, label: 'Ammo crate' },
   { id: 'ammo_food', kind: 'ammo', pos: [127, -27.5], cost: 250, label: 'Ammo crate' },
   { id: 'ammo_bblock', kind: 'ammo', pos: [-30, -108.6], cost: 250, label: 'Ammo crate' },
-  { id: 'med_admission', kind: 'health', pos: [160, -122.3], cost: 400, label: 'First-aid kit' },
+  { id: 'med_admission', kind: 'health', pos: [GX - 6.5, -122.3], cost: 400, label: 'First-aid kit' },
   // moved from the Quad (45.5, −78) into the enterable G-floor cafeteria; belongs back in the Quad's east arcade on L1 once levels land
   { id: 'med_court', kind: 'health', pos: [74.8, 4], cost: 400, label: 'First-aid kit' },
-  { id: 'buy_shotgun', kind: 'weapon', item: 'shotgun', pos: [171.5, -140.2], cost: 1200, label: 'Security locker — Shotgun' },
+  { id: 'buy_shotgun', kind: 'weapon', item: 'shotgun', pos: [GX - 4.5, -140.2], cost: 1200, label: 'Security locker — Shotgun' },
   { id: 'buy_smg', kind: 'weapon', item: 'smg', pos: [133, -24.5], cost: 1500, label: 'Canteen stash — SMG' },
   { id: 'buy_rifle', kind: 'weapon', item: 'rifle', pos: [50, -124.2], cost: 2500, label: 'NCC armoury — Rifle' },
 ];
