@@ -7,6 +7,7 @@ import { distToSegment, pointInPoly, polylineToStrip, rng, samplePolyline } from
 import { AREAS, BUILDINGS, GATES, GLOBE_POS, GLOBE_Y, ORR, orrPoint, PLAYER_SPAWN, QUAD, ROADS, SPAWN_ZONES, STATIONS, STEP_STACKS, type GateDef, type StationDef, type V2 } from './layout';
 import { parkingSlots } from './gjb/parking';
 import { injectWorldLighting } from './materials';
+import { liftY } from './terrain';
 
 /**
  * Prop dressing for the campus and the Outer Ring Road.
@@ -943,20 +944,26 @@ class Dresser {
   /**
    * Stations: STATIONS[].pos is where the player stands to interact; it is kept free (the nav grid cell stays open)
    * and the prop is set ~1.4 m behind it, front facing the player. The anchor sits above the prop.
+   * A station with a floor height (StationDef.y: a storey, the MRD plinth, the parking deck) is fitted inside its own
+   * storey: walls and furniture count only within head height of that floor, and the prop must stand on it.
    */
   stations(): void {
     const staticB = new VBuilder();
     const FOOT: Record<string, [number, number, number]> = { ammo: [1.95, 0.56, 1.4], health: [1.05, 0.8, 1.45], weapon: [1.42, 0.56, 1.45], repair: [1.25, 0.65, 1.4] }; // w, depth, back
     for (const s of STATIONS) {
       let [x, z] = s.pos;
-      if (this.col.blocked(x, z, 0.4)) {
-        const q = this.nudge(x, z, 0.45);
+      const storey = s.y !== undefined;
+      // floor in the flat-authored frame (applyTerrain lifts props, collision included, afterwards)
+      const fy = storey ? s.y! - liftY(x, z) : 0;
+      const blocked = storey ? (px: number, pz: number, r: number) => this.col.blockedBand(px, pz, r, fy + 0.1, fy + 1.9) : (px: number, pz: number, r: number) => this.col.blocked(px, pz, r);
+      if (blocked(x, z, 0.4)) {
+        const q = this.nudge(x, z, 0.45, blocked);
         if (q) {
           console.warn(`[props] station ${s.id} at (${x}, ${z}) is inside geometry; using (${q[0].toFixed(1)}, ${q[1].toFixed(1)})`);
           [x, z] = q;
         }
       }
-      const yaw0 = this.faceAway(x, z);
+      const yaw0 = s.face ?? this.faceAway(x, z, blocked);
       const [fw, fd, back0] = FOOT[s.kind] ?? FOOT.ammo;
       let px = x, pz = z, yaw = yaw0;
       let found = false;
@@ -966,20 +973,21 @@ class Dresser {
         for (const back of [back0, back0 - 0.15, back0 - 0.3]) {
           for (const side of [0, 0.6, -0.6]) {
             const cx = x - fx * back + fz * side, cz = z - fz * back - fx * side;
-            if (this.rectFree(cx, cz, yw, fw, fd, 0.05, { noClear: true, noReserve: true })) { px = cx; pz = cz; yaw = yw; found = true; break search; }
+            const ok = storey ? this.storeyRectFree(cx, cz, yw, fw, fd, 0.05, fy) : this.rectFree(cx, cz, yw, fw, fd, 0.05, { noClear: true, noReserve: true });
+            if (ok) { px = cx; pz = cz; yaw = yw; found = true; break search; }
           }
         }
       }
       if (!found) console.warn(`[props] station ${s.id}: no room behind the standing spot; prop placed on it`);
       let top = 1;
-      if (s.kind === 'ammo') top = this.ammoStation(px, pz, yaw);
-      else if (s.kind === 'health') top = this.healthStation(staticB, px, pz, yaw);
-      else if (s.kind === 'weapon') top = this.weaponStation(staticB, s, px, pz, yaw);
-      else top = this.repairStation(staticB, px, pz, yaw);
-      this.col.addPolygon(rectPoly(px, pz, yaw, fw, fd), s.kind === 'weapon' ? 2.0 : top + 0.05, s.kind === 'weapon' && s.item === 'smg' ? 'wood' : s.kind === 'ammo' ? 'wood' : 'metal', 'prop');
+      if (s.kind === 'ammo') top = this.ammoStation(px, pz, yaw, fy);
+      else if (s.kind === 'health') top = this.healthStation(staticB, px, pz, yaw, fy);
+      else if (s.kind === 'weapon') top = this.weaponStation(staticB, s, px, pz, yaw, fy);
+      else top = this.repairStation(staticB, px, pz, yaw, fy);
+      this.col.addPolygon(rectPoly(px, pz, yaw, fw, fd), s.kind === 'weapon' ? 2.0 : top + 0.05, s.kind === 'weapon' && s.item === 'smg' ? 'wood' : s.kind === 'ammo' ? 'wood' : 'metal', 'prop', fy);
       const anchor = new THREE.Object3D();
       anchor.name = `station:${s.id}`;
-      anchor.position.set(px, top + 0.45, pz);
+      anchor.position.set(px, fy + top + 0.45, pz);
       anchor.rotation.y = yaw;
       anchor.userData = { stationId: s.id, kind: s.kind, item: s.item ?? null, stand: [x, z] as V2 };
       anchor.updateMatrix();
@@ -990,23 +998,43 @@ class Dresser {
     if (!staticB.empty) this.addStatic(staticB.geometry());
   }
 
-  private nudge(x: number, z: number, r: number): V2 | null {
+  private nudge(x: number, z: number, r: number, blocked = (px: number, pz: number, rr: number) => this.col.blocked(px, pz, rr)): V2 | null {
     for (let d = 0.3; d < 9; d += 0.3) {
       for (let k = 0; k < 24; k++) {
         const a = (k / 24) * Math.PI * 2;
         const px = x + Math.sin(a) * d, pz = z + Math.cos(a) * d;
-        if (!this.col.blocked(px, pz, r)) return [px, pz];
+        if (!blocked(px, pz, r)) return [px, pz];
       }
     }
     return null;
   }
 
+  /**
+   * rectFree for a footprint on a storey floor at fy: clear of every solid within head height of that floor (walls,
+   * desks, benches, other stations) and standing on the floor, not over a stairwell or a drop.
+   */
+  private storeyRectFree(x: number, z: number, yaw: number, w: number, l: number, margin: number, fy: number): boolean {
+    const long = Math.max(w, l), short = Math.min(w, l);
+    const r = short / 2 + margin;
+    const n = Math.max(1, Math.ceil((long - short) / (short * 0.7)) + 1);
+    for (let i = 0; i < n; i++) {
+      const f = n === 1 ? 0 : (i / (n - 1) - 0.5) * (long - short);
+      const [px, pz] = w >= l ? local(x, z, yaw, f, 0) : local(x, z, yaw, 0, f);
+      if (this.col.blockedBand(px, pz, r, fy + 0.1, fy + 1.9)) return false;
+    }
+    for (const [sx, sz] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5], [0, 0]] as V2[]) {
+      const [px, pz] = local(x, z, yaw, sx * w, sz * l);
+      if (Math.abs(this.col.groundAt(px, pz, fy + 0.3) - fy) > 0.15) return false;
+    }
+    return true;
+  }
+
   /** Yaw that faces away from nearby walls, else toward the nearest road. */
-  private faceAway(x: number, z: number): number {
+  private faceAway(x: number, z: number, blocked = (px: number, pz: number, r: number) => this.col.blocked(px, pz, r)): number {
     let bx = 0, bz = 0;
     for (let k = 0; k < 16; k++) {
       const a = (k / 16) * Math.PI * 2, dx = Math.sin(a), dz = Math.cos(a);
-      for (const d of [1.0, 1.8, 2.8]) if (this.col.blocked(x + dx * d, z + dz * d, 0.15)) { bx += dx / d; bz += dz / d; }
+      for (const d of [1.0, 1.8, 2.8]) if (blocked(x + dx * d, z + dz * d, 0.15)) { bx += dx / d; bz += dz / d; }
     }
     if (Math.hypot(bx, bz) > 0.05) return yawTo(-bx, -bz);
     let best = Infinity, px = x, pz = z + 1;
@@ -1020,17 +1048,17 @@ class Dresser {
     return best < 40 && best > 0.3 ? yawTo(px - x, pz - z) : 0;
   }
 
-  private ammoStation(x: number, z: number, yaw: number): number {
+  private ammoStation(x: number, z: number, yaw: number, fy = 0): number {
     const a = local(x, z, yaw, -0.47, 0.0);
     const c = local(x, z, yaw, 0.48, 0.02);
-    this.place('ammo', a[0], a[1], yaw + 0.03, { force: true });
-    this.place('ammo', a[0] + 0.01, a[1] - 0.01, yaw - 0.1, { force: true, y: 0.345 });
-    this.place('ammo', c[0], c[1], yaw + 0.07, { force: true });
+    this.place('ammo', a[0], a[1], yaw + 0.03, { force: true, y: fy });
+    this.place('ammo', a[0] + 0.01, a[1] - 0.01, yaw - 0.1, { force: true, y: fy + 0.345 });
+    this.place('ammo', c[0], c[1], yaw + 0.07, { force: true, y: fy });
     return 0.7;
   }
 
-  private healthStation(b: VBuilder, x: number, z: number, yaw: number): number {
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
+  private healthStation(b: VBuilder, x: number, z: number, yaw: number, fy = 0): number {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, fy, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
     b.transform(m);
     b.set(0xd9dcdf, 0.4, 0.6); // steel folding table
     b.box(0, 0.74, 0, 0.95, 0.035, 0.58);
@@ -1048,16 +1076,16 @@ class Dresser {
     b.box(0.32, 1.45, -0.305, 0.1, 0.34, 0.012);
     b.transform(null);
     const k1 = local(x, z, yaw, -0.12, 0.05);
-    this.place('medkit', k1[0], k1[1], yaw + 0.1, { force: true, y: 0.767 });
+    this.place('medkit', k1[0], k1[1], yaw + 0.1, { force: true, y: fy + 0.767 });
     const k2 = local(x, z, yaw, 0.26, 0.08);
-    this.place('medkit', k2[0], k2[1], yaw - 0.4, { force: true, y: 0.767, pitch: -HALF_PI });
+    this.place('medkit', k2[0], k2[1], yaw - 0.4, { force: true, y: fy + 0.767, pitch: -HALF_PI });
     return 1.9;
   }
 
-  private weaponStation(b: VBuilder, s: StationDef, x: number, z: number, yaw: number): number {
+  private weaponStation(b: VBuilder, s: StationDef, x: number, z: number, yaw: number, fy = 0): number {
     const tone = s.item === 'rifle' ? 0x4b5320 : s.item === 'smg' ? 0x7a5230 : 0x46525e;
     const wood = s.item === 'smg';
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, fy, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
     b.transform(m);
     b.set(tone, wood ? 0.75 : 0.5, wood ? 0 : 0.55);
     b.box(0, 0.05, -0.02, 1.34, 0.1, 0.52); // plinth
@@ -1096,8 +1124,8 @@ class Dresser {
     return 2.0;
   }
 
-  private repairStation(b: VBuilder, x: number, z: number, yaw: number): number {
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
+  private repairStation(b: VBuilder, x: number, z: number, yaw: number, fy = 0): number {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, fy, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1));
     b.transform(m);
     b.set(0x5a4632, 0.8, 0);
     b.box(0, 0.42, 0, 1.2, 0.06, 0.6);

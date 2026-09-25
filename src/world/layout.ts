@@ -727,7 +727,20 @@ export const SPAWN_ZONES: { gate: string; pts: V2[] }[] = [
 
 /** Interactable stations (COD-style). */
 export type StationKind = 'ammo' | 'health' | 'weapon' | 'repair';
-export interface StationDef { id: string; kind: StationKind; pos: V2; cost: number; item?: string; label: string; /** floor height (multi-level), default 0 */ y?: number }
+export interface StationDef {
+  id: string; kind: StationKind; pos: V2; cost: number; item?: string; label: string;
+  /** floor height (multi-level), default 0 */
+  y?: number;
+  /**
+   * Which way the prop's front faces (yaw: toward (sin, cos)); the prop stands behind `pos`, opposite that way. Set it
+   * in furnished rooms where the automatic choice (away from the nearest walls) could pick a desk; see propToward.
+   */
+  face?: number;
+}
+/** StationDef.face for a prop set between a standing spot and a point on the wall behind it. */
+export function propToward(stand: V2, wall: V2): number {
+  return Math.atan2(stand[0] - wall[0], stand[1] - wall[1]);
+}
 export const STATIONS: StationDef[] = [
   { id: 'ammo_gate', kind: 'ammo', pos: [150, -121], cost: 250, label: 'Ammo crate' },
   // moved from the Quad (22.5, −33) into the enterable G-floor east lobby; belongs back in the Quad's SW arcade on L1 once levels land
