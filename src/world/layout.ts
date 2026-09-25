@@ -41,6 +41,11 @@ export interface BuildingDef {
   /** 'soffit' tint for the underside of overhangs */
   soffit?: 'wood' | 'red' | 'grey';
   sign?: { text: string; sub?: string; edge: number; offset?: number; color?: string };
+  /**
+   * Walls only (facade, no roof, no collision): a hand-built interior provides the floors, ceilings, roof and collision.
+   * `skip` lists edge indices (edge i = poly[i] → poly[i+1]) whose wall is left out (internal party walls, openings).
+   */
+  shell?: { skip?: number[] };
 }
 
 export interface RoadDef { pts: V2[]; width: number; kind: 'asphalt' | 'paver'; kerb?: boolean; center?: boolean; median?: number; id?: string }
@@ -236,20 +241,29 @@ export const BUILDINGS: BuildingDef[] = [
   // (satellite + 2021/2026 tours, reference/MRD_NOTES.md). Refurbished 2025-26 parts use 'mrd' (buff stone, frosted
   // glass, navy cornices), the old wings facing the Open Air Theatre stay cream. Detail: src/world/mrd.ts.
   // id 'mrd' is kept on the NW auditorium hall (Props looks it up); its metal hip roof is built in mrd.ts.
+  // the auditorium is an enterable hall (mrdInterior.ts buildMrdAuditorium): a walls-only shell, its party walls with the
+  // central wings (edges 5–7) left out; the hall walls, ceiling, collision and the metal hip roof are hand-built
   {
     id: 'mrd', name: 'Prof. MRD Block — auditorium', style: 'admin', floors: 4, floorH: 4.0,
     poly: [[2.0, -179.8], [9.2, -182.4], [21.2, -187.0], [25.8, -185.8], [30.2, -187.9], [31.1, -183.2], [33.0, -172.0], [28.0, -158.0], [15.0, -154.0], [9.2, -156.9], [2.8, -168.5]],
-    roof: { parapet: 0.3 },
+    roof: { parapet: 0.3 }, shell: { skip: [5, 6, 7] },
   },
   // The entrance block and the central wings are hollowed out for the enterable interior (src/world/mrdInterior.ts,
   // plan in the local frame of mrdAt(): lobby behind the east glazing, the 4-storey atrium under the octagonal skylight,
   // a corridor out to the Open Air Theatre side). mrd_fan keeps the outer wings full height (C-shape round the atrium);
   // the atrium's upper floors are the four mrd_up_* pieces around the gallery ring (base = 2nd-floor slab underside).
+  // (split by the passage from the atrium into the auditorium: local s −6.6…−4.2 from the atrium's west wall)
   {
     id: 'mrd_fan', name: 'Prof. MRD Block — central wings', style: 'oldCream', floors: 6, floorH: 3.6, top: 22,
-    poly: [[31.1, -183.2], [34.8, -180.9], [59.3, -169.6], mrdAt(12.512, 15.3), mrdAt(9.6, 15.3), mrdAt(9.6, 33.5), mrdAt(-16, 33.5), mrdAt(-16, 22), mrdAt(-20.95, 22), [15.0, -154.0], [28.0, -158.0], [33.0, -172.0]],
+    poly: [[31.1, -183.2], [34.8, -180.9], [59.3, -169.6], mrdAt(12.512, 15.3), mrdAt(9.6, 15.3), mrdAt(9.6, 33.5), mrdAt(-4.2, 33.5), mrdAt(-4.2, 38.895), [33.0, -172.0]],
     roof: { tanks: 3 },
   },
+  {
+    id: 'mrd_fan_w', name: 'Prof. MRD Block — central wings (OAT side)', style: 'oldCream', floors: 6, floorH: 3.6, top: 22,
+    poly: [mrdAt(-6.6, 33.5), mrdAt(-16, 33.5), mrdAt(-16, 22), mrdAt(-20.95, 22), [15.0, -154.0], [28.0, -158.0], mrdAt(-6.6, 38.407)],
+    roof: { tanks: 1 },
+  },
+  { id: 'mrd_fan_pass', name: 'Prof. MRD Block — over the auditorium passage', style: 'oldCream', floors: 5, floorH: 3.6, base: 5.85, top: 22, soffit: 'grey', roof: { parapet: 0.4 }, poly: [mrdAt(-6.6, 33.5), mrdAt(-4.2, 33.5), mrdAt(-4.2, 38.895), mrdAt(-6.6, 38.407)] },
   { id: 'mrd_fan_s', name: 'Prof. MRD Block — central wings (south-east corner)', style: 'oldCream', floors: 6, floorH: 3.6, top: 22, poly: [mrdAt(-20.176, 15.3), mrdAt(-16, 15.3), mrdAt(-16, 19), mrdAt(-20.602, 19)] },
   ...mrdUpperPieces(),
   {
@@ -279,15 +293,25 @@ export const BUILDINGS: BuildingDef[] = [
   { id: 'bblock_lobby_over', name: 'BE block (over the entrance lobby)', style: 'bblock', floors: 14, floorH: 3.5, base: 7.0, top: 49, soffit: 'grey', roof: { parapet: 1.1 }, poly: [[-10.83, -165.5], [-19.81, -164.93], [-19.06, -152.95], [-10.08, -153.5]] },
   { id: 'bblock_portico', name: 'BE block portico over the link road', style: 'bblock', floors: 14, floorH: 3.5, base: 14.0, top: 49, soffit: 'grey', roof: { parapet: 1.1 }, poly: [[-11.4, -169.5], [2.6, -169.5], [2.6, -156.5], [-10.6, -156.5]] },
   { id: 'bblock_tower', name: 'B-Block crest tower', style: 'bblockTower', floors: 16, floorH: 3.5, top: 57, poly: [[-20, -124], [-7.95, -124], [-8.9, -139], [-20, -139]] },
+  // OSM "Admission Enquiry" (way 347418529), the white mural building the main gate's south pillar is built into. Its
+  // ground floor is an enterable enquiry hall facing the entry walkway (src/world/admissionHall.ts): a walls-only shell
+  // whose front between x 158.2 and 170.2 is hand-built glazing; the three upper floors are a solid block on top.
   {
-    id: 'admission', name: 'Admission Enquiry (gate mural building)', style: 'admin', floors: 4, floorH: 3.5,
-    poly: [[156.2, -120.5], [184, -120.6], [184.1, -107.3], [156.2, -106.6]],
+    id: 'admission', name: 'Admission Enquiry (gate mural building)', style: 'admin', floors: 3, floorH: 3.5, base: 3.5, top: 14,
+    poly: admissionPoly(),
   },
+  { id: 'admission_g', name: 'Admission Enquiry (ground floor)', style: 'admin', floors: 1, floorH: 3.5, top: 3.5, roof: { parapet: 0 }, shell: { skip: [1] }, poly: admissionPoly() },
   { id: 'gate_annex', name: 'Gate mural wing (outside)', style: 'admin', floors: 3, floorH: 3.6, poly: [[184, -120.6], [200, -121.2], [200.1, -116.4], [184, -116.0]] },
   { id: 'gate_annex2', name: 'Gate annex strip', style: 'admin', floors: 1, floorH: 4, poly: [[200, -121.2], [213.7, -121.8], [213.9, -116.7], [200.1, -116.4]] },
-  { id: 'f_podium', name: 'F-Block (podium)', style: 'fPodium', floors: 3, floorH: 3.5, poly: [[101.6, 9.5], [118.1, 7.1], [121.1, 25], [105.45, 27]], sign: { text: 'F BLOCK', edge: 0, offset: 0.5, color: '#f4efe2' } },
-  { id: 'f_wing1', name: 'F-Block (east wing)', style: 'fWing', floors: 8, floorH: 3.5, poly: [[105.45, 27], [121.1, 25], [124.0, 42], [109.2, 44]], roof: { tanks: 2 } },
-  { id: 'f_tower', name: 'F-Block (Panini) tower', style: 'fTower', floors: 10, floorH: 3.5, poly: [[109.2, 44], [124.0, 42], [127.2, 60.9], [111.3, 53.6]], roof: { tanks: 2 } },
+  // F-Block (Panini Block, OSM way 199315793): an L of beige open-corridor wings with terracotta blocks at the north end
+  // (the 10-storey tower with the PES roof sign, a 3-storey terracotta podium in front of it) and at the elbow (an
+  // 8-storey terracotta end block). Law terrace key frames 0050 / 1534 look straight at the tower rising behind the podium
+  // with the wing running south to the end block; the 2011 Wikimedia photo (reference/frames/fblock/) shows the same
+  // tower + wing + end block from the west.
+  { id: 'f_podium', name: 'F-Block (podium)', style: 'fPodium', floors: 3, floorH: 3.5, poly: [[101.6, 9.5], [118.1, 7.1], [119.9, 18.0], [104.0, 20.4]], sign: { text: 'F BLOCK', edge: 0, offset: 0.5, color: '#f4efe2' } },
+  { id: 'f_tower', name: 'F-Block (Panini) tower', style: 'fTower', floors: 10, floorH: 3.5, poly: [[104.0, 20.4], [119.9, 18.0], [122.5, 33.0], [107.3, 35.3]], roof: { tanks: 2 } },
+  { id: 'f_wing1', name: 'F-Block (east wing)', style: 'fWing', floors: 8, floorH: 3.5, poly: [[107.3, 35.3], [122.5, 33.0], [124.0, 42], [109.2, 44]], roof: { tanks: 2 } },
+  { id: 'f_end', name: 'F-Block (terracotta end block at the elbow)', style: 'fTower', floors: 8, floorH: 3.5, poly: [[109.2, 44], [124.0, 42], [127.2, 60.9], [111.3, 53.6]], roof: { tanks: 2 } },
   { id: 'fblock', name: 'F-Block (south wing)', style: 'fWing', floors: 8, floorH: 3.5, poly: [[75.2, 69.8], [107.2, 55.5], [111.3, 53.6], [127.2, 60.9], [82.7, 84.5]], roof: { tanks: 3 } },
   {
     id: 'gblock', name: 'G-Block', style: 'oldCream', floors: 5, floorH: 3.5,
@@ -313,6 +337,22 @@ export const BUILDINGS: BuildingDef[] = [
     id: 'hostel2', name: 'PES Boys Hostel (Annexe)', style: 'hostel', floors: 5,
     poly: [[24.2, 138.2], [23.6, 128.0], [-9.5, 129.0], [-13.7, 125.4], [-14.1, 92.3], [-26.1, 93.0], [-23.7, 140.7]],
     roof: { tanks: 3 },
+  },
+  // OSM buildings inside the campus that were missing (src/world/data/osm.json; reference/sat_campus.jpg shows all three):
+  // the hostel IT-Block (1182315666, 3 levels, cream with a stepped / crenellated parapet: 2021 hostel tour 1OVI1TlGEho
+  // 2:50–3:32), the PES Food Court (351160549, 2 levels, OSM restaurant node inside) west of Pie R Cube, and a 3-level
+  // hostel block (347418355) south of the Boys Hostel. Parapet merlons + the food court's colonnade: src/world/blocks.ts.
+  {
+    id: 'hostel_it', name: 'PES Boys Hostel — IT Block', style: 'oldCream', floors: 3, floorH: 3.5, roof: { tanks: 3, parapet: 0.9 },
+    poly: [[-39.0, 68.9], [-38.3, 68.9], [-38.0, 82.0], [-9.5, 81.4], [-9.6, 76.5], [13.6, 76.0], [13.3, 64.0], [14.9, 63.9], [14.8, 58.3], [6.4, 58.5], [6.4, 56.6], [3.0, 56.7], [3.0, 58.6], [-18.4, 59.0], [-18.3, 62.2], [-19.6, 62.3], [-19.7, 59.0], [-23.1, 59.1], [-23.1, 60.7], [-27.5, 60.8], [-27.5, 59.2], [-31.2, 59.3], [-31.1, 63.4], [-32.5, 63.4], [-32.5, 62.6], [-39.1, 62.7]],
+  },
+  {
+    id: 'food_court', name: 'PES Food Court', style: 'oldCream', floors: 2, floorH: 3.8, roof: { tanks: 2 },
+    poly: [[-27.9, 53.3], [-15.0, 52.6], [-16.4, 27.2], [-29.3, 27.9]],
+  },
+  {
+    id: 'hostel_s', name: 'PES Boys Hostel — south block', style: 'hostel', floors: 3, floorH: 3.5, roof: { tanks: 2 },
+    poly: [[44.8, 132.4], [53.9, 141.2], [66.3, 129.8], [57.2, 120.5]],
   },
   {
     id: 'cabin_gate', name: 'Security Cabin', style: 'admin', floors: 1, floorH: 2.8,
@@ -365,6 +405,22 @@ function mrdUpperPieces(): BuildingDef[] {
       poly: [mrdAt(-16, 19), mrdAt(-16, 22), mrdAt(-20.95, 22), [37.7, -143.7], mrdAt(-20.602, 19)] },
   ];
 }
+/**
+ * Plan footprints of the enterable interiors (walls, floors, ceilings hand-built): the MRD lobby block, atrium, OAT-side
+ * corridor and auditorium passage. Facade ledges are not drawn on building faces that front one of these.
+ */
+export const INTERIOR_ZONES: V2[][] = [
+  [mrdAt(-12.7, 0), mrdAt(12.5, 0), mrdAt(12.5, 15.3), mrdAt(-12.7, 15.3)],
+  [mrdAt(-16, 15.3), mrdAt(9.6, 15.3), mrdAt(9.6, 33.5), mrdAt(-16, 33.5)],
+  [mrdAt(-16, 19), mrdAt(-16, 22), mrdAt(-20.95, 22), mrdAt(-20.602, 19)],
+  [mrdAt(-6.6, 33.5), mrdAt(-4.2, 33.5), mrdAt(-4.2, 38.895), mrdAt(-6.6, 38.407)],
+];
+/** Admission Enquiry building outline (OSM), with extra vertices on the walkway face round the enquiry hall's glazed front. */
+export function admissionPoly(): V2[] {
+  return [[156.2, -120.5], [158.2, -120.51], [170.2, -120.54], [184, -120.6], [184.1, -107.3], [156.2, -106.6]];
+}
+/** F-Block tower roof sign ("PES", facing north towards GJBC's east colonnade): centre on the tower's north edge. */
+export const F_BLOCK_SIGN = { x: 112.0, y: 37.6, z: 19.3, rot: 0.15, nx: -0.15, nz: -1 };
 /**
  * Octagonal skylight lantern over the MRD atrium void (tour 2026 4:40–5:00: pyramid glazing on a white frame). Built by
  * mrd.ts on the roof slab round the void (`base` = MRD_LV.roof); centre = the atrium void centre.

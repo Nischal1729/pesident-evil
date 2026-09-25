@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GeoBuffer, InteriorKit, PlanFrame } from './buildings';
 import { col, type DetailKey, type WorldKit } from './kit';
-import { MRD_DRUM, MRD_FRAME, MRD_LV, mrdOctagon, type V2 } from './layout';
+import { BUILDINGS, MRD_DRUM, MRD_FRAME, MRD_LV, mrdOctagon, type V2 } from './layout';
 
 /**
  * Enterable interior of the Prof. MRD Block (reference/MRD_NOTES.md §5; campus tour 2026 4:10–5:28, 2021 tour 0:57,
@@ -34,7 +34,7 @@ const NAVY = col('#1f2b45'), BLACK = col('#1b1c1e'), DOOR = col('#2e2522'), WHIT
  * wall, the two photo-mosaic walls, the office plate and a classroom board. Each is drawn at its design size and scaled
  * into its slot; returns the UV rects.
  */
-function drawMrdSigns(): { tex: THREE.CanvasTexture; edu: UV; pes: UV; compass: UV; admin: UV; board: UV } {
+function drawMrdSigns(): { tex: THREE.CanvasTexture; edu: UV; pes: UV; compass: UV; admin: UV; board: UV; aud: UV } {
   const W = 1024, H = 512;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
@@ -117,7 +117,13 @@ function drawMrdSigns(): { tex: THREE.CanvasTexture; edu: UV; pes: UV; compass: 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  return { tex, edu, pes, compass, admin, board };
+  const aud = slot(776, 0, 248, 50, 320, 64, (g, w, h) => {
+    g.fillStyle = '#111214'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f2f2f2'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 20px Arial, sans-serif'; g.fillText('ಸಭಾಂಗಣ', w / 2, h * 0.3);
+    g.font = 'bold 24px Arial, sans-serif'; g.fillText('Auditorium', w / 2, h * 0.72);
+  });
+  return { tex, edu, pes, compass, admin, board, aud };
 }
 
 /** Sign quad (same layout as WorldKit.signQuad) into a local buffer: centre, size, facing (nx, nz). */
@@ -188,6 +194,7 @@ export function buildMrdInterior(kit: WorldKit): void {
   // skirting along every lobby wall
   for (const [s0, t0, s1, t1] of [[-12.5, 8.56, 12.3, 8.6], [12.26, 0, 12.3, 8.6], [-12.5, 0, -12.46, 8.6]] as number[][]) k.fbox('polished', s0, F0, t0, s1, F0 + 0.12, t1, SKIRT);
   { const p = F.at(6.1, 8.585); signQuad(sb, SG.admin, p[0], F0 + 2.8, p[1], 1.6, 0.32, -F.n[0], -F.n[1]); }
+  { const p = F.at(-5.4, A.t1 - 0.245); signQuad(sb, SG.aud, p[0], F0 + 3.05, p[1], 1.5, 0.3, -F.n[0], -F.n[1]); }
   // the "education for the real world" wall between cream columns, facing the doors
   k.fbox('plaster', -4.2, F0, 4.2, 4.2, F0 + 3.4, 4.5, col('#4c5660'), 0.5);
   k.fbox('polished', -4.25, F0, 4.18, 4.25, F0 + 0.12, 4.52, SKIRT);
@@ -218,7 +225,7 @@ export function buildMrdInterior(kit: WorldKit): void {
   fwall(k, 'plaster', 1.8, 15.1, 12.3, 15.3, F0, U1, CREAM);
   fwall(k, 'plaster', 12.3, 8.8, 12.5, 15.1, F0, U1, CREAM);
   k.fflat('polished', [[1.8, 8.8], [12.3, 8.8], [12.3, 15.1], [1.8, 15.1]], yl, col('#d2cfc6'), 2);
-  for (const [s, t] of [[5.0, 11.0], [8.3, 11.0], [5.0, 13.9], [8.3, 13.9]] as V2[]) desk(k, C, s, t, F0);
+  for (const [s, t] of [[5.0, 12.3], [8.3, 12.3]] as V2[]) desk(k, C, s, t, F0); // one row: clear walkways all round
   for (let s = 2.4; s < 11.8; s += 1.0) k.fbox('metal', s, F0, 14.55, s + 0.9, F0 + 2.0, 15.1, col('#8d9096'));
   C.addPolygon(R(2.4, 14.55, 11.8, 15.1), 2.0, 'metal', 'prop', F0);
   k.fbox('wood', 11.0, F0, 9.6, 12.3, F0 + 1.05, 12.6, col('#6b4b33'), 0.5);
@@ -229,7 +236,7 @@ export function buildMrdInterior(kit: WorldKit): void {
   const at0 = A.t0, at1 = A.t1, as0 = A.s0, as1 = A.s1;
   fwall(k, 'plaster', as0 + 0.2, at0, as1 - 0.2, at0 + 0.2, F0, U2, CREAM, [[14.2, 17.4, F0, F0 + 3.6]]);
   fwall(k, 'plaster', as1 - 0.2, at0, as1, at1, F0, U2, CREAM);
-  fwall(k, 'plaster', as0 + 0.2, at1 - 0.2, as1 - 0.2, at1, F0, U2, CREAM);
+  fwall(k, 'plaster', as0 + 0.2, at1 - 0.2, as1 - 0.2, at1, F0, U2, CREAM, [[9.2, 11.6, F0, F0 + 2.6]]); // auditorium doors (s −6.6…−4.2)
   fwall(k, 'plaster', as0, at0, as0 + 0.2, at1, F0, U2, CREAM, [[3.9, 6.5, F0, U2]]);
   // lintel strip over the corridor opening on the ground floor
   k.fbox('plaster', as0, F0 + 3.4, 19.2, as0 + 0.2, U1, 21.8, CREAM, 0.5);
@@ -238,7 +245,12 @@ export function buildMrdInterior(kit: WorldKit): void {
   k.fbox('polished', as0 + 0.2, F0, at1 - 0.24, as1 - 0.2, F0 + 0.12, at1 - 0.2, SKIRT);
   k.fbox('polished', as1 - 0.24, F0, at0 + 0.2, as1 - 0.2, F0 + 0.12, at1 - 0.2, SKIRT);
   k.fbox('polished', as0 + 0.2, F0, at0 + 0.2, as0 + 0.24, F0 + 0.12, at1 - 0.2, SKIRT);
-  for (const [s0, s1] of [[-13.5, -8.5], [-5.5, -1.0], [3.0, 7.5]] as V2[]) k.fbox('plaster', s0, F0 + 0.12, at1 - 0.23, s1, U1 - 0.4, at1 - 0.2, YELLOW, 0.5);
+  for (const [s0, s1] of [[-13.5, -8.5], [-3.6, 1.0], [3.0, 7.5]] as V2[]) k.fbox('plaster', s0, F0 + 0.12, at1 - 0.23, s1, U1 - 0.4, at1 - 0.2, YELLOW, 0.5);
+  // the auditorium entrance (2021 tour 5bxHqmfj7bE 1:28: black double doors under a bilingual plate in a yellow wall)
+  for (const [s0, s1] of [[-7.4, -6.6], [-4.2, -3.6]] as V2[]) k.fbox('plaster', s0, F0 + 0.12, at1 - 0.23, s1, U1 - 0.4, at1 - 0.2, YELLOW, 0.5);
+  k.fbox('plaster', -7.4, F0 + 2.6, at1 - 0.23, -3.6, U1 - 0.4, at1 - 0.2, YELLOW, 0.5);
+  for (const [s, dir] of [[-6.6, 1], [-4.2, -1]] as V2[]) k.fbox('wood', s, F0, at1 - 0.2 + 0.05, s + dir * 0.06, F0 + 2.5, at1 + 1.2, col('#141516'), 0.5);
+  k.fbox('metal', -6.66, F0 + 2.55, at1 - 0.24, -4.14, F0 + 2.65, at1 - 0.18, col('#141516'));
   for (const [t0, t1] of [[23.5, 28.5]] as V2[]) k.fbox('plaster', as1 - 0.23, F0 + 0.12, t0, as1 - 0.2, U1 - 0.4, t1, YELLOW, 0.5);
   for (const s of [-12.2, -1.4, 7.8]) k.fbox('stone', s - 0.35, F0, at1 - 0.5, s + 0.35, U2, at1 - 0.2, NAVY, 0.5);
   for (const t of [20.0, 26.0, 31.4]) k.fbox('stone', as1 - 0.5, F0, t - 0.35, as1 - 0.2, U1, t + 0.35, NAVY, 0.5);
@@ -369,9 +381,10 @@ export function buildMrdInterior(kit: WorldKit): void {
     // green board + teacher's desk on the far wall, desk-bench rows facing it
     { const p = F.at((s0 + s1) / 2 + 0.1, t1 - 0.215); signQuad(sb, SG.board, p[0], F1 + 1.6, p[1], 3.6, 1.2, -F.n[0], -F.n[1]); }
     k.fbox('wood', 5.6, F1 + 0.9, t1 - 0.24, 8.8, F1 + 2.3, t1 - 0.2, col('#5a4632'), 0.5);
-    k.fbox('wood', 6.2, F1, t1 - 1.9, 8.0, F1 + 0.78, t1 - 1.2, col('#6b4b33'), 0.5);
-    C.addPolygon(R(6.2, t1 - 1.9, 8.0, t1 - 1.2), 0.8, 'wood', 'desk', F1);
-    for (let t = t0 + 1.6; t < t1 - 3.2; t += 1.45) deskBench(k, C, 7.9, t, F1);
+    // teacher's desk against the board wall; desk rows packed from the entry end (no player-sized gaps behind them)
+    k.fbox('wood', 6.4, F1, t1 - 0.95, 8.4, F1 + 0.78, t1 - 0.2, col('#6b4b33'), 0.5);
+    C.addPolygon(R(6.4, t1 - 0.95, 8.4, t1 - 0.2), 0.8, 'wood', 'desk', F1);
+    for (let t = t0 + 0.95; t < t1 - 3.2; t += 1.45) deskBench(k, C, 7.9, t, F1);
     for (const t of [21.5, 25.5, 29.0]) k.flight(6.9, U2 - 0.03, t, 1.2, 0.6);
   }
   // 1st floor gallery details: benches along the walls, a water dispenser, ceiling lights over the walkways
@@ -440,6 +453,7 @@ export function buildMrdInterior(kit: WorldKit): void {
     k.extras.push(m);
   }
   k.build('interior:mrd', F.at(CS, 12), CULL, far);
+  buildMrdAuditorium(kit);
 }
 
 /** The east entrance glazing: see-through panes (interior LOD) between black mullions, with two open doorways. */
@@ -606,4 +620,242 @@ function lantern(kit: WorldKit): void {
   m.name = 'mrd:skylight'; m.renderOrder = 2; m.castShadow = false; m.receiveShadow = false; m.matrixAutoUpdate = false; m.updateMatrix();
   kit.group.add(m);
   kit.collision.addPolygon(pts, apex - y0, 'concrete', 'mrd:lantern', y0);
+}
+
+// ================================================================================================ auditorium / indoor court
+/**
+ * The MRD auditorium (2021 tour cWKYL-ruQ_E 1:40–2:10 "The Auditorium – a complete inside view"; Wikimedia "PESIT
+ * Auditorium" 2013): a multi-purpose hall with a raked bank of yellow seats at the entrance end, a red court floor with
+ * basketball backboards on the side walls, a stage with yellow panels and a screen at the far end, magenta walls,
+ * steel trusses with hanging banners. Entered from the atrium through the passage behind the "Auditorium" doors; the
+ * seat tiers step down from the atrium level (MRD_LV.f0) to the hall floor at the ground. The 'mrd' building is a
+ * walls-only shell; the hall walls, ceiling, roof collision and floor are built here (own distance-culled LOD).
+ */
+const AUD = { tier0: 36.9, tierD: 1.0, tiers: 6, rise: 0.3, stageT: 59, stageH: 1.0, ceil: 14.2, roofTop: 16.3, wall: 0.3 };
+
+/** World → MRD frame. */
+function toLocal(p: V2): [number, number] {
+  const rx = p[0] - F.origin[0], rz = p[1] - F.origin[1];
+  return [rx * F.u[0] + rz * F.u[1], rx * F.n[0] + rz * F.n[1]];
+}
+/** Clip a plan polygon (frame coordinates) to the band t0 ≤ t ≤ t1 (Sutherland–Hodgman against two half-planes). */
+function clipBand(poly: [number, number][], t0: number, t1: number): [number, number][] {
+  const half = (pts: [number, number][], keep: (p: [number, number]) => number): [number, number][] => {
+    const out: [number, number][] = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const da = keep(a), db = keep(b);
+      if (da >= 0) out.push(a);
+      if ((da >= 0) !== (db >= 0)) { const f = da / (da - db); out.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]); }
+    }
+    return out;
+  };
+  return half(half(poly, (p) => p[1] - t0), (p) => t1 - p[1]);
+}
+/** s range of a polygon (frame coordinates) at t (from a thin band). */
+function spanAt(poly: [number, number][], t: number): [number, number] {
+  const row = clipBand(poly, t - 0.01, t + 0.01);
+  if (row.length < 2) return [0, 0];
+  return [Math.min(...row.map((p) => p[0])), Math.max(...row.map((p) => p[0]))];
+}
+/** Inset a simple polygon (frame coordinates, any winding) by d. */
+function inset(poly: [number, number][], d: number): [number, number][] {
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; area += a[0] * b[1] - b[0] * a[1]; }
+  const sgn = area > 0 ? 1 : -1; // CCW (s right, t up): the inward normal of a→b is the left normal
+  const n = poly.length;
+  const lines = poly.map((a, i) => {
+    const b = poly[(i + 1) % n], dx = b[0] - a[0], dt = b[1] - a[1], l = Math.hypot(dx, dt) || 1;
+    const nx = (-dt / l) * sgn, nt = (dx / l) * sgn;
+    return { p: [a[0] + nx * d, a[1] + nt * d] as [number, number], d: [dx / l, dt / l] as [number, number] };
+  });
+  return poly.map((_, i) => {
+    const L1 = lines[(i + n - 1) % n], L2 = lines[i];
+    const den = L1.d[0] * L2.d[1] - L1.d[1] * L2.d[0];
+    if (Math.abs(den) < 1e-6) return L2.p;
+    const tt = ((L2.p[0] - L1.p[0]) * L2.d[1] - (L2.p[1] - L1.p[1]) * L2.d[0]) / den;
+    return [L1.p[0] + L1.d[0] * tt, L1.p[1] + L1.d[1] * tt] as [number, number];
+  });
+}
+
+export function buildMrdAuditorium(kit: WorldKit): void {
+  const bd = BUILDINGS.find((b) => b.id === 'mrd');
+  if (!bd) return;
+  const k = new InteriorKit(kit, F);
+  k.castKeys = new Set(['plaster', 'stone']);
+  const C = kit.collision;
+  const F0 = L.f0;
+  const outline = bd.poly.map((p) => toLocal(p));
+  const hall = inset(outline, AUD.wall);
+  const worldOut = bd.poly;
+  const MAG = col('#a8386c'), RED = col('#8e2b2b'), WOOD = col('#9a6a3e'), SEATY = col('#e8b923');
+
+  // ---------------------------------------------------------------- floor, walls, ceiling, roof collision
+  C.addPolygon(worldOut, 0.05, 'concrete', 'mrd:floor'); // also keeps the tree / prop scatter out of the hall
+  k.fflat('polished', hall, 0.06, RED, 2);
+  const passA = toLocal([33.0, -172.0]), passB = toLocal([28.0, -158.0]);
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i], b = outline[(i + 1) % outline.length];
+    const isPass = Math.hypot(a[0] - passA[0], a[1] - passA[1]) < 0.05 && Math.hypot(b[0] - passB[0], b[1] - passB[1]) < 0.05;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const openings: [number, number, number, number][] = [];
+    if (isPass) {
+      const along = (s: number) => ((a[0] - s) / (a[0] - b[0])) * len;
+      openings.push([along(-4.2), along(-6.6), F0, F0 + 2.6]);
+    }
+    const side = sideInward(outline, a, b);
+    const c = (a[1] + b[1]) / 2 > 60 ? col('#e0a92a') : CREAM;
+    k.wall('plaster', a[0], a[1], b[0], b[1], 0, AUD.ceil, AUD.wall, c, openings, null, side);
+    wallCollision(C, a, b, 0, AUD.roofTop, AUD.wall, side, openings);
+    // magenta band + skirting on every wall
+    k.wall('plaster', a[0], a[1], b[0], b[1], 4.6, 6.2, AUD.wall + 0.03, MAG, [], null, side);
+    k.wall('polished', a[0], a[1], b[0], b[1], 0, 0.14, AUD.wall + 0.03, SKIRT, openings, null, side);
+  }
+  k.fflat('plaster', hall, AUD.ceil, WHITE, 3, true);
+  C.addPolygon(worldOut, AUD.roofTop - AUD.ceil, 'concrete', 'mrd:roof', AUD.ceil);
+  // steel trusses across the hall, hanging banners, lights under the trusses
+  const mb = k.b('metal'), truss = col('#3a3d42');
+  for (const t of [44, 48.5, 53, 57.5, 62]) {
+    const [r0, r1] = spanAt(hall, t);
+    if (r1 - r0 < 2) continue;
+    const s0 = r0 + 0.2, s1 = r1 - 0.2;
+    const top = AUD.ceil - 0.25, bot = AUD.ceil - 1.3;
+    const P = (s: number, y: number): [number, number, number] => { const q = F.at(s, t); return [q[0], y, q[1]]; };
+    mb.beam(P(s0, top), P(s1, top), 0.18, 0.18, truss);
+    mb.beam(P(s0, bot), P(s1, bot), 0.18, 0.18, truss);
+    const n = Math.max(2, Math.round((s1 - s0) / 1.6));
+    for (let j = 0; j < n; j++) {
+      const sa = s0 + ((s1 - s0) * j) / n, sb2 = s0 + ((s1 - s0) * (j + 1)) / n;
+      mb.beam(P(sa, bot), P(sb2, top), 0.08, 0.08, truss);
+      mb.beam(P(sa, bot), P(sa, top), 0.08, 0.08, truss);
+    }
+    for (let s = s0 + 2; s < s1 - 1; s += 4) k.flight(s, bot - 0.1, t, 0.9, 0.35);
+  }
+  const bannerC = ['#1f4aa8', '#e8622a', '#2d8c4a', '#c8342e', '#f2c200', '#6a3fa0'];
+  for (let i = 0; i < 6; i++) {
+    const s = -18 + i * 4.6, t = 48.5 + (i % 2) * 4.5;
+    k.fbox('plaster', s - 0.6, AUD.ceil - 4.6, t - 0.02, s + 0.6, AUD.ceil - 1.4, t + 0.02, col(bannerC[i]), 0.5);
+  }
+
+  // ---------------------------------------------------------------- raked seat tiers from the atrium level down to the court
+  const tierT = (kk: number): [number, number] => [kk === 0 ? AUD.tier0 : AUD.tier0 + 1.7 + (kk - 1) * AUD.tierD, AUD.tier0 + 1.7 + kk * AUD.tierD];
+  for (let kk = 0; kk < AUD.tiers; kk++) {
+    const [t0, t1] = tierT(kk);
+    const top = F0 - kk * AUD.rise;
+    const band = clipBand(outline, t0, t1);
+    if (band.length < 3) continue;
+    C.addPolygon(F.poly(band), top, 'concrete', 'mrd:tier');
+    const vis = clipBand(hall, t0, t1);
+    if (vis.length >= 3) k.fflat('polished', vis, top + 0.004, col('#b9b4aa'), 2);
+    const [s0, s1] = spanAt(hall, t1);
+    if (s1 - s0 < 1) continue;
+    k.fbox('polished', s0, top - AUD.rise, t1 - 0.02, s1, top, t1, col('#8f8a82'), 0.5); // riser
+    // a row of yellow seats with the aisle on the entrance axis; none on the top landing
+    if (kk > 0) for (let s = s0 + 0.7; s < s1 - 0.6; s += 0.56) {
+      if (Math.abs(s + 5.4) < 0.9) continue;
+      const ts = t1 - 0.62;
+      k.fbox('plaster', s - 0.22, top + 0.4, ts - 0.2, s + 0.22, top + 0.46, ts + 0.2, SEATY, 0.5);
+      k.fbox('plaster', s - 0.22, top + 0.46, ts - 0.26, s + 0.22, top + 0.86, ts - 0.2, SEATY, 0.5);
+      k.fbox('metal', s - 0.03, top, ts - 0.05, s + 0.03, top + 0.4, ts + 0.05, col('#2a2c2f'));
+    }
+  }
+  // steel railing along the front of the top landing, broken by the central aisle
+  {
+    const t = AUD.tier0 + 1.7 - 0.08;
+    const [s0, s1] = spanAt(hall, t);
+    for (const [a0, a1] of [[s0 + 0.2, -6.4], [-4.4, s1 - 0.2]] as V2[]) {
+      if (a1 - a0 < 0.5) continue;
+      const pa = F.at(a0, t), pb = F.at(a1, t);
+      mb.beam([pa[0], F0 + 1.0, pa[1]], [pb[0], F0 + 1.0, pb[1]], 0.05, 0.05, col('#8d9196'));
+      for (let s = a0; s <= a1; s += 1.5) { const q = F.at(s, t); k.box('metal', q[0], F0 + 0.5, q[1], 0.04, 1.0, 0.04, 0, col('#8d9196')); }
+    }
+  }
+
+  // ---------------------------------------------------------------- stage with yellow panels, a screen, side stairs
+  {
+    const st = clipBand(outline, AUD.stageT, 200);
+    C.addPolygon(F.poly(st), AUD.stageH, 'concrete', 'mrd:stage');
+    k.fflat('wood', clipBand(hall, AUD.stageT, 200), AUD.stageH + 0.004, WOOD, 1);
+    const [s0, s1] = spanAt(hall, AUD.stageT);
+    k.fbox('dark', s0, 0, AUD.stageT - 0.03, s1, AUD.stageH, AUD.stageT, col('#2a1d1a'));
+    // magenta proscenium header over the stage front, the screen
+    k.fbox('plaster', s0, 8.2, AUD.stageT - 0.3, s1, AUD.ceil, AUD.stageT, MAG, 0.5);
+    k.fbox('plaster', -13.5, 3.2, 66.3, -3.5, 8.0, 66.45, col('#f4f4f2'), 0.5);
+    k.fbox('dark', -13.6, 3.1, 66.45, -3.4, 8.1, 66.55, col('#1b1c1e'));
+    // side stairs (6 steps) up from the court
+    for (const [sa, sb2] of [[-16.8, -14.6], [1.0, 3.2]] as V2[]) {
+      const tA = AUD.stageT - 2.0;
+      for (let j = 0; j < 6; j++) k.fbox('wood', sa, 0, tA + (j * 2.0) / 6, sb2, ((j + 1) * AUD.stageH) / 6, AUD.stageT, col('#6e4a2c'), 0.5);
+      C.addRamp(R(sa, tA, sb2, AUD.stageT), F.at((sa + sb2) / 2, tA), F.at((sa + sb2) / 2, AUD.stageT), 0, AUD.stageH, 'concrete', 'mrd:stair');
+    }
+    for (let s = s0 + 2; s < s1 - 1; s += 3.5) k.flight(s, AUD.ceil - 0.03, AUD.stageT + 3, 0.8, 0.8);
+    // speakers either side of the stage front
+    for (const s of [s0 + 1.0, s1 - 1.0]) {
+      k.fbox('dark', s - 0.35, AUD.stageH, AUD.stageT + 0.3, s + 0.35, AUD.stageH + 1.6, AUD.stageT + 0.9, col('#161718'));
+      C.addPolygon(R(s - 0.35, AUD.stageT + 0.3, s + 0.35, AUD.stageT + 0.9), 1.6, 'metal', 'prop', AUD.stageH);
+    }
+  }
+
+  // ---------------------------------------------------------------- court markings + basketball backboards on the side walls
+  {
+    const cs0 = -21, cs1 = 7, ct0 = 45.8, ct1 = 57.8, y = 0.068, w = 0.06, white = col('#f2f0ea');
+    const line = (s0: number, t0: number, s1: number, t1: number) => { const a = F.at(s0, t0), b = F.at(s1, t1); k.b('paint').segBox(a, b, y - 0.004, y, w, white, 0, w); };
+    line(cs0, ct0, cs1, ct0); line(cs0, ct1, cs1, ct1); line(cs0, ct0, cs0, ct1); line(cs1, ct0, cs1, ct1);
+    const mid = (cs0 + cs1) / 2, tc = (ct0 + ct1) / 2;
+    line(mid, ct0, mid, ct1);
+    const arc = (sc: number, r: number, a0: number, a1: number) => {
+      const n = 20;
+      for (let j = 0; j < n; j++) { const p = a0 + ((a1 - a0) * j) / n, q = a0 + ((a1 - a0) * (j + 1)) / n; line(sc + Math.cos(p) * r, tc + Math.sin(p) * r, sc + Math.cos(q) * r, tc + Math.sin(q) * r); }
+    };
+    arc(mid, 1.8, 0, Math.PI * 2);
+    const [wS0, wS1] = spanAt(hall, tc);
+    for (const [end, dir] of [[cs0, 1], [cs1, -1]] as V2[]) {
+      line(end, tc - 2.45, end + dir * 5.8, tc - 2.45); line(end, tc + 2.45, end + dir * 5.8, tc + 2.45); line(end + dir * 5.8, tc - 2.45, end + dir * 5.8, tc + 2.45);
+      arc(end + dir * 5.8, 1.8, dir > 0 ? -Math.PI / 2 : Math.PI / 2, dir > 0 ? Math.PI / 2 : Math.PI * 1.5);
+      arc(end + dir * 1.575, 6.75, dir > 0 ? -1.1 : Math.PI - 1.1, dir > 0 ? 1.1 : Math.PI + 1.1);
+      // backboard on brackets from the side wall behind the baseline
+      const bs = end - dir * 1.2, wallS = dir > 0 ? wS0 : wS1;
+      k.fbox('plaster', bs - 0.03, 2.9, tc - 0.9, bs + 0.03, 3.95, tc + 0.9, col('#f6f6f4'), 0.5);
+      k.fbox('dark', bs - 0.035, 3.05, tc - 0.3, bs + 0.035, 3.5, tc + 0.3, col('#c8342e'));
+      const ring = F.at(bs + dir * 0.45, tc);
+      k.b('metal').cylinder(ring[0], 3.05, ring[1], 0.23, 0.03, 12, col('#e8622a'), false);
+      for (const yb of [3.6, 4.4]) k.fbox('metal', Math.min(bs, wallS), yb, tc - 0.05, Math.max(bs, wallS), yb + 0.1, tc + 0.05, col('#3a3d42'));
+    }
+  }
+
+  // ---------------------------------------------------------------- passage from the atrium (between the central wings)
+  {
+    const pt0 = A.t1;
+    C.addPolygon(R(-6.6, pt0, -4.2, 39.2), F0, 'concrete', 'mrd:floor');
+    k.fflat('polished', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], F0 + 0.006, MARBLE, 2);
+    k.fflat('plaster', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], L.u1 - 0.02, WHITE, 2, true);
+    k.fbox('plaster', -6.64, F0, pt0, -6.6, L.u1, 38.4, YELLOW, 0.5);
+    k.fbox('plaster', -4.2, F0, pt0, -4.16, L.u1, 38.9, YELLOW, 0.5);
+    k.flight(-5.4, L.u1 - 0.05, 36.2, 0.6, 1.2);
+  }
+
+  let cx = 0, cz = 0;
+  for (const p of bd.poly) { cx += p[0]; cz += p[1]; }
+  k.build('interior:mrd_auditorium', [cx / bd.poly.length, cz / bd.poly.length], 75);
+}
+
+/** Which side (for InteriorKit.wall) points into the polygon for edge a→b (frame coordinates). */
+function sideInward(poly: [number, number][], a: [number, number], b: [number, number]): number {
+  let cs = 0, ct = 0;
+  for (const p of poly) { cs += p[0]; ct += p[1]; }
+  cs /= poly.length; ct /= poly.length;
+  const pa = F.at(...a), pb = F.at(...b), c = F.at(cs, ct);
+  const dx = pb[0] - pa[0], dz = pb[1] - pa[1];
+  return (c[0] - (pa[0] + pb[0]) / 2) * -dz + (c[1] - (pa[1] + pb[1]) / 2) * dx > 0 ? 1 : -1;
+}
+/** Wall collision prisms along a→b (frame coordinates), `thick` to `side`, y0..y1, with rectangular openings. */
+function wallCollision(C: WorldKit['collision'], a: [number, number], b: [number, number], y0: number, y1: number, thick: number, side: number, openings: [number, number, number, number][]): void {
+  const pa = F.at(...a), pb = F.at(...b);
+  const len = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]);
+  const dx = (pb[0] - pa[0]) / len, dz = (pb[1] - pa[1]) / len, nx = -dz * side, nz = dx * side;
+  const at = (d: number, o: number): V2 => [pa[0] + dx * d + nx * o, pa[1] + dz * d + nz * o];
+  const piece = (d0: number, d1: number, py0: number, py1: number) => { if (d1 - d0 > 0.01 && py1 - py0 > 0.01) C.addPolygon([at(d0, 0), at(d1, 0), at(d1, thick), at(d0, thick)], py1 - py0, 'concrete', 'mrd:wall', py0); };
+  let d = 0;
+  for (const [o0, o1, oy0, oy1] of openings) { piece(d, o0, y0, y1); piece(o0, o1, y0, oy0); piece(o0, o1, oy1, y1); d = o1; }
+  piece(d, len, y0, y1);
 }

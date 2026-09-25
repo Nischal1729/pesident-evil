@@ -7,13 +7,15 @@ import { buildGJBC } from './gjbc';
 import { Chunked, col, WorldKit } from './kit';
 import { buildLandscape } from './landscape';
 import {
-  AREAS, BUILDINGS, CAMPUS_BOUNDS, ENTRY_DIVIDER, GLOBE_POS, MRD_DRUM, NO_TREE_ZONES, ORR, ORR_NORMAL, orrPoint, PATHS, QUAD, ROADS, WALLS,
+  AREAS, BUILDINGS, CAMPUS_BOUNDS, ENTRY_DIVIDER, GLOBE_POS, INTERIOR_ZONES, MRD_DRUM, NO_TREE_ZONES, ORR, ORR_NORMAL, orrPoint, PATHS, QUAD, ROADS, WALLS,
   type BuildingDef, type FacadeStyle, type V2,
 } from './layout';
 import { asphaltMaterial, barcodePaverTexture, facadeMaterial, FACADE_STYLES, greyPaverTexture, pbrMaterial, radialTexture, setLampLights, worldUniforms, type WorldTextures } from './materials';
 import { drawSigns, type SignUVs } from './signs';
 import { TreeSystem, type TreeSpecies } from './trees';
 import { lawnBlades, lawnMaterial } from './vegetation/lawn';
+import { buildAdmissionHall } from './admissionHall';
+import { buildBlockDetails } from './blocks';
 import { buildLandmarksAll, type GateVisual } from './landmarks';
 
 const osm = osmJson as unknown;
@@ -366,13 +368,24 @@ export class CampusBuilder {
       const height = top - base;
       const parapet = b.roof?.parapet ?? (b.style === 'service' ? 0.6 : base > 0 && base < 10 && b.style !== 'gjbc' && b.style !== 'gjbcQuad' ? 0.6 : 1.1);
       const c = polyCentroid(b.poly);
-      extrudeBuilding(b.poly, { base, height, floorH, floors: b.floors, seed, parapet, bottom: base > 0 }, facades.get(b.style, c[0], c[1]), roofs.get('roof', c[0], c[1]), soffits.get(b.soffit ?? 'grey', c[0], c[1]));
+      // shells: walls only, minus the listed (internal) edges, matched by their midpoints whatever the winding
+      const skipMids = (b.shell?.skip ?? []).map((i) => { const a = b.poly[i], q = b.poly[(i + 1) % b.poly.length]; return [(a[0] + q[0]) / 2, (a[1] + q[1]) / 2]; });
+      const skipEdge = skipMids.length ? (a: V2, q: V2) => skipMids.some(([mx, mz]) => Math.hypot((a[0] + q[0]) / 2 - mx, (a[1] + q[1]) / 2 - mz) < 0.02) : undefined;
+      extrudeBuilding(b.poly, { base, height, floorH, floors: b.floors, seed, parapet, bottom: base > 0 && !b.shell, roof: !b.shell, skipEdge }, facades.get(b.style, c[0], c[1]), roofs.get('roof', c[0], c[1]), soffits.get(b.soffit ?? 'grey', c[0], c[1]));
+      if (b.shell) return; // the hand-built interior adds the roof, ledges and collision
       const ledge = this.kit.buf('stone', c[0], c[1]);
-      if (b.style === 'hostel') addLedges(b.poly, base, floorH, b.floors - 1, 0.45, 0.22, ledge, FACADE_STYLES.hostel.band);
-      else if (b.style === 'fWing') addLedges(b.poly, base, floorH, b.floors - 1, 0.55, 0.18, ledge, col('#e2d4b8'));
-      else if (b.style === 'oldCream') addLedges(b.poly, base, floorH, b.floors - 1, 0.5, 0.15, ledge, col('#e6e1d8'));
-      if (b.style === 'fTower' || b.style === 'fPodium' || b.style === 'fWing') addLedgesAt(b.poly, [top + 0.2], 0.8, 0.7, ledge, b.style === 'fWing' ? col('#b8604a') : col('#9e4a38'));
-      if (b.style === 'mrd') addLedgesAt(b.poly, [top + 0.1], 1.0, 0.45, ledge, col('#1f2b45'), 3);
+      // no ledges / bands on faces that front a neighbouring building or an enterable interior (they would poke through)
+      const exposed = (a: V2, q: V2, nx: number, nz: number) => {
+        const mx = (a[0] + q[0]) / 2 + nx * 0.3, mz = (a[1] + q[1]) / 2 + nz * 0.3;
+        if (INTERIOR_ZONES.some((z) => pointInPoly(mx, mz, z))) return false;
+        return !BUILDINGS.some((o) => o !== b && (o.base ?? 0) < top && (o.top ?? (o.floorH ?? 3.7) * o.floors) > base && pointInPoly(mx, mz, o.poly));
+      };
+      const floorYs = (n: number) => Array.from({ length: Math.max(0, n) }, (_, f) => base + (f + 1) * floorH);
+      if (b.style === 'hostel') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.45, 0.22, ledge, FACADE_STYLES.hostel.band, 2, exposed);
+      else if (b.style === 'fWing') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.55, 0.18, ledge, col('#e2d4b8'), 2, exposed);
+      else if (b.style === 'oldCream') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.5, 0.15, ledge, col('#e6e1d8'), 2, exposed);
+      if (b.style === 'fTower' || b.style === 'fPodium' || b.style === 'fWing') addLedgesAt(b.poly, [top + 0.2], 0.8, 0.7, ledge, b.style === 'fWing' ? col('#b8604a') : col('#9e4a38'), 2, exposed);
+      if (b.style === 'mrd') addLedgesAt(b.poly, [top + 0.1], 1.0, 0.45, ledge, col('#1f2b45'), 3, exposed);
       if (b.roof && (base === 0 || b.roof.tanks)) roofClutter(b.poly, top, seed, b.roof, tanks, solar, cabins.get('cabin', c[0], c[1]), col('#e2ddd2'));
       if (b.roof?.skylights) {
         for (const [sx, sz, sw, sd] of b.roof.skylights) {
@@ -384,6 +397,8 @@ export class CampusBuilder {
       if (b.sign) this.buildingSign(b, top);
     };
     BUILDINGS.forEach((b, i) => buildOne(b, i * 17 + 3));
+    buildAdmissionHall(this.kit); // enterable ground floor of the gate building (admission_g is its walls-only shell)
+    buildBlockDetails(this.kit); // IT-Block parapet merlons, food court colonnade
     // (the MRD atrium skylight lantern, MRD_DRUM, sits on the atrium roof and is built with the interior in mrd.ts)
 
     // OSM neighbourhood houses (colourful apartment blocks beyond the walls)

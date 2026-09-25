@@ -185,6 +185,10 @@ export interface ExtrudeOpts {
   color?: THREE.Color;
   parapet: number;
   bottom?: boolean;
+  /** false: walls only (no roof slab / parapet caps) — a hand-built interior or roof closes the top */
+  roof?: boolean;
+  /** skip the wall of this edge (plan end points, in the winding the edge is drawn); e.g. an internal party wall */
+  skipEdge?: (a: V2, b: V2) => boolean;
 }
 
 /**
@@ -204,6 +208,7 @@ export function extrudeBuilding(poly: V2[], o: ExtrudeOpts, walls: GeoBuffer, ro
     const dx = bx - ax, dz = bz - az;
     const len = Math.hypot(dx, dz);
     if (len < 0.01) continue;
+    if (o.skipEdge && o.skipEdge(p[i], p[(i + 1) % n])) { u = Math.ceil((u + len) / 0.6) * 0.6; continue; }
     const nx = -dz / len, nz = dx / len;
     const h = wallTop - o.base;
     const a0 = walls.vert(ax, o.base, az, nx, 0, nz, u, 0, o.color, fac);
@@ -215,6 +220,7 @@ export function extrudeBuilding(poly: V2[], o: ExtrudeOpts, walls: GeoBuffer, ro
     // round u to bay-friendly offsets per edge so windows don't straddle corners badly
     u = Math.ceil(u / 0.6) * 0.6;
   }
+  if (o.roof === false) return;
   const contour = p.map(([x, z]) => new THREE.Vector2(x, z));
   const tris = THREE.ShapeUtils.triangulateShape(contour, []);
   const rbase = roof.vertexCount;
