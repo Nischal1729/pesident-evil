@@ -88,7 +88,9 @@ reference/           tour-video frames, CAMPUS_NOTES.md (layout + look reference
   locomotion), replays events into the mirror's bus, sends its input at 30 Hz, and pushes its player out of the
   zombies it draws. Gate collision follows the host's broken flag (`clientGateChanged`).
 * Scaling (`coopDifficulty`): with f = players / 4, wave size × f^0.6, zombie health and gate damage × f^0.4.
-  Snapshots are ~2.2 KB for 80 zombies; about 46 KB/s per client with events.
+  Snapshots are ~2.2 KB for 80 zombies, ~1.3 KB deflated. Each tick's snapshot and event batch (field names in a
+  per-batch shape table, not per event) are compressed once and shared by every client: about 26 KB/s per client,
+  plus ~1.4 KB/s per player firing. Reliable sends/receives are queued so compressed batches keep their order.
 * A hidden host tab keeps simulating through a Worker timer (rAF stops in hidden tabs) and skips drawing.
 
 ## Asset contracts (Blender → three.js)
