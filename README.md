@@ -52,6 +52,8 @@ npm run build
 - The campus is multi-level: walk up the front ramp to GJB's first floor and the Quad, climb the amphitheatre tiers,
   take the stair onto the two-wheeler parking deck, or duck into the GJB lobby and cafeteria. Zombies follow you up,
   and falls over 4 m hurt. Add `?flat` to the URL for the old flat movement.
+- Jump climbs onto anything up to 1.3 m: scooters, sandbags, barricades, benches. Sandbag step stacks lead up onto the
+  gates and the Outer Ring Road wall, whose tops you can walk. Zombies climb the same steps, so no perch is safe.
 
 ## Architecture
 
