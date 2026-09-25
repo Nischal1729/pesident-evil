@@ -179,6 +179,19 @@ export const NO_TREE_ZONES: V2[][] = [
 ];
 
 // ---------------------------------------------------------------------------------------------
+// B-Block ("BE block") frame (reference/BE_NOTES.md, src/world/bblock.ts). s runs south along the east facade line,
+// d runs west into the block; (0, 0) is the entrance axis on the facade. The crest tower stands over the entrance.
+// ---------------------------------------------------------------------------------------------
+export const BE_FRAME = { origin: [-10.455, -159.5] as V2, s: [0.0625, 0.998] as V2, d: [-0.998, 0.0625] as V2 };
+/** Plan point (x, z) at (s, d) in the BE frame. */
+export function bePt(s: number, d: number): V2 {
+  const f = BE_FRAME;
+  return [f.origin[0] + f.s[0] * s + f.d[0] * d, f.origin[1] + f.s[1] * s + f.d[1] * d];
+}
+/** Floor tops of the enterable BE-block core (G = entrance plinth) and the underside of the solid block above it. */
+export const BE_LEVELS = { G: 0.45, F1: 3.95, F2: 7.45, top: 10.65 };
+
+// ---------------------------------------------------------------------------------------------
 // Buildings
 // ---------------------------------------------------------------------------------------------
 const GJ_H = 26.4; // 6 floors x 4.4 m
@@ -261,18 +274,27 @@ export const BUILDINGS: BuildingDef[] = [
     poly: [[59.9, -139.3], [59.3, -136.4], [62.9, -136.1], [68.4, -135.7], [66.8, -131.8], [45.0, -126.0], [40.9, -137.6], [43.6, -141.0]],
     roof: { solar: true },
   },
-  // B-Block = "BE block" (reference/BE_NOTES.md). The main entrance lobby on the east face (z −165.5…−153.5) is carved
-  // out of the footprint: bblock_lobby_over covers it from 7 m up, bblock_portico bridges the link road from 14 m up
-  // on four columns (src/world/bblock.ts builds the plinth, steps, glass wall, columns and the lobby interior).
+  // B-Block = "BE block" (reference/BE_NOTES.md). It has ONE centre: the buff-stone crest tower (deep slot, roof sign)
+  // stands over the main entrance on the east face, entrance axis z ≈ −159.5 (satellite + 2021/2026 tours). The
+  // footprint is notched for the enterable core behind the entrance (lobby, atrium, G/1st/2nd-floor rooms, built in
+  // src/world/bblock.ts); bblock_tower and bblock_core cover the notch from BE_LEVELS.top up. The portico deck over the
+  // link road is a low slab on four columns (bblock.ts), not a full-height block.
   {
     id: 'bblock', name: 'B-Block (BE block)', style: 'bblock', floors: 14, floorH: 3.5,
-    poly: [[-54.8, -177.2], [-41.0, -178.0], [-42.1, -195.0], [-12.8, -196.8], [-11.2, -171.4], [-10.83, -165.5], [-19.81, -164.93], [-19.06, -152.95], [-10.08, -153.5], [-7.6, -113.9], [-50.6, -111.2]],
+    poly: [[-54.8, -177.2], [-41.0, -178.0], [-42.1, -195.0], [-12.8, -196.8], [-11.2, -171.4],
+      bePt(-9, 0), bePt(-9, 10), bePt(-15, 10), bePt(-15, 32), bePt(15, 32), bePt(15, 10), bePt(9, 10), bePt(9, 0),
+      [-7.6, -113.9], [-50.6, -111.2]],
     roof: { solar: true, tanks: 4 },
-    sign: { text: 'BE BLOCK', sub: 'COMPUTER SCIENCE & ENGG', edge: 10, offset: 0.5, color: '#2f3a40' },
+    sign: { text: 'BE BLOCK', sub: 'COMPUTER SCIENCE & ENGG', edge: 14, offset: 0.5, color: '#2f3a40' },
   },
-  { id: 'bblock_lobby_over', name: 'BE block (over the entrance lobby)', style: 'bblock', floors: 14, floorH: 3.5, base: 7.0, top: 49, soffit: 'grey', roof: { parapet: 1.1 }, poly: [[-10.83, -165.5], [-19.81, -164.93], [-19.06, -152.95], [-10.08, -153.5]] },
-  { id: 'bblock_portico', name: 'BE block portico over the link road', style: 'bblock', floors: 14, floorH: 3.5, base: 14.0, top: 49, soffit: 'grey', roof: { parapet: 1.1 }, poly: [[-11.4, -169.5], [2.6, -169.5], [2.6, -156.5], [-10.6, -156.5]] },
-  { id: 'bblock_tower', name: 'B-Block crest tower', style: 'bblockTower', floors: 16, floorH: 3.5, top: 57, poly: [[-20, -124], [-7.95, -124], [-8.9, -139], [-20, -139]] },
+  {
+    id: 'bblock_tower', name: 'B-Block crest tower (over the entrance)', style: 'bblockTower', floors: 13, floorH: 3.5, base: BE_LEVELS.top, top: 57, soffit: 'grey',
+    poly: [bePt(-9, -0.8), bePt(-2, -0.8), bePt(-2, 4), bePt(2, 4), bePt(2, -0.8), bePt(9, -0.8), bePt(9, 18), bePt(-9, 18)],
+  },
+  {
+    id: 'bblock_core', name: 'BE block (over the enterable core)', style: 'bblock', floors: 11, floorH: 3.5, base: BE_LEVELS.top, top: 50.15, soffit: 'grey', roof: { parapet: 0 },
+    poly: [bePt(-15, 10), bePt(-9, 10), bePt(-9, 18), bePt(9, 18), bePt(9, 10), bePt(15, 10), bePt(15, 32), bePt(-15, 32)],
+  },
   {
     id: 'admission', name: 'Admission Enquiry (gate mural building)', style: 'admin', floors: 4, floorH: 3.5,
     poly: [[156.2, -120.5], [184, -120.6], [184.1, -107.3], [156.2, -106.6]],
