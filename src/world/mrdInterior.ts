@@ -703,6 +703,9 @@ export function buildMrdAuditorium(kit: WorldKit): void {
   const F0 = L.f0;
   const outline = bd.poly.map((p) => toLocal(p));
   const hall = inset(outline, AUD.wall);
+  // the hall's walls are drawn from 3 cm inside the outline: their outer faces were coplanar with the shell's facade and
+  // z-fought through it (magenta / yellow patches on the outside)
+  const skin = inset(outline, 0.03);
   const worldOut = bd.poly;
   const MAG = col('#a8386c'), RED = col('#8e2b2b'), WOOD = col('#9a6a3e'), SEATY = col('#e8b923');
 
@@ -721,11 +724,12 @@ export function buildMrdAuditorium(kit: WorldKit): void {
     }
     const side = sideInward(outline, a, b);
     const c = (a[1] + b[1]) / 2 > 60 ? col('#e0a92a') : CREAM;
-    k.wall('plaster', a[0], a[1], b[0], b[1], 0, AUD.ceil, AUD.wall, c, openings, null, side);
+    const a2 = skin[i], b2 = skin[(i + 1) % outline.length];
+    k.wall('plaster', a2[0], a2[1], b2[0], b2[1], 0, AUD.ceil, AUD.wall - 0.03, c, openings, null, side);
     wallCollision(C, a, b, 0, AUD.roofTop, AUD.wall, side, openings);
     // magenta band + skirting on every wall
-    k.wall('plaster', a[0], a[1], b[0], b[1], 4.6, 6.2, AUD.wall + 0.03, MAG, [], null, side);
-    k.wall('polished', a[0], a[1], b[0], b[1], 0, 0.14, AUD.wall + 0.03, SKIRT, openings, null, side);
+    k.wall('plaster', a2[0], a2[1], b2[0], b2[1], 4.6, 6.2, AUD.wall, MAG, [], null, side);
+    k.wall('polished', a2[0], a2[1], b2[0], b2[1], 0, 0.14, AUD.wall, SKIRT, openings, null, side);
   }
   k.fflat('plaster', hall, AUD.ceil, CEIL, 3, true);
   C.addPolygon(worldOut, AUD.roofTop - AUD.ceil, 'concrete', 'mrd:roof', AUD.ceil);
