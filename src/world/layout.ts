@@ -460,6 +460,19 @@ export const NPC_SPAWNS: V2[] = [[122, -131], [124, -119.5], [116, -127]];
 /** The gold PES armillary globe (model placed by Props.ts; it brings its own plinth). */
 export const GLOBE_POS: V2 = [84.4, -140];
 export const FOUNTAIN_POS: V2 = [106, -156];
+/**
+ * Sandbag step stacks (placed by Props.ts) up onto gate and compound-wall tops, every rise ≤ CLIMB_MAX (1.3 m).
+ * `at` lies on the gate / wall centreline, `in` is the inward unit normal, `gap` the clearance (m) from the centreline
+ * to the first tier. Tiers run inward from there, each two bags deep; `layers` gives each tier's bag layers (0.57 m
+ * pitch on a 0.69 m bag: 2 layers = 1.26 m, 4 layers = 2.40 m under the 2.62 / 2.72 m wall copings).
+ */
+export const STEP_STACKS: { id: string; at: V2; in: V2; gap: number; layers: number[] }[] = [
+  { id: 'main_out', at: [176, -136.5], in: [-1, 0], gap: 0.27, layers: [2] },
+  { id: 'main_in', at: [176, -126.2], in: [-1, 0], gap: 0.27, layers: [2] },
+  { id: 'west', at: [-72, -107.7], in: [1, 0], gap: 0.27, layers: [2] },
+  { id: 'orr_plaster', at: [159.55, -153.89], in: [-0.4569, 0.8896], gap: 0.23, layers: [4, 2] },
+  { id: 'orr_stone', at: [126.74, -170.43], in: [-0.4472, 0.8944], gap: 0.23, layers: [4, 2] },
+];
 
 /** Zombie spawn zones outside the walls, keyed by the gate they funnel into. */
 export const SPAWN_ZONES: { gate: string; pts: V2[] }[] = [
