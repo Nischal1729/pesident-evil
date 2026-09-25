@@ -354,10 +354,11 @@ export class Game {
   }
 
   // -----------------------------------------------------------------------------------------------
-  private loop = (now: number): void => {
+  private loop = (now: number = performance.now()): void => {
     // the rAF timestamp is the frame's start time; performance.now() here would add the callback's scheduling
     // jitter to dt, and with it to the fixed-step count and the interpolation alpha. `last` can be a later
-    // performance.now() (boot, resume), hence the clamp at 0.
+    // performance.now() (boot, resume), hence the clamp at 0. Direct calls without a timestamp (the cinematic
+    // capture tool steps the game with a fake performance.now) fall back to the clock.
     const dt = Math.min(0.1, Math.max(0, now - this.last) / 1000);
     this.last = now;
     worldUniforms.uTime.value += dt;

@@ -76,6 +76,35 @@ export class Post {
     effects.push(this.tone, this.outline, this.grade, this.vignette, this.chroma);
     this.composer.addPass(new EffectPass(camera, ...effects));
     if (q.smaa) this.composer.addPass(new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.MEDIUM })));
+    this.shareOutlineDepth();
+  }
+
+  /**
+   * The outline's own DepthPass redraws the whole scene on every frame with a live zombie selected (measured +42% draw
+   * calls and +48% triangles). The composer already copies the main pass's depth into a stable texture before the
+   * effect pass runs (N8AO needs it; created here when AO is off), and that depth holds the zombies themselves. So the
+   * mask compares against it instead: a visible zombie pixel lies at the depth it wrote, a small bias absorbing
+   * round-off, and a hidden one lies behind whatever covers it. Edges stay visible-only, as before.
+   */
+  private shareOutlineDepth(): void {
+    const composer = this.composer as unknown as { stableDepthTexture: THREE.DepthTexture | null; createDepthTexture(): void };
+    if (!composer.stableDepthTexture) composer.createDepthTexture();
+    const depth = composer.stableDepthTexture;
+    const o = this.outline as unknown as {
+      depthPass: { render(): void };
+      maskPass: { overrideMaterial: THREE.ShaderMaterial & { depthBuffer: THREE.Texture | null; depthPacking: number } };
+    };
+    const m = o.maskPass.overrideMaterial;
+    const test = '(-vViewZ>-viewZ)';
+    if (!depth || !m.fragmentShader.includes(test)) {
+      console.warn('[post] outline keeps its own depth pass (postprocessing internals changed)');
+      return;
+    }
+    o.depthPass.render = () => { /* depth comes from the main pass */ };
+    m.depthBuffer = depth;
+    m.depthPacking = THREE.BasicDepthPacking;
+    m.fragmentShader = m.fragmentShader.replace(test, '(-vViewZ>-viewZ*1.002+0.03)');
+    m.needsUpdate = true;
   }
 
   setSize(w: number, h: number): void {

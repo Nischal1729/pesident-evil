@@ -361,6 +361,25 @@ export class StaticCollision {
   }
 
   /**
+   * Is there a boundary top (a lipped gate leaf, compound wall or median, see setLip) underfoot at (x,z), by the same
+   * GROUND_TOL rule as groundAt, with its top in [y0, y1]? The squad probes ahead with it to stay off those tops.
+   */
+  lipTopAt(x: number, z: number, y0: number, y1: number): boolean {
+    const cell = this.cellAt(x, z);
+    if (!cell) return false;
+    const T = GROUND_TOL;
+    for (const pi of cell.p) {
+      const P = this.prisms[pi];
+      if (!P.lip || !P.enabled) continue;
+      const top = P.base + P.height;
+      if (top < y0 || top > y1) continue;
+      if (x < P.minX - T || x > P.maxX + T || z < P.minZ - T || z > P.maxZ + T) continue;
+      if (pointInPolygon(x, z, P.pts, P.n) || this.nearestEdge(P, x, z) < T * T) return true;
+    }
+    return false;
+  }
+
+  /**
    * Ledge to climb onto, probing ahead along the unit direction (dx,dz). The first probe inside something decides:
    * its highest top (prisms and cylinders) must rise more than STEP_UP and at most CLIMB_MAX above the feet, belong to a
    * climbable solid (climbableTag), have AGENT_HEIGHT of headroom, and for a lipped (boundary) solid be approached from

@@ -191,8 +191,12 @@ function localeTier(v: SpeechSynthesisVoice): number {
   if (l.startsWith('en')) return 0;
   return -1;
 }
+/** Voices whose names carry no gender hint. Chrome ships "Google हिन्दी" (a female voice) on every desktop OS. */
+const KNOWN_GENDER: Record<string, VoiceGender> = { 'google हिन्दी': 'female' };
+
 function genderOf(v: SpeechSynthesisVoice): VoiceGender | null {
   const n = v.name.toLowerCase();
+  if (KNOWN_GENDER[n]) return KNOWN_GENDER[n];
   if (n.includes('female')) return 'female';
   if (/\bmale\b/.test(n)) return 'male';
   if (IN_FEMALE.some((k) => n.includes(k)) || EN_FEMALE.some((k) => n.includes(k))) return 'female';
@@ -204,11 +208,14 @@ function score(v: SpeechSynthesisVoice, want: VoiceGender): number {
   const n = v.name.toLowerCase();
   const tier = localeTier(v);
   if (tier < 0) return -1000;
+  const g = genderOf(v);
+  // a non-English Indian voice only beats English when it is known to be the wanted gender: its tier bonus (up to
+  // 60) otherwise outscores every English voice, and an unknown-gender one would take the male slot too
+  if ((tier === 1 || tier === 2) && g !== want) return -1000;
   let s = tier * 30;
   if (NOVELTY.some((k) => n.includes(k))) s -= 200;
   if (ROBOTIC.some((k) => n.startsWith(k))) s -= 15;
   for (const [k, bonus] of Object.entries(NATURAL)) if (n.startsWith(k)) s += bonus;
-  const g = genderOf(v);
   if (g === want) s += 40;
   else if (g !== null) s -= 60;
   if (v.localService) s += 5;

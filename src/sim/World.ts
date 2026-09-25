@@ -5,7 +5,7 @@ import { GATES, NPC_SPAWNS, PLAYER_SPAWN, PLAYER_SPAWN_YAW, SPAWN_ZONES, STATION
 import { distToSegment, rng } from '../world/geom';
 import { CAM, cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
 import { CORPSE_FADE_DUR, CORPSE_FADE_START, Survivor, Zombie, type Look, type ZombieType } from './actors';
-import { STEP_UP, type StaticCollision } from './Collision';
+import { CLIMB_MAX, STEP_UP, type StaticCollision } from './Collision';
 import { INF } from './flowfield';
 import { LayeredNav } from './LayeredNav';
 import { NavGrid, type Nav } from './NavGrid';
@@ -299,12 +299,7 @@ export class World {
       break;
     }
     if (!pos) return;
-    let z = this.zombies.find((zz) => !zz.alive && zz.deadT > 12);
-    if (z) {
-      const idx = this.zombies.indexOf(z);
-      this.zombies.splice(idx, 1);
-    }
-    z = new Zombie();
+    const z = new Zombie();
     const type = this.pickZombieType();
     const hpScale = (1 + (this.wave - 1) * 0.13) * this.opts.difficulty;
     z.type = type;
@@ -484,6 +479,42 @@ export class World {
     a.mantle = { t: 0, dur, fx: a.pos.x, fy: a.pos.y, fz: a.pos.z, tx: l.x, ty: l.y, tz: l.z };
     a.vel.set(0, 0, 0);
     a.grounded = false;
+  }
+
+  /**
+   * Where `n` should stand to get out of the player's aim corridor, measured from `from` (its post in hold mode, else
+   * where it stands), or null when `from` is clear of the corridor or no spot beside it is safe. The near side is
+   * tried first, then the far side; a spot must be walkable ground on the same level, not a boundary top, and in plain
+   * sight, so the sidestep never walks into a wall, off a stack tier or wall top, or along a detour.
+   */
+  private aimSidestep(p: Survivor, from: THREE.Vector3, n: Survivor, out: THREE.Vector3): THREE.Vector3 | null {
+    const ox = p.aimOrigin.x, oz = p.aimOrigin.z;
+    const fx = -Math.sin(p.aimYaw), fz = -Math.cos(p.aimYaw);
+    const rx = from.x - ox, rz = from.z - oz;
+    if (rx * fx + rz * fz <= 0) return null;
+    const d = distToSegment(from.x, from.z, ox, oz, ox + fx * AIM_CLEAR_LEN, oz + fz * AIM_CLEAR_LEN);
+    if (d >= AIM_CLEAR_R) return null;
+    // (−fz, fx) points to the side `from` is on when s0 = 1
+    const s0 = fx * rz - fz * rx >= 0 ? 1 : -1;
+    for (const s of [s0, -s0]) {
+      const m = (AIM_CLEAR_R + 0.8 + (s === s0 ? -d : d)) * s;
+      out.set(from.x - fz * m, n.pos.y, from.z + fx * m);
+      if (this.canStepTo(n, out)) return out;
+    }
+    return null;
+  }
+
+  /** Can `n` walk straight to (to.x, to.z) and stand there on the level it is on? */
+  private canStepTo(n: Survivor, to: THREE.Vector3): boolean {
+    const y = n.pos.y;
+    if (this.nav.isBlocked(to.x, to.z, y)) return false;
+    if (this.levels) {
+      if (Math.abs(this.collision.groundAt(to.x, to.z, y + STEP_UP) - y) > STEP_UP) return false;
+      if (this.collision.lipTopAt(to.x, to.z, y + 0.05, y + CLIMB_MAX + 0.05)) return false;
+    }
+    // knee height catches planters and benches the body can't step over; gates count as solid (bars stop bodies)
+    const c = this.collision;
+    return c.los(n.pos.x, y + 0.5, n.pos.z, to.x, y + 0.5, to.z, true) && c.los(n.pos.x, y + 1.2, n.pos.z, to.x, y + 1.2, to.z, true);
   }
 
   /** Advance a timed climb: no collision or steering until it ends, grounded and at rest (a gate top is 0.5 m wide). */
@@ -1359,8 +1390,10 @@ export class World {
     n.anim.reviving = false;
     if (n.downed) {
       n.vel.set(0, 0, 0);
-      // downed mid-climb: drop to the floor, as the player does
-      if (n.mantle) { n.mantle = null; if (this.levels) this.moveBody(n, dt); }
+      // downed mid-climb or mid-air: drop to the floor every tick, as the player does (one step of gravity would
+      // leave the body hanging on the ledge face until revived)
+      n.mantle = null;
+      if (this.levels) this.moveBody(n, dt);
       return;
     }
     if (n.mantle) { this.stepClimb(n, dt); return; }
@@ -1453,33 +1486,24 @@ export class World {
     }
     // stay out of the player's crosshair: if standing in the aim corridor ahead of the camera, sidestep out of it.
     // Not while closing in on an unseen attacker: its path to the player may cross the corridor, and the sidestep
-    // would push it back every tick.
+    // would push it back every tick. Hold mode measures from its post, so it steps aside and returns once the aim
+    // moves on instead of being herded along by a sweeping aim.
     let aimClear = false;
     if (!urgent && !closing && p && p.alive) {
-      const ox = p.aimOrigin.x, oz = p.aimOrigin.z;
-      const fx = -Math.sin(p.aimYaw), fz = -Math.cos(p.aimYaw);
-      const nx = n.pos.x - ox, nz = n.pos.z - oz;
-      if (nx * fx + nz * fz > 0) {
-        const d = distToSegment(n.pos.x, n.pos.z, ox, oz, ox + fx * AIM_CLEAR_LEN, oz + fz * AIM_CLEAR_LEN);
-        if (d < AIM_CLEAR_R) {
-          const side = fx * nz - fz * nx >= 0 ? 1 : -1;
-          const m = (AIM_CLEAR_R + 0.8 - d) * side;
-          goal.set(n.pos.x - fz * m, n.pos.y, n.pos.z + fx * m);
-          // hold mode: move the hold spot to the sidestep goal (not by it, which would drift every tick in the corridor)
-          if (b.mode === 'hold') b.holdPos.set(goal.x, b.holdPos.y, goal.z);
-          aimClear = true;
-        }
-      }
+      const side = this.aimSidestep(p, b.mode === 'hold' ? b.holdPos : n.pos, n, _v3);
+      if (side) { goal.copy(side); aimClear = true; }
     }
     let mx = 0, mz = 0, speed = 0;
     const gdx = goal.x - n.pos.x, gdz = goal.z - n.pos.z;
     const gdist = Math.hypot(gdx, gdz);
     const followingPlayer = !urgent && b.mode === 'follow' && p && p.alive;
     const stopDist = urgent ? 1.1 : followingPlayer ? 1.4 : 0.8;
-    if (gdist > stopDist || aimClear) {
+    if (gdist > stopDist || (aimClear && gdist > 0.2)) {
       speed = gdist > 9 || urgent ? 4.6 : gdist > 4 ? 3.4 : 2.2;
       _dir2.y = -Infinity;
-      const direct = gdist < 10 && Math.abs(goal.y - n.pos.y) < 0.6 && this.collision.los(n.pos.x, n.pos.y + 1.0, n.pos.z, goal.x, goal.y + 1.0, goal.z);
+      // a sidestep spot was checked walkable and in plain sight (aimSidestep): go straight there, never via the
+      // player field, which leads back down the aim line
+      const direct = aimClear || (gdist < 10 && Math.abs(goal.y - n.pos.y) < 0.6 && this.collision.los(n.pos.x, n.pos.y + 1.0, n.pos.z, goal.x, goal.y + 1.0, goal.z));
       if (direct) { mx = gdx / gdist; mz = gdz / gdist; }
       else if ((followingPlayer || (urgent && reviveT === p)) && this.nav.descend('player', n.pos.x, n.pos.z, _dir2, n.pos.y) >= -1 && (_dir2.x || _dir2.z)) {
         mx = _dir2.x; mz = _dir2.z;
@@ -1513,6 +1537,12 @@ export class World {
       const tl = Math.hypot(tx, tz) || 1;
       mx = (-tz / tl) * b.strafeDir; mz = (tx / tl) * b.strafeDir;
       speed = b.strafeDir ? 1.0 : 0;
+    }
+    // the squad never steps or climbs onto the campus boundary (gate, compound wall and median tops): from a stack it
+    // holds on the top tier, which is a plain step below a wall coping, so the climb rule alone doesn't stop it
+    if (speed > 0 && this.levels && (mx || mz)) {
+      const ml = Math.hypot(mx, mz), reach = n.radius + 0.35;
+      if (this.collision.lipTopAt(n.pos.x + (mx / ml) * reach, n.pos.z + (mz / ml) * reach, n.pos.y + 0.05, n.pos.y + CLIMB_MAX + 0.05)) speed = 0;
     }
     const k = Math.min(1, dt * 10);
     n.vel.x += (mx * speed - n.vel.x) * k;
@@ -1596,10 +1626,12 @@ export function effectiveRange(d: WeaponDef): number {
 }
 
 /** Squad skill scales with wave: weak and spread-happy early, full effectiveness (the old flat 0.65 damage) by wave 5. */
-function npcSkill(wave: number): { dmg: number; spread: number; reaction: number; head: boolean } {
-  if (wave <= 2) return { dmg: 0.40, spread: 0.035, reaction: 0.30, head: false };
-  if (wave <= 4) return { dmg: 0.55, spread: 0.015, reaction: 0.10, head: true };
-  return { dmg: 0.65, spread: 0, reaction: 0, head: true };
+type NpcSkill = Readonly<{ dmg: number; spread: number; reaction: number; head: boolean }>;
+const NPC_SKILL_EARLY: NpcSkill = Object.freeze({ dmg: 0.40, spread: 0.035, reaction: 0.30, head: false });
+const NPC_SKILL_MID: NpcSkill = Object.freeze({ dmg: 0.55, spread: 0.015, reaction: 0.10, head: true });
+const NPC_SKILL_FULL: NpcSkill = Object.freeze({ dmg: 0.65, spread: 0, reaction: 0, head: true });
+function npcSkill(wave: number): NpcSkill {
+  return wave <= 2 ? NPC_SKILL_EARLY : wave <= 4 ? NPC_SKILL_MID : NPC_SKILL_FULL;
 }
 
 export function angleDiff(a: number, b: number): number {
