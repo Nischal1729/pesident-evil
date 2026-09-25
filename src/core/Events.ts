@@ -31,6 +31,12 @@ export interface GameEvents {
   jump: { actorId: number; position: Vector3 };
   dryFire: { actorId: number; position: Vector3 };
   land: { actorId: number; position: Vector3 };
+  /** a survivor pulls the pin ('pin', start of the throw) and lets go ('release', the grenade is live in World.grenades) */
+  grenadeThrow: { actorId: number; stage: 'pin' | 'release'; position: Vector3 };
+  /** a flying grenade hits something hard enough to clatter */
+  grenadeBounce: { id: number; position: Vector3; speed: number; surface: SurfaceKind };
+  /** blast at `position` (the grenade's centre); `floorY` is the surface it lay on / over, `kills` zombies it killed */
+  grenadeExplode: { id: number; ownerId: number; position: Vector3; floorY: number; radius: number; kills: number };
 }
 
 type Handler<T> = (payload: T) => void;

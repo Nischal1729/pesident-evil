@@ -161,6 +161,7 @@ export class CoopHost {
       pin.interactPressed = d('interact') > 0;
       pin.melee = d('melee') > 0;
       pin.command = d('command') > 0;
+      pin.grenade = d('grenade') > 0;
       pin.weaponSlot = d('slot') > 0 ? p.slot : -1;
       const sc = ((p.scrollSum - m.scroll + 128) & 255) - 128;
       pin.weaponScroll = sc > 0 ? 1 : sc < 0 ? -1 : 0;
@@ -336,6 +337,7 @@ export class CoopClient {
     if (pin.interactPressed) c.interact++;
     if (pin.melee) c.melee++;
     if (pin.command) c.command++;
+    if (pin.grenade) c.grenade++;
     if (pin.weaponSlot >= 0) { c.slot++; this.slot = pin.weaponSlot; }
     if (pin.weaponScroll) this.scrollSum += pin.weaponScroll;
     if (p.netJumped) { c.jump++; p.netJumped = false; }

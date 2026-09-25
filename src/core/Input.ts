@@ -19,6 +19,7 @@ export interface PlayerInput {
   jump: boolean;
   melee: boolean;
   command: boolean; // toggle NPC follow/hold
+  grenade: boolean; // throw a grenade
   weaponSlot: number; // -1 = none
   weaponScroll: number; // -1, 0, 1
   // Co-op: a remote player moves on its own machine and reports the result; the host takes the pose as given
@@ -35,7 +36,7 @@ export interface PlayerInput {
 export function emptyInput(): PlayerInput {
   return {
     moveX: 0, moveZ: 0, yaw: 0, pitch: 0, camX: NaN, camY: NaN, camZ: NaN, camAlpha: 0, fire: false, aim: false, sprint: false,
-    reload: false, interact: false, interactPressed: false, jump: false, melee: false, command: false,
+    reload: false, interact: false, interactPressed: false, jump: false, melee: false, command: false, grenade: false,
     weaponSlot: -1, weaponScroll: 0,
     remote: false, px: 0, py: 0, pz: 0, vx: 0, vy: 0, vz: 0, pyaw: 0, pGrounded: true, pClimb: false, fallDmg: 0, jumped: false, landed: false, poseTele: 0,
   };
@@ -44,7 +45,7 @@ export function emptyInput(): PlayerInput {
 export class Input {
   private keys = new Set<string>();
   private mouseButtons = new Set<number>();
-  private latched = { reload: false, interact: false, jump: false, melee: false, command: false, slot: -1, scroll: 0 };
+  private latched = { reload: false, interact: false, jump: false, melee: false, command: false, grenade: false, slot: -1, scroll: 0 };
   private recoilDebt = 0;
   private sinceShot = 99;
   yaw = 0;
@@ -93,6 +94,7 @@ export class Input {
       case 'Space': this.latched.jump = true; e.preventDefault(); break;
       case 'KeyV': case 'KeyQ': this.latched.melee = true; break;
       case 'KeyF': this.latched.command = true; break;
+      case 'KeyG': this.latched.grenade = true; break;
       case 'Digit1': this.latched.slot = 0; break;
       case 'Digit2': this.latched.slot = 1; break;
       case 'Digit3': this.latched.slot = 2; break;
@@ -177,10 +179,11 @@ export class Input {
     out.jump = this.latched.jump;
     out.melee = this.latched.melee;
     out.command = this.latched.command;
+    out.grenade = this.latched.grenade;
     out.weaponSlot = this.latched.slot;
     out.weaponScroll = this.latched.scroll;
     if (consume) {
-      this.latched.reload = this.latched.interact = this.latched.jump = this.latched.melee = this.latched.command = false;
+      this.latched.reload = this.latched.interact = this.latched.jump = this.latched.melee = this.latched.command = this.latched.grenade = false;
       this.latched.slot = -1;
       this.latched.scroll = 0;
     }

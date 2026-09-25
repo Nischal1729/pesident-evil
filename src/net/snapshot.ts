@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Zombie, type Survivor } from '../sim/actors';
-import type { NpcBrain, Pickup, World } from '../sim/World';
+import type { Grenade, NpcBrain, Pickup, World } from '../sim/World';
 import { DSTATES, MSG_SNAPSHOT, Reader, weaponAt, weaponIndex, wrapAngle, Writer, ZSTATES, ZTYPES } from './protocol';
 
 /**
@@ -15,16 +15,19 @@ export interface SurvSnap {
   tele: number; current: number; weapons: { id: string; mag: number; reserve: number }[];
   aimPitch: number; fireT: number; reloadP: number; meleeP: number; switchP: number; hitT: number; hitDirX: number; hitDirZ: number;
   deadT: number; deathVariant: number; speed: number; localX: number; localZ: number; bloom: number;
+  grenades: number; throwP: number;
 }
 export interface ZombSnap {
   id: number; x: number; y: number; z: number; yaw: number; type: number; state: number; alive: boolean; airborne: boolean;
   speed: number; localX: number; localZ: number; attackP: number; hitT: number; hitDirX: number; hitDirZ: number;
   deadT: number; deathVariant: number; variant: number; scale: number;
 }
+export interface GrenSnap { id: number; x: number; y: number; z: number; vx: number; vz: number; rolling: boolean }
 export interface Snapshot {
   seq: number; time: number; tod: number; wave: number; state: number; stateT: number; toSpawn: number; totalKills: number;
   surv: SurvSnap[]; zomb: ZombSnap[]; gates: { hp: number; broken: boolean; hitAgo: number }[];
   pickups: { id: number; kind: number; x: number; y: number; z: number }[];
+  grenades: GrenSnap[];
   /** receive time (client clock, ms) */
   at: number;
 }
@@ -71,6 +74,8 @@ export function writeSnapshot(w: Writer, world: World, seq: number): ArrayBuffer
     w.u8(Math.min(255, a.speed * 20));
     w.i8(a.localX * 127); w.i8(a.localZ * 127);
     w.u8(Math.min(255, s.bloom * 50));
+    w.u8(s.grenades);
+    w.frac(a.throwP);
   }
   w.u16(world.zombies.length);
   for (const z of world.zombies) {
@@ -93,6 +98,8 @@ export function writeSnapshot(w: Writer, world: World, seq: number): ArrayBuffer
   for (const g of world.gates) { w.u16(g.hp); w.u8(g.broken ? 1 : 0); w.u8(Math.min(255, (world.time - g.lastHitT) * 10)); }
   w.u16(world.pickups.length);
   for (const p of world.pickups) { w.u32(p.id); w.u8(p.kind === 'ammo' ? 0 : 1); w.i16(p.pos.x * 64); w.i16(p.pos.y * 256); w.i16(p.pos.z * 64); }
+  w.u8(Math.min(255, world.grenades.length));
+  for (const g of world.grenades.slice(0, 255)) { w.u32(g.id); w.i16(g.x * 64); w.i16(g.y * 256); w.i16(g.z * 64); w.i16(g.vx * 100); w.i16(g.vz * 100); w.u8(g.rolling ? 1 : 0); }
   return w.bytes();
 }
 
@@ -108,11 +115,11 @@ export function readSnapshot(r: Reader, at: number): Snapshot {
     for (let k = 0, nw = r.u8(); k < nw; k++) { const wi = r.u8(), mag = r.u16(), reserve = r.u16(); weapons.push({ id: weaponAt(wi) ?? 'pistol', mag, reserve }); }
     const aimPitch = r.i8() / 100, fireT = r.secs(), reloadP = Math.max(0, r.frac()), meleeP = r.frac(), switchP = r.frac(), hitT = r.secs();
     const hitDirX = r.i8() / 127, hitDirZ = r.i8() / 127, deadT = r.u8() / 10, deathVariant = r.u8(), speed = r.u8() / 20;
-    const localX = r.i8() / 127, localZ = r.i8() / 127, bloom = r.u8() / 50;
+    const localX = r.i8() / 127, localZ = r.i8() / 127, bloom = r.u8() / 50, grenades = r.u8(), throwP = r.frac();
     surv.push({
       id, x, y, z, yaw, health, maxHealth, alive: !!(fl & 1), downed: !!(fl & 2), aiming: !!(fl & 4), reloading: !!(fl & 8), airborne: !!(fl & 16),
       reviving: !!(fl & 32), waving: !!(fl & 64), hold: !!(fl & 128), bleedout, revive, points, score, kills, tele, current, weapons,
-      aimPitch, fireT, reloadP, meleeP, switchP, hitT, hitDirX, hitDirZ, deadT, deathVariant, speed, localX, localZ, bloom,
+      aimPitch, fireT, reloadP, meleeP, switchP, hitT, hitDirX, hitDirZ, deadT, deathVariant, speed, localX, localZ, bloom, grenades, throwP,
     });
   }
   const zomb: ZombSnap[] = [];
@@ -126,7 +133,9 @@ export function readSnapshot(r: Reader, at: number): Snapshot {
   for (let i = 0, n = r.u8(); i < n; i++) gates.push({ hp: r.u16(), broken: r.u8() === 1, hitAgo: r.u8() / 10 });
   const pickups: Snapshot['pickups'] = [];
   for (let i = 0, n = r.u16(); i < n; i++) pickups.push({ id: r.u32(), kind: r.u8(), x: r.i16() / 64, y: r.i16() / 256, z: r.i16() / 64 });
-  return { seq, time, tod, wave, state, stateT, toSpawn, totalKills, surv, zomb, gates, pickups, at };
+  const grenades: GrenSnap[] = [];
+  for (let i = 0, n = r.u8(); i < n; i++) grenades.push({ id: r.u32(), x: r.i16() / 64, y: r.i16() / 256, z: r.i16() / 64, vx: r.i16() / 100, vz: r.i16() / 100, rolling: r.u8() === 1 });
+  return { seq, time, tod, wave, state, stateT, toSpawn, totalKills, surv, zomb, gates, pickups, grenades, at };
 }
 
 // ------------------------------------------------------------------------------------------------ client: apply
@@ -134,6 +143,7 @@ const lerpAngle = (a: number, b: number, t: number) => a + wrapAngle(b - a) * t;
 
 type SurvPair = { s: Survivor; sn: SurvSnap; pa: SurvSnap | undefined };
 type ZombPair = { z: Zombie; zn: ZombSnap; pa: ZombSnap | undefined };
+type GrenPair = { g: Grenade; gn: GrenSnap; pa: GrenSnap | undefined };
 
 /**
  * What applySnapshot keeps between frames: the bracketing pair it last synced, the actors matched to it, and the
@@ -145,6 +155,7 @@ export class ApplyCache {
   b: Snapshot | null = null;
   surv: SurvPair[] = [];
   zomb: ZombPair[] = [];
+  gren: GrenPair[] = [];
   zmap = new Map<number, Zombie>();
 }
 
@@ -184,6 +195,12 @@ export function applySnapshot(world: World, a: Snapshot | null, b: Snapshot, t: 
     } else { z.pos.set(zn.x, zn.y, zn.z); z.yaw = zn.yaw; }
     z.prev.copy(z.pos);
     z.prevYaw = z.yaw;
+  }
+  // grenades: this frame's position in both x and px, so the view's own tick alpha changes nothing
+  for (const { g, gn, pa } of cache.gren) {
+    if (pa) { g.x = pa.x + (gn.x - pa.x) * t; g.y = pa.y + (gn.y - pa.y) * t; g.z = pa.z + (gn.z - pa.z) * t; }
+    else { g.x = gn.x; g.y = gn.y; g.z = gn.z; }
+    g.px = g.x; g.py = g.y; g.pz = g.z;
   }
 }
 
@@ -259,6 +276,16 @@ function syncPair(world: World, a: Snapshot | null, b: Snapshot, localTele: { se
     if (q) { q.pos.set(p.x, p.y, p.z); return q; }
     return { id: p.id, kind: p.kind === 0 ? 'ammo' : 'health', pos: new THREE.Vector3(p.x, p.y, p.z), ttl: 30 };
   });
+  // grenades in flight
+  const gm = new Map(world.grenades.map((g) => [g.id, g]));
+  const pg = a ? new Map(a.grenades.map((g) => [g.id, g])) : null;
+  cache.gren.length = 0;
+  world.grenades = b.grenades.map((gn): Grenade => {
+    const g = gm.get(gn.id) ?? { id: gn.id, ownerId: 0, x: gn.x, y: gn.y, z: gn.z, px: gn.x, py: gn.y, pz: gn.z, vx: 0, vy: 0, vz: 0, fuse: 0, rolling: false };
+    g.vx = gn.vx; g.vz = gn.vz; g.rolling = gn.rolling;
+    cache.gren.push({ g, gn, pa: pg?.get(gn.id) });
+    return g;
+  });
 }
 
 function applySurvivorState(world: World, s: Survivor, sn: SurvSnap, local: boolean): void {
@@ -271,6 +298,8 @@ function applySurvivorState(world: World, s: Survivor, sn: SurvSnap, local: bool
   s.reviveProgress = sn.revive;
   s.kills = sn.kills;
   s.bloom = sn.bloom;
+  s.grenades = sn.grenades;
+  s.throwT = sn.throwP;
   world.points.set(s.id, sn.points);
   world.score.set(s.id, sn.score);
   // weapons: keep the slot objects stable when the loadout is unchanged
@@ -286,7 +315,7 @@ function applySurvivorState(world: World, s: Survivor, sn: SurvSnap, local: bool
   const an = s.anim;
   an.fireT = sn.fireT; an.reloading = sn.reloading; an.reloadP = sn.reloadP; an.meleeP = sn.meleeP; an.switchP = sn.switchP;
   an.hitT = sn.hitT; an.hitDirX = sn.hitDirX; an.hitDirZ = sn.hitDirZ; an.dead = !sn.alive; an.deadT = sn.deadT;
-  an.deathVariant = sn.deathVariant; an.downed = sn.downed; an.reviving = sn.reviving; an.wave = sn.waving;
+  an.deathVariant = sn.deathVariant; an.downed = sn.downed; an.reviving = sn.reviving; an.wave = sn.waving; an.throwP = sn.throwP;
   an.weapon = s.weapons[s.current]?.id ?? null;
   if (!local) {
     // remote bodies animate from the host's hints; the local body computes its own (World.predictLocal)

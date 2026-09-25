@@ -243,7 +243,9 @@ function navCheck(campus: CampusBuild): { ok: boolean; grid: NavGrid; field: Uin
   test('playerSpawn', PLAYER_SPAWN);
   NPC_SPAWNS.forEach((p, i) => test(`npc_${i}`, p));
   for (const s of STATIONS) {
-    // stations must be in an open, reachable cell (a crate sits there; the player stands next to it)
+    // stations must be in an open, reachable cell (a crate sits there; the player stands next to it). This flat grid
+    // can't see storeys: stations on an upper floor or deck (StationDef.y) are left to the layered graph in game.
+    if ((s.y ?? 0) > 1) continue;
     test(`station_${s.id}`, s.pos);
   }
   // sealed pockets: free cells inside the campus bounding box that are unreachable

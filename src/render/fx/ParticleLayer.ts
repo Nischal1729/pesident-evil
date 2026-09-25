@@ -38,6 +38,9 @@ export class PSpec {
   extra = 0;
   /** seconds before the particle appears */
   delay = 0;
+  /** floor under this particle (world y) for the floor clamp and ground fade: the higher of this and the layer's
+   * ground. Lets effects on a raised plateau or an upper storey rest on it instead of the campus ground (not TRACER) */
+  floor = 0;
 
   reset(): this {
     this.px = this.py = this.pz = 0;
@@ -45,7 +48,7 @@ export class PSpec {
     this.life = 1; this.size0 = this.size1 = 0.1; this.rot = this.spin = 0;
     this.r = this.g = this.b = this.a = 1;
     this.gravity = this.drag = 0; this.tile = 0; this.mode = PMode.BILLBOARD; this.stretch = 0;
-    this.fadeIn = 0; this.fadeOut = 0.6; this.heat = 0; this.extra = 0; this.delay = 0;
+    this.fadeIn = 0; this.fadeOut = 0.6; this.heat = 0; this.extra = 0; this.delay = 0; this.floor = 0;
     return this;
   }
 }
@@ -58,7 +61,7 @@ attribute vec4 aB; // velocity xyz (axis for AXIAL), life
 attribute vec4 aC; // size0, size1, rot0, spin
 attribute vec4 aD; // rgb (HDR), alpha
 attribute vec4 aE; // gravity, drag, tile + 16*mode, stretch
-attribute vec4 aF; // fadeIn, fadeOut, heat, extra
+attribute vec4 aF; // fadeIn, fadeOut, heat, extra (TRACER) / floor (other modes)
 uniform float uTime;
 uniform float uGround;
 uniform float uPixel;
@@ -100,8 +103,10 @@ void main() {
   }
   float te = 1.0 - (1.0 - t) * (1.0 - t);
   float size = mix(aC.x, aC.y, te);
+  // this particle's floor (aF.w holds the tracer length in TRACER mode)
+  float gy = (mode > 1.5 && mode < 2.5) ? uGround : max(uGround, aF.w);
   if (aE.x > 0.0 && mode < 1.5) {
-    float fy = uGround + size * 0.3;
+    float fy = gy + size * 0.3;
     if (p.y < fy) { p.y = fy; v.y = 0.0; }
   }
 
@@ -113,7 +118,9 @@ void main() {
   vec2 q = position.xy + 0.5;
   vec3 mv;
   vStreak = 0.0;
-  vGround = vec2(p.y, 0.0);
+  // the fragment stage fades against uGround: shift heights so that fade happens at this particle's floor instead
+  float gShift = gy - uGround;
+  vGround = vec2(p.y - gShift, 0.0);
   if (mode < 0.5) {
     float rot = aC.z + aC.w * dragInt;
     float c = cos(rot), s = sin(rot);
@@ -121,7 +128,7 @@ void main() {
     mv = (viewMatrix * vec4(p, 1.0)).xyz;
     mv.xy += off;
     // world-space height of this corner (camera right/up are the rows of the view matrix)
-    vGround = vec2(p.y + viewMatrix[1][0] * off.x + viewMatrix[1][1] * off.y, size > 0.12 ? min(size * 0.3, 0.35) : 0.0);
+    vGround = vec2(p.y - gShift + viewMatrix[1][0] * off.x + viewMatrix[1][1] * off.y, size > 0.12 ? min(size * 0.3, 0.35) : 0.0);
   } else {
     vec3 A; vec3 B; float caps = 1.0;
     if (mode < 1.5) {
@@ -307,7 +314,7 @@ export class ParticleLayer {
     d[o + 8] = s.size0; d[o + 9] = s.size1; d[o + 10] = s.rot; d[o + 11] = s.spin;
     d[o + 12] = s.r; d[o + 13] = s.g; d[o + 14] = s.b; d[o + 15] = s.a;
     d[o + 16] = s.gravity; d[o + 17] = s.drag; d[o + 18] = s.tile + 16 * s.mode; d[o + 19] = s.stretch;
-    d[o + 20] = s.fadeIn; d[o + 21] = s.fadeOut; d[o + 22] = s.heat; d[o + 23] = s.extra;
+    d[o + 20] = s.fadeIn; d[o + 21] = s.fadeOut; d[o + 22] = s.heat; d[o + 23] = s.mode === PMode.TRACER ? s.extra : s.floor;
   }
 
   /** Stamp spawn times for this frame's particles and queue the minimal GPU upload. */

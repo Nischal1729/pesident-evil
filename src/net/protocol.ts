@@ -10,7 +10,7 @@ import { WEAPONS, type WeaponId } from '../sim/weapons';
  *   and binary player inputs (client → host, 30 Hz). A lost packet is simply superseded by the next one, so every
  *   one-shot action in an input travels as a wrapping press counter rather than a flag.
  */
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 export const MAX_PLAYERS = 10;
 
 export interface Profile { name: string; look: Look }
