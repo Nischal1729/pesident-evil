@@ -47,6 +47,8 @@ export const STEP_UP = 0.45;
 const GROUND_TOL = 0.15;
 /** Body height used for head-room / blocking tests in multi-level mode. */
 export const AGENT_HEIGHT = 1.8;
+/** Highest ledge above the feet the player can mantle onto: covers the 2.4 m gates; boundary walls are 2.7 m and up. */
+export const MANTLE_MAX = 2.6;
 
 export class StaticCollision {
   prisms: Prism[] = [];
@@ -252,7 +254,9 @@ export class StaticCollision {
   /**
    * Highest walkable surface under (x,z) that is at or below maxY (0 = terrain). Surfaces whose outline passes within
    * GROUND_TOL count as underfoot, so hairline seams between adjacent solids (tier rings, stacked slabs) never open a
-   * hole to fall through.
+   * hole to fall through. Gate tops count: only a mantle gets a body up there (navigation skips them in forTopsAt).
+   * Tops of 'wall' prisms (compound, low and parking walls) never do: from a gate top the player could otherwise step
+   * or hop onto the 2.7 m compound wall beside the west gate and walk along it.
    */
   groundAt(x: number, z: number, maxY: number): number {
     let best = 0;
@@ -261,7 +265,7 @@ export class StaticCollision {
     const T = GROUND_TOL;
     for (const pi of cell.p) {
       const P = this.prisms[pi];
-      if (!P.enabled || P.passBullets) continue;
+      if (!P.enabled || P.tag === 'wall') continue;
       if (x < P.minX - T || x > P.maxX + T || z < P.minZ - T || z > P.maxZ + T) continue;
       const top = this.topAt(P, x, z);
       if (top <= best || top > maxY) continue;
@@ -289,6 +293,30 @@ export class StaticCollision {
       if (pointInPolygon(x, z, P.pts, P.n)) best = P.base;
     }
     return best;
+  }
+
+  /**
+   * Ledge the player can mantle onto, probing ahead along the unit direction (dx,dz). The first probe that is inside
+   * something decides: a boundary wall or anything above MANTLE_MAX refuses, a top in (feetY + 0.9, feetY + MANTLE_MAX]
+   * with AGENT_HEIGHT of headroom is the ledge.
+   */
+  ledgeAt(x: number, z: number, dx: number, dz: number, feetY: number, r: number): { x: number; z: number; y: number } | null {
+    for (const s of [0.25, 0.45, 0.65]) {
+      const px = x + dx * (r + s), pz = z + dz * (r + s);
+      const cell = this.cellAt(px, pz);
+      if (!cell) continue;
+      let top = -Infinity;
+      for (const pi of cell.p) {
+        const P = this.prisms[pi];
+        if (!P.enabled || px < P.minX || px > P.maxX || pz < P.minZ || pz > P.maxZ || !pointInPolygon(px, pz, P.pts, P.n)) continue;
+        if (P.tag === 'wall') return null;
+        if (P.base <= feetY + MANTLE_MAX) top = Math.max(top, this.topAt(P, px, pz));
+      }
+      if (top <= feetY + 0.9) continue;
+      if (top > feetY + MANTLE_MAX || this.ceilingAt(px, pz, top) < top + AGENT_HEIGHT) return null;
+      return { x: px, z: pz, y: top };
+    }
+    return null;
   }
 
   /** Visit the tops of every solid whose footprint contains (x,z) (navigation candidates). Gates are skipped. */

@@ -390,8 +390,9 @@ export class World {
         }
       });
     }
+    // a mantling player is on a scripted path and is left alone
     for (const s of this.survivors) {
-      if (!s.alive) continue;
+      if (!s.alive || s.mantle) continue;
       this.forZombiesNear(s.pos.x, s.pos.z, 1.2, (z) => {
         if (!z.alive || Math.abs(z.pos.y - s.pos.y) > 1.2) return;
         const dx = s.pos.x - z.pos.x, dz = s.pos.z - z.pos.z;
@@ -406,7 +407,7 @@ export class World {
         }
       });
       for (const o of this.survivors) {
-        if (o === s || !o.alive || o.id < s.id || Math.abs(o.pos.y - s.pos.y) > 1.2) continue;
+        if (o === s || !o.alive || o.id < s.id || o.mantle || Math.abs(o.pos.y - s.pos.y) > 1.2) continue;
         const dx = o.pos.x - s.pos.x, dz = o.pos.z - s.pos.z;
         const min = s.radius + o.radius;
         const d2 = dx * dx + dz * dz;
@@ -588,6 +589,9 @@ export class World {
       p.vel.set(0, 0, 0);
       p.aiming = false;
       p.anim.aiming = false;
+      // downed mid-climb or mid-air: drop to the floor instead of hanging on the ledge face out of revive reach
+      p.mantle = null;
+      if (this.levels) this.moveBody(p, dt);
       return;
     }
     // weapon switching
@@ -598,6 +602,24 @@ export class World {
     const sprinting = input.sprint && input.moveZ > 0.1 && !wantsAim && !input.fire && p.reloadT < 0;
     p.aiming = wantsAim;
     p.anim.aiming = wantsAim || (input.fire && def.kind === 'gun') || p.sinceFire < 0.8;
+
+    // mantle in progress: scripted climb, no collision, movement, firing or interaction
+    if (p.mantle) {
+      const m = p.mantle;
+      m.t += dt / 0.45;
+      const t = Math.min(1, m.t), s = t * t * (3 - 2 * t);
+      p.pos.set(m.fx + (m.tx - m.fx) * s, m.fy + (m.ty - m.fy) * Math.min(1, t * 1.6), m.fz + (m.tz - m.fz) * s);
+      if (m.t >= 1) {
+        // zero velocity so the player stays on a narrow top (the gate strip is 0.5 m)
+        p.mantle = null;
+        p.grounded = true;
+        p.vy = 0;
+        p.vel.set(0, 0, 0);
+        this.events.emit('land', { actorId: p.id, position: p.pos });
+      }
+      p.prevFire = input.fire;
+      return;
+    }
 
     // movement
     const f = forwardFromYawPitch(input.yaw, 0, _v);
@@ -612,10 +634,19 @@ export class World {
     p.vel.x += (wx * speed - p.vel.x) * k;
     p.vel.z += (wz * speed - p.vel.z) * k;
     // jump + gravity
+    // jump: mantle onto a ledge ahead (move direction, else camera forward) when there is one, else a plain hop
     if (input.jump && p.grounded) {
-      p.vy = 5.0;
       p.grounded = false;
       this.events.emit('jump', { actorId: p.id, position: p.pos });
+      const ml = Math.hypot(wx, wz);
+      const l = this.levels ? this.collision.ledgeAt(p.pos.x, p.pos.z, ml > 0.1 ? wx / ml : f.x, ml > 0.1 ? wz / ml : f.z, p.pos.y, p.radius) : null;
+      if (l) {
+        p.mantle = { t: 0, fx: p.pos.x, fy: p.pos.y, fz: p.pos.z, tx: l.x, ty: l.y, tz: l.z };
+        p.vel.set(0, 0, 0);
+        p.prevFire = input.fire;
+        return;
+      }
+      p.vy = 5.0;
     }
     if (this.levels) {
       p.pos.x += p.vel.x * dt;

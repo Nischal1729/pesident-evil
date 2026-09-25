@@ -96,6 +96,8 @@ export class Survivor extends Actor {
   aimPitch = 0;
   aiming = false;
   aimOrigin = new THREE.Vector3();
+  /** Scripted climb onto a ledge (from f to t over 0.45 s), or null. */
+  mantle: { t: number; fx: number; fy: number; fz: number; tx: number; ty: number; tz: number } | null = null;
   vy = 0;
   grounded = true;
   kills = 0;
