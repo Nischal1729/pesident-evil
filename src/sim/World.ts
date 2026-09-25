@@ -3,7 +3,7 @@ import { EventBus, type GameEvents, type SurfaceKind } from '../core/Events';
 import type { PlayerInput } from '../core/Input';
 import { GATES, NPC_SPAWNS, PLAYER_SPAWN, PLAYER_SPAWN_YAW, SPAWN_ZONES, STATIONS, WORLD_BOUNDS, type StationDef, type V2 } from '../world/layout';
 import { distToSegment, rng } from '../world/geom';
-import { cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
+import { CAM, cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
 import { Survivor, Zombie, type Look, type ZombieType } from './actors';
 import { STEP_UP, type StaticCollision } from './Collision';
 import { LayeredNav } from './LayeredNav';
@@ -62,7 +62,7 @@ export interface InteractPrompt { text: string; progress: number; cost: number; 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
-const _camPos = new THREE.Vector3();
+const _aimPivot = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 const _dir2 = { x: 0, z: 0 };
 const _hitRes = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground' as SurfaceKind, tag: '' };
@@ -565,19 +565,27 @@ export class World {
     p.aimYaw = input.yaw;
     p.aimPitch = input.pitch;
     p.anim.aimPitch = input.pitch;
+    const def = p.def;
+    const wantsAim = input.aim && def.kind === 'gun';
+    // aim origin/dir for this tick: the render camera when the client supplied one, else the sim's own camera pose.
+    // Runs every tick (not just on fire) since the squad's aim-corridor check reads p.aimOrigin off the player.
+    if (Number.isFinite(input.camX)) {
+      p.aimOrigin.set(input.camX, input.camY, input.camZ);
+      forwardFromYawPitch(input.yaw, input.pitch, _camDir);
+    } else {
+      cameraPose(p.pos, input.yaw, input.pitch, wantsAim ? 1 : 0, p.aimOrigin, _camDir);
+    }
     if (p.downed) {
       p.vel.set(0, 0, 0);
       p.aiming = false;
       p.anim.aiming = false;
       return;
     }
-    const def = p.def;
     // weapon switching
     if (input.weaponSlot >= 0) this.switchWeapon(p, input.weaponSlot);
     else if (input.weaponScroll) this.switchWeapon(p, (p.current + input.weaponScroll + p.weapons.length) % p.weapons.length);
     if (input.reload) this.startReload(p);
 
-    const wantsAim = input.aim && def.kind === 'gun';
     const sprinting = input.sprint && input.moveZ > 0.1 && !wantsAim && !input.fire && p.reloadT < 0;
     p.aiming = wantsAim;
     p.anim.aiming = wantsAim || (input.fire && def.kind === 'gun') || p.sinceFire < 0.8;
@@ -647,8 +655,8 @@ export class World {
           p.fireCd = 0.25;
           if (p.slot.reserve <= 0 && !p.prevFire) this.events.emit('message', { text: 'Out of ammo — find an ammo crate (E)', kind: 'warn' });
         } else {
-          cameraPose(p.pos, input.yaw, input.pitch, wantsAim ? 1 : 0, _camPos, _camDir);
-          const aimPoint = this.aimPoint(_camPos, _camDir, 250, _v3);
+          _aimPivot.set(p.pos.x, p.pos.y + CAM.pivotY, p.pos.z);
+          const aimPoint = this.aimPoint(p.aimOrigin, _camDir, 250, _v3, _aimPivot);
           const muzzle = this.muzzlePos(p, _v);
           this.fire(p, muzzle, aimPoint, wantsAim);
         }
@@ -668,18 +676,24 @@ export class World {
     return out.set(s.pos.x, s.pos.y + (pistol ? 1.42 : 1.38), s.pos.z).addScaledVector(r, pistol ? 0.18 : 0.22).addScaledVector(f, pistol ? 0.62 : 0.78);
   }
 
-  /** First thing the camera ray hits (static geometry or a zombie), or a far point. */
-  aimPoint(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, out: THREE.Vector3): THREE.Vector3 {
+  /**
+   * First thing the camera ray hits (static geometry or a zombie), or a far point.
+   * `pivot` is the point near the player the ray should be judged from (e.g. the shoulder pivot): geometry or
+   * zombies between `origin` and `pivot` are ignored, so a render camera sitting behind or beside the player
+   * (far/high views, or one pulled through a wall) can't capture the aim on something in front of it.
+   */
+  aimPoint(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, out: THREE.Vector3, pivot: THREE.Vector3): THREE.Vector3 {
+    const tStart = Math.max(0, (pivot.x - origin.x) * dir.x + (pivot.y - origin.y) * dir.y + (pivot.z - origin.z) * dir.z);
     let best = maxDist;
-    const h = this.collision.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, maxDist, _hitRes, true);
-    if (h) best = h.dist;
+    const h = this.collision.raycast(origin.x + dir.x * tStart, origin.y + dir.y * tStart, origin.z + dir.z * tStart, dir.x, dir.y, dir.z, maxDist - tStart, _hitRes, true);
+    if (h) best = tStart + h.dist;
     for (const z of this.zombies) {
       if (!z.alive) continue;
       const t = rayZombie(z, origin, dir, best);
-      if (t && t.t < best) best = t.t;
+      if (t && t.t < best && t.t >= tStart) best = t.t;
     }
-    // don't aim at points behind/very close to the camera (inside the shoulder zone)
-    best = Math.max(best, 2.5);
+    // don't aim at points behind/very close to the pivot (inside the shoulder zone)
+    best = Math.max(best, tStart + 1.0);
     return out.copy(origin).addScaledVector(dir, best);
   }
 

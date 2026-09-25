@@ -34,6 +34,7 @@ npm run build
 | V or Q | Quick bat swing |
 | F | Squad: hold position / follow me |
 | C | Swap shoulder |
+| T | Camera: near / far / high |
 | N | Start the next wave now |
 | Esc / P | Pause |
 

@@ -14,7 +14,7 @@ const CONTROLS: [string, string][] = [
   ['W A S D', 'Move'], ['Mouse', 'Look / aim'], ['Left click', 'Shoot / swing bat'], ['Right click', 'Aim down sights'],
   ['Shift', 'Sprint'], ['Space', 'Jump'], ['R', 'Reload'], ['E (hold)', 'Interact · buy · revive · repair gate'],
   ['1-4 / wheel', 'Switch weapon'], ['V / Q', 'Quick bat swing'], ['F', 'Squad: hold position / follow me'], ['C', 'Swap shoulder'],
-  ['N', 'Start next wave now'], ['Esc / P', 'Pause'],
+  ['T', 'Camera: near / far / high'], ['N', 'Start next wave now'], ['Esc / P', 'Pause'],
 ];
 
 const TIPS = [

@@ -95,6 +95,7 @@ export class Survivor extends Actor {
   aimYaw = 0;
   aimPitch = 0;
   aiming = false;
+  aimOrigin = new THREE.Vector3();
   vy = 0;
   grounded = true;
   kills = 0;

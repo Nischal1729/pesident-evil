@@ -7,6 +7,7 @@ export interface PlayerInput {
   moveZ: number; // -1..1 forward (+)
   yaw: number; // radians, camera yaw (0 = looking toward -Z)
   pitch: number; // radians, + looks up
+  camX: number; camY: number; camZ: number; // world-space render camera position; NaN = not provided
   fire: boolean;
   aim: boolean;
   sprint: boolean;
@@ -23,7 +24,7 @@ export interface PlayerInput {
 
 export function emptyInput(): PlayerInput {
   return {
-    moveX: 0, moveZ: 0, yaw: 0, pitch: 0, fire: false, aim: false, sprint: false,
+    moveX: 0, moveZ: 0, yaw: 0, pitch: 0, camX: NaN, camY: NaN, camZ: NaN, fire: false, aim: false, sprint: false,
     reload: false, interact: false, interactPressed: false, jump: false, melee: false, command: false,
     weaponSlot: -1, weaponScroll: 0,
   };

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { cameraPivot, cameraPose } from '../sim/aim';
+import { cameraPivot, cameraPose, CAM_VIEWS, type CamView } from '../sim/aim';
 import type { StaticCollision } from '../sim/Collision';
 
 const _desired = new THREE.Vector3();
@@ -16,6 +16,8 @@ export class CameraRig {
   baseFov = 62;
   shoulderSide = 1;
   private shoulderS = 1;
+  view = 0; // index into CAM_VIEWS, cycled with T
+  private easedView: CamView = { ...CAM_VIEWS[0] };
 
   constructor(private camera: THREE.PerspectiveCamera, private collision: StaticCollision) {}
 
@@ -27,6 +29,11 @@ export class CameraRig {
     this.t += dt;
     this.aimBlend += ((aiming ? 1 : 0) - this.aimBlend) * Math.min(1, dt * 11);
     this.shoulderS += (this.shoulderSide - this.shoulderS) * Math.min(1, dt * 8);
+    const tv = CAM_VIEWS[this.view];
+    const ve = Math.min(1, dt * 6);
+    this.easedView.dist += (tv.dist - this.easedView.dist) * ve;
+    this.easedView.shoulder += (tv.shoulder - this.easedView.shoulder) * ve;
+    this.easedView.up += (tv.up - this.easedView.up) * ve;
     this.shake = Math.max(0, this.shake - dt * 2.2);
     const tgt = _pivot.copy(target);
     // smooth the pivot height so snapping up steps / onto ramps doesn't jolt the camera (jumps still read)
@@ -34,8 +41,8 @@ export class CameraRig {
     else this.pivotY += (tgt.y - this.pivotY) * Math.min(1, dt * 14);
     tgt.y = this.pivotY;
     if (downed) tgt.y -= 0.9;
-    cameraPose(tgt, yaw, pitch, this.aimBlend, _desired, _dir, this.shoulderS);
-    cameraPivot(tgt, yaw, this.aimBlend, _pivot, this.shoulderS);
+    cameraPose(tgt, yaw, pitch, this.aimBlend, _desired, _dir, this.shoulderS, this.easedView);
+    cameraPivot(tgt, yaw, this.aimBlend, _pivot, this.shoulderS, this.easedView);
     // collision pull-in (sphere-ish: test a few rays)
     const toCam = _desired.clone().sub(_pivot);
     const full = toCam.length();

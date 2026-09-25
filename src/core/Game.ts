@@ -15,6 +15,7 @@ import { CharacterManager, WeaponModels } from '../render/Characters';
 import { GlbCharacterLibrary } from '../render/GlbCharacters';
 import { gateInward, World } from '../sim/World';
 import type { Look } from '../sim/actors';
+import { CAM_VIEWS } from '../sim/aim';
 import { WEAPONS } from '../sim/weapons';
 import { Hud } from '../ui/Hud';
 import { Menu } from '../ui/Menu';
@@ -110,6 +111,7 @@ export class Game {
       if (this.state !== 'playing' || !this.world) return;
       if (e.code === 'KeyN') this.world.skipPrep();
       if (e.code === 'KeyC') this.rig.shoulderSide *= -1;
+      if (e.code === 'KeyT') this.rig.view = (this.rig.view + 1) % CAM_VIEWS.length;
     });
     this.applySettings(this.settings, false);
 
@@ -317,6 +319,7 @@ export class Game {
           this.input.sample(this.pin, first);
           if (!this.input.locked) { this.pin.fire = false; this.pin.aim = false; this.pin.moveX = this.pin.moveZ = 0; }
           if (this.pin.command) w.toggleNpcMode();
+          this.pin.camX = e.camera.position.x; this.pin.camY = e.camera.position.y; this.pin.camZ = e.camera.position.z;
           this.inputs.set(w.localPlayerId, this.pin);
           w.update(this.fixed, this.inputs);
           this.pin.command = false;
