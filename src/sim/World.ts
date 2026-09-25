@@ -66,7 +66,7 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _aimPivot = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
-const _dir2 = { x: 0, z: 0 };
+const _dir2 = { x: 0, z: 0, y: 0, thin: false };
 const _hitRes = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground' as SurfaceKind, tag: '' };
 
 // Follow-mode trail: an NPC stands its ground until it falls too far behind, then walks to its formation slot.
@@ -93,6 +93,8 @@ type Walker = { pos: THREE.Vector3; prev: THREE.Vector3; radius: number; height:
 const GRAVITY = 16;
 /** Falls higher than this hurt survivors. */
 const SAFE_FALL = 4;
+/** Seconds one timed climb (a rise of at most CLIMB_MAX) takes. */
+const CLIMB_DUR = { player: 0.45, npc: 0.6, walker: 0.9, runner: 0.55, brute: 1.2, crawler: 1.4 };
 
 /**
  * Authoritative game simulation. Rendering reads its state; audio/fx/UI listen to events.
@@ -333,13 +335,10 @@ export class World {
     this.fieldT -= dt;
     if (this.fieldT > 0) return;
     this.fieldT = 0.3;
-    // a survivor mantled onto a gate top has no nav node under its feet (the graph skips gates), which would leave the
-    // field empty and zombies pressing on the bars; target the gate's ground node instead, so they bash the gate down
-    const navY = (s: Survivor) => this.levels && s.pos.y > 2 && this.gates.some((g) => !g.broken && distToSegment(s.pos.x, s.pos.z, g.a[0], g.a[1], g.b[0], g.b[1]) < 0.6) ? 0 : s.pos.y;
-    const targets = this.survivors.filter((s) => s.alive).map((s) => ({ x: s.pos.x, y: navY(s), z: s.pos.z }));
+    const targets = this.survivors.filter((s) => s.alive).map((s) => ({ x: s.pos.x, y: s.pos.y, z: s.pos.z }));
     if (targets.length) this.nav.request('zombie', targets);
     const p = this.player;
-    if (p && p.alive) this.nav.request('player', [{ x: p.pos.x, y: navY(p), z: p.pos.z }], 12000);
+    if (p && p.alive) this.nav.request('player', [{ x: p.pos.x, y: p.pos.y, z: p.pos.z }], 12000);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -378,9 +377,9 @@ export class World {
     // zombie-zombie and zombie-survivor soft separation
     for (let i = 0; i < this.zombies.length; i++) {
       const a = this.zombies[i];
-      if (!a.alive) continue;
+      if (!a.alive || a.mantle) continue;
       this.forZombiesNear(a.pos.x, a.pos.z, 1.2, (b, j) => {
-        if (j <= i || !b.alive || Math.abs(b.pos.y - a.pos.y) > 1.2) return;
+        if (j <= i || !b.alive || b.mantle || Math.abs(b.pos.y - a.pos.y) > 1.2) return;
         const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
         const min = a.radius + b.radius;
         const d2 = dx * dx + dz * dz;
@@ -393,11 +392,11 @@ export class World {
         }
       });
     }
-    // a mantling player is on a scripted path and is left alone
+    // a climbing body is on a scripted path and is left alone
     for (const s of this.survivors) {
       if (!s.alive || s.mantle) continue;
       this.forZombiesNear(s.pos.x, s.pos.z, 1.2, (z) => {
-        if (!z.alive || Math.abs(z.pos.y - s.pos.y) > 1.2) return;
+        if (!z.alive || z.mantle || Math.abs(z.pos.y - s.pos.y) > 1.2) return;
         const dx = s.pos.x - z.pos.x, dz = s.pos.z - z.pos.z;
         const min = s.radius + z.radius;
         const d2 = dx * dx + dz * dz;
@@ -421,8 +420,11 @@ export class World {
           o.pos.x += (dx / d) * push; o.pos.z += (dz / d) * push;
         }
       }
-      if (this.levels) this.collision.resolveBody(s.pos, s.radius, s.pos.y, s.height);
-      else this.collision.resolveCircle(s.pos, s.radius, s.pos.y + 0.3);
+      if (this.levels) {
+        this.collision.resolveBody(s.pos, s.radius, s.pos.y, s.height);
+        // after every move and push this tick: nobody leaves the campus over a wall, gate or the median
+        this.collision.clampLip(s.pos, s.pos.y);
+      } else this.collision.resolveCircle(s.pos, s.radius, s.pos.y + 0.3);
     }
   }
 
@@ -464,6 +466,38 @@ export class World {
   private collideWalker(a: Walker, dt: number): void {
     if (this.levels) this.moveBody(a, dt);
     else this.collision.resolveCircle(a.pos, a.radius, 0.3);
+  }
+
+  /**
+   * AI climb: a grounded body whose next step (nav node or chase target) is more than STEP_UP above its feet starts a
+   * timed climb when ledgeAt finds a climbable top ahead along (dx, dz). The caller ignores its steering while it runs.
+   */
+  private tryClimb(a: Survivor | Zombie, dx: number, dz: number, nextY: number, dur: number): boolean {
+    if (!this.levels || !a.grounded || nextY <= a.pos.y + STEP_UP + 0.02) return false;
+    const l = this.collision.ledgeAt(a.pos.x, a.pos.z, dx, dz, a.pos.y, a.radius);
+    if (!l) return false;
+    this.startClimb(a, l, dur);
+    return true;
+  }
+
+  private startClimb(a: Survivor | Zombie, l: { x: number; y: number; z: number }, dur: number): void {
+    a.mantle = { t: 0, dur, fx: a.pos.x, fy: a.pos.y, fz: a.pos.z, tx: l.x, ty: l.y, tz: l.z };
+    a.vel.set(0, 0, 0);
+    a.grounded = false;
+  }
+
+  /** Advance a timed climb: no collision or steering until it ends, grounded and at rest (a gate top is 0.5 m wide). */
+  private stepClimb(a: Survivor | Zombie, dt: number): void {
+    const m = a.mantle!;
+    m.t += dt / m.dur;
+    const t = Math.min(1, m.t), s = t * t * (3 - 2 * t);
+    a.pos.set(m.fx + (m.tx - m.fx) * s, m.fy + (m.ty - m.fy) * Math.min(1, t * 1.6), m.fz + (m.tz - m.fz) * s);
+    if (m.t >= 1) {
+      a.mantle = null;
+      a.grounded = true;
+      a.vy = 0;
+      a.vel.set(0, 0, 0);
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -608,18 +642,8 @@ export class World {
 
     // mantle in progress: scripted climb, no collision, movement, firing or interaction
     if (p.mantle) {
-      const m = p.mantle;
-      m.t += dt / 0.45;
-      const t = Math.min(1, m.t), s = t * t * (3 - 2 * t);
-      p.pos.set(m.fx + (m.tx - m.fx) * s, m.fy + (m.ty - m.fy) * Math.min(1, t * 1.6), m.fz + (m.tz - m.fz) * s);
-      if (m.t >= 1) {
-        // zero velocity so the player stays on a narrow top (the gate strip is 0.5 m)
-        p.mantle = null;
-        p.grounded = true;
-        p.vy = 0;
-        p.vel.set(0, 0, 0);
-        this.events.emit('land', { actorId: p.id, position: p.pos });
-      }
+      this.stepClimb(p, dt);
+      if (!p.mantle) this.events.emit('land', { actorId: p.id, position: p.pos });
       p.prevFire = input.fire;
       return;
     }
@@ -644,8 +668,7 @@ export class World {
       const ml = Math.hypot(wx, wz);
       const l = this.levels ? this.collision.ledgeAt(p.pos.x, p.pos.z, ml > 0.1 ? wx / ml : f.x, ml > 0.1 ? wz / ml : f.z, p.pos.y, p.radius) : null;
       if (l) {
-        p.mantle = { t: 0, fx: p.pos.x, fy: p.pos.y, fz: p.pos.z, tx: l.x, ty: l.y, tz: l.z };
-        p.vel.set(0, 0, 0);
+        this.startClimb(p, l, CLIMB_DUR.player);
         p.prevFire = input.fire;
         return;
       }
@@ -881,6 +904,8 @@ export class World {
     else { z.anim.deathVariant = 0; z.deathYaw = Math.atan2(hx, hz); }
     z.anim.attackP = -1;
     z.vel.set(0, 0, 0);
+    // killed mid-climb: the corpse lies where the climb started, not in the air against the face
+    if (z.mantle) { z.pos.set(z.mantle.fx, z.mantle.fy, z.mantle.fz); z.mantle = null; }
     this.totalKills++;
     if (by) {
       by.kills++;
@@ -1166,6 +1191,13 @@ export class World {
       this.events.emit('zombieGroan', { id: z.id, position: z.pos, kind: z.type === 'runner' && !z.alerted ? 'scream' : this.rand() < 0.3 ? 'near' : 'groan' });
       if (z.type === 'runner') z.alerted = true;
     }
+    if (z.mantle) {
+      this.stepClimb(z, dt);
+      // arms-forward lunge: the attack pose, driven by the climb's progress
+      a.attackP = z.mantle ? z.mantle.t : -1;
+      a.speed = 0;
+      return;
+    }
     // target selection
     z.retargetT -= dt;
     let target = this.findSurvivor(z.targetId);
@@ -1238,13 +1270,22 @@ export class World {
         // steering LOS: gate bars are see-through but not walk-through, so a closed gate sends it to the field (bash)
         z.hasLos = dist < 14 && this.collision.los(z.pos.x, z.pos.y + 1.2, z.pos.z, target.pos.x, target.pos.y + 1.2, target.pos.z, true);
       }
-      if (z.hasLos && dist > 0.1) {
+      // a straight line to the target that walks off an edge (a wall or gate top, a stack tier) follows the graph instead;
+      // the probe runs 1.2 m ahead, since steering lags the heading by ~0.3 s
+      const ledge = z.hasLos && dist > 0.1 && this.levels && ((this.nav as LayeredNav).thinAt(z.pos.x, z.pos.z, z.pos.y)
+        || z.pos.y - this.collision.groundAt(z.pos.x + (dx / dist) * 1.2, z.pos.z + (dz / dist) * 1.2, z.pos.y + STEP_UP) > STEP_UP);
+      if (z.hasLos && dist > 0.1 && !ledge) {
         desiredX = dx / dist; desiredZ = dz / dist;
         z.state = 'chase';
+        if (this.tryClimb(z, desiredX, desiredZ, target.pos.y, CLIMB_DUR[z.type])) return;
       } else {
+        _dir2.y = -Infinity;
         const gi = this.nav.descend('zombie', z.pos.x, z.pos.z, _dir2, z.pos.y);
         if (gi === -2) { desiredX = dx / (dist || 1); desiredZ = dz / (dist || 1); }
-        else { desiredX = _dir2.x; desiredZ = _dir2.z; }
+        else {
+          desiredX = _dir2.x; desiredZ = _dir2.z;
+          if (this.tryClimb(z, desiredX, desiredZ, _dir2.y, CLIMB_DUR[z.type])) { z.state = 'chase'; return; }
+        }
         // at a closed gate?
         const gate = gi >= 0 ? this.gates[gi] : null;
         if (gate && !gate.broken) {
@@ -1316,7 +1357,13 @@ export class World {
     const b = this.brains.get(n.id)!;
     const p = this.player;
     n.anim.reviving = false;
-    if (n.downed) { n.vel.set(0, 0, 0); return; }
+    if (n.downed) {
+      n.vel.set(0, 0, 0);
+      // downed mid-climb: drop to the floor, as the player does
+      if (n.mantle) { n.mantle = null; if (this.levels) this.moveBody(n, dt); }
+      return;
+    }
+    if (n.mantle) { this.stepClimb(n, dt); return; }
     b.thinkT -= dt;
     let target = b.targetId ? this.zombies.find((z) => z.id === b.targetId && z.alive) : undefined;
     if (b.thinkT <= 0) {
@@ -1431,10 +1478,15 @@ export class World {
     const stopDist = urgent ? 1.1 : followingPlayer ? 1.4 : 0.8;
     if (gdist > stopDist || aimClear) {
       speed = gdist > 9 || urgent ? 4.6 : gdist > 4 ? 3.4 : 2.2;
+      _dir2.y = -Infinity;
       const direct = gdist < 10 && Math.abs(goal.y - n.pos.y) < 0.6 && this.collision.los(n.pos.x, n.pos.y + 1.0, n.pos.z, goal.x, goal.y + 1.0, goal.z);
       if (direct) { mx = gdx / gdist; mz = gdz / gdist; }
-      else if ((followingPlayer || (urgent && reviveT === p)) && this.nav.descend('player', n.pos.x, n.pos.z, _dir2, n.pos.y) >= -1 && (_dir2.x || _dir2.z)) { mx = _dir2.x; mz = _dir2.z; }
-      else { mx = gdx / gdist; mz = gdz / gdist; }
+      else if ((followingPlayer || (urgent && reviveT === p)) && this.nav.descend('player', n.pos.x, n.pos.z, _dir2, n.pos.y) >= -1 && (_dir2.x || _dir2.z)) {
+        mx = _dir2.x; mz = _dir2.z;
+        // the squad climbs stack tiers but not onto a thin top (gate, wall): the tier below is as far as it goes
+        if (_dir2.thin && _dir2.y > n.pos.y + STEP_UP + 0.02) speed = 0;
+        else if (this.tryClimb(n, mx, mz, _dir2.y, CLIMB_DUR.npc)) return;
+      } else { mx = gdx / gdist; mz = gdz / gdist; }
     }
     if (aimClear) speed = Math.max(speed, 3.0);
     // kite away from close zombies

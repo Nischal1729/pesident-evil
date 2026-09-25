@@ -54,6 +54,8 @@ export class Actor {
   maxHealth = 100;
   alive = true;
   anim: AnimHints = newAnim();
+  /** Timed climb onto a ledge (from f to t, progress t over dur seconds), or null. */
+  mantle: { t: number; dur: number; fx: number; fy: number; fz: number; tx: number; ty: number; tz: number } | null = null;
   constructor(public kind: ActorKind) {}
 
   snapshotPrev(): void {
@@ -96,8 +98,6 @@ export class Survivor extends Actor {
   aimPitch = 0;
   aiming = false;
   aimOrigin = new THREE.Vector3();
-  /** Scripted climb onto a ledge (from f to t over 0.45 s), or null. */
-  mantle: { t: number; fx: number; fy: number; fz: number; tx: number; ty: number; tz: number } | null = null;
   vy = 0;
   grounded = true;
   kills = 0;
