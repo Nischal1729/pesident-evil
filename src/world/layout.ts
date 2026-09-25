@@ -202,13 +202,25 @@ export const GJB_INTERIORS = {
  * walkway, pedestrian stair at the south end by the food court, white-roofed covered bay on the deck at the north end.
  */
 /**
+ * The campus slope (user, 2026-09-25): the ground falls from the main gate towards GJB. The entry corridor (road,
+ * walkways, the 2-wheeler parking's yard), the gate forecourt, the PES Lawn and the Ring Road near the gate sit one
+ * storey (`h`) above GJB level; the entry road, its walkways and the PES Lawn promenade descend to GJB level between
+ * slopeX1 and slopeX0, and the Ring Road outside the campus between orrX1 and orrX0. Shapes and the lift of everything
+ * standing on the raised ground: src/world/terrain.ts.
+ */
+export const TERRAIN = { h: 3.2, slopeX0: 92, slopeX1: 118, orrX0: 96, orrX1: 140 };
+/** Raised-ground height on the entry-road slope at x (the ramp foot, the walkway ends). */
+export function slopeY(x: number): number {
+  return TERRAIN.h * Math.min(1, Math.max(0, (x - TERRAIN.slopeX0) / (TERRAIN.slopeX1 - TERRAIN.slopeX0)));
+}
+/**
  * 2-wheeler parking (user's description 2026-09-25; GJB tour 0:40–0:47): the campus falls from the main gate towards
  * GJB, so the -1 floor sits at GJB / lawn level (`low`) and the ground floor one storey up at the level of the entry
  * walkway it opens off (`road`). Above the covered part of the ground floor is an empty roof (`roof`).
  */
 export const PARKING = {
   x0: 120, x1: 137.5, z0: -111, z1: -30,
-  low: 0, road: 3.2, roof: 6.4, slabT: 0.35,
+  low: 0, road: TERRAIN.h, roof: TERRAIN.h + 3.2, slabT: 0.35,
   /** open-air north yard of the ground floor (z0 … yardZ), straight off the walkway; covered floor south of it */
   yardZ: -97,
   /** vehicle lane to the -1 floor: branches left (east) off the yard and runs south along the back wall, down from
@@ -225,7 +237,7 @@ export const PARKING = {
   labs: { z0: -49.5, xMid: 128.75, lobbyX1: 133.5, huaZ0: -42.4 },
   /** reflecting pool at the north end of the east lawn, under the entry walkway's tall grey retaining wall */
   pool: { x0: 105, x1: 117.5, z0: -108.4, z1: -105.4 },
-  retainingWall: { x0: 104, x1: 119.6, z: -110.4, h: 2.4 },
+  retainingWall: { x0: 104, x1: 119.6, z: -110.4, h: 1.0 }, // parapet above the raised walkway (its face to the pool is terrain)
   /** campus east boundary line (the parking's back wall), z range */
   backX: 137.72, backZ0: -110.8, backZ1: -30.3,
 };
@@ -235,14 +247,14 @@ export const PARKING_FOOTPRINT: V2[] = [[PARKING.x0, PARKING.z0], [PARKING.x1, P
  * of the entry road to an L1 landing beside the porte-cochère, under the PES signboard; the landing joins the L1 porch
  * over the drive-through (→ covered plaza → Quad) and a glazed L1 bridge crosses the MRD loop road into MRD.
  */
-export const FRONT_RAMP = { xFoot: 110, xTop: 86, z0: -136.3, z1: -131.9, landing: { x0: 78.9, x1: 86, zN: -137.8 } };
+export const FRONT_RAMP = { xFoot: 110, xTop: 86, z0: -136.3, z1: -131.9, landing: { x0: 78.9, x1: 86, zN: -137.8 }, footY: slopeY(110) };
 /**
  * Raised terrace on the north side of the east plaza (2026 tour 0216 / sheet 2:08: a wide granite stair climbs north
  * from the plaza between white cheek walls to a white pavilion; Google satellite: the paved strip x ≈ 103–113 running
  * north from the plaza into the PES Lawn path). Walkable: stair up from the plaza, ramp down north onto the lawn path.
  */
 export const PLAZA_TERRACE = {
-  x0: 96, x1: 114, zS: -153.4, zN: -162, y: 2.4,
+  x0: 96, x1: 114, zS: -153.4, zN: -162, y: TERRAIN.h, // flush with the raised PES Lawn behind it
   stair: { x0: 102.5, x1: 108.5, zFoot: -148.2 },
   ramp: { x0: 103, x1: 108, zEnd: -173 },
   pavilion: { x0: 108.5, x1: 114, zS: -157, h: 3.4 },

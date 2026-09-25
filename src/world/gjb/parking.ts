@@ -31,12 +31,6 @@ const MID_X = (X0 + X1) / 2; // = L.xMid: the middle column line doubles as the 
 const COLS_Z = [-104, -97.3, -90.6, -83.9, -77.2, -70.5, -63.8, -57.1, -50.4, -43.7, -37];
 /** bike-row centre lines (x); yaw π/2 = nose east, −π/2 = nose west */
 const ROW_W = X0 + 1.25, ROW_MW = MID_X - 0.95, ROW_ME = MID_X + 0.95, ROW_LANE = P.laneX - 1.25, ROW_E = X1 - 1.25;
-/**
- * Until the entry corridor is raised to road level (the campus slope), the yard is reached from the flat walkway by a
- * temporary ramp over the entry strip. Remove this (and the ramp below) once the terrain lands.
- */
-const FLAT_CAMPUS_ACCESS = true;
-const ACCESS_Z = -117.5;
 /** PIL door (lobby → PIL, z range in the dividing wall) and Huawei lab door (lobby → Huawei, x range in its north wall) */
 const PIL_DOOR: V2 = [-48.9, -47.1];
 const HUAWEI_DOOR: V2 = [130.1, 131.9];
@@ -195,25 +189,6 @@ export function buildParking(kit: WorldKit): void {
   kit.box('dark', lx1 - 0.49, ROAD + 1.45, Z0 + 1.0, 0.02, 0.35, 0.4, 0, col('#c0392b'));
   c.addPolygon(rect(lx1 - 0.48, Z0 + 0.7, lx1 - 0.22, Z0 + 1.3), 2.0, 'concrete', 'post', ROAD);
 
-  // --- temporary access from the flat walkway up to the yard (see FLAT_CAMPUS_ACCESS)
-  if (FLAT_CAMPUS_ACCESS) {
-    const ab = kit.buf('concrete', MID_X, (ACCESS_Z + Z0) / 2);
-    const len = Math.hypot(Z0 - ACCESS_Z, ROAD), ny = (Z0 - ACCESS_Z) / len, nz = -ROAD / len;
-    const i0 = ab.vert(X0, 0.02, ACCESS_Z, 0, ny, nz, X0, ACCESS_Z, laneCol), i1 = ab.vert(X1, 0.02, ACCESS_Z, 0, ny, nz, X1, ACCESS_Z, laneCol);
-    const i2 = ab.vert(X1, ROAD + 0.02, Z0, 0, ny, nz, X1, Z0, laneCol), i3 = ab.vert(X0, ROAD + 0.02, Z0, 0, ny, nz, X0, Z0, laneCol);
-    ab.quad(i0, i3, i2, i1);
-    for (const x of [X0 + 0.12, X1 - 0.12]) {
-      const b0 = kit.buf('concrete', x, (ACCESS_Z + Z0) / 2);
-      const n = 6;
-      for (let k = 0; k < n; k++) {
-        const za = ACCESS_Z + ((Z0 - ACCESS_Z) * k) / n, zb = ACCESS_Z + ((Z0 - ACCESS_Z) * (k + 1)) / n;
-        const h = (ROAD * (k + 1)) / n;
-        b0.box(x, h / 2, (za + zb) / 2, 0.24, h, zb - za + 0.01, 0, darkWall, 0.5);
-      }
-    }
-    c.addRamp(rect(X0, ACCESS_Z, X1, Z0), [MID_X, ACCESS_Z], [MID_X, Z0], 0, ROAD, 'concrete', 'ramp');
-  }
-
   // --- tube lights under the ground-floor slab (-1 floor) and under the roof (covered ground floor)
   for (let z = Z0 + 4; z < Z1 - 1; z += 6.5) for (const x of [X0 + 3.5, X1 - 3.5]) {
     if (!(x > P.laneX && z < P.rampZ)) kit.box('emissive', x, ROAD - T - 0.03, z, 0.1, 0.05, 1.2, 0, col('#ffffff'));
@@ -239,11 +214,17 @@ export function buildParking(kit: WorldKit): void {
 
   buildLabs(kit);
 
-  // --- reflecting pool at the north end of the lawn, under the entry walkway's tall grey retaining wall (1:04–1:08)
+  // --- reflecting pool at the north end of the lawn, under the entry walkway's tall grey retaining wall (1:04–1:08).
+  // The walkway above stands on the raised ground (src/world/terrain.ts draws the retaining face down to the pool); this
+  // is its parapet, built flat and lifted onto the walkway's slope piece by piece.
   const W = P.retainingWall;
-  kit.segBox('concrete', [W.x0, W.z], [W.x1, W.z], 0, W.h, 0.35, darkWall, 0, 0, 0.5);
-  kit.segBox('granite', [W.x0, W.z], [W.x1, W.z], W.h, W.h + 0.08, 0.45, col('#2c2e30'));
-  c.addSegment([W.x0, W.z], [W.x1, W.z], 0.35, W.h, 'concrete', 'wall');
+  const wp = Math.ceil((W.x1 - W.x0) / 2);
+  for (let k = 0; k < wp; k++) {
+    const xa = W.x0 + ((W.x1 - W.x0) * k) / wp, xb = W.x0 + ((W.x1 - W.x0) * (k + 1)) / wp;
+    kit.segBox('concrete', [xa, W.z], [xb, W.z], 0, W.h, 0.35, darkWall, 0, 0.01, 0.5);
+    kit.segBox('granite', [xa, W.z], [xb, W.z], W.h, W.h + 0.08, 0.45, col('#2c2e30'), 0, 0.01);
+    c.addSegment([xa, W.z], [xb, W.z], 0.35, W.h + 0.08, 'concrete', 'wall');
+  }
   hedgeBox(kit, 'hedge', [W.x0 + 1.5, W.z + 0.6], [W.x1 - 0.5, W.z + 0.6], 0, 0.7, 0.7);
   const Q = P.pool;
   const pc = col('#34373a');

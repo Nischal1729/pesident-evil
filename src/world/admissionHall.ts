@@ -15,7 +15,8 @@ import { pottedPlant } from './shapes';
  */
 const F = new PlanFrame([156.2, -120.5], [1, 0], [0, 1]);
 const H = 3.5, CEIL = 3.3;
-const DOOR: V2 = [6.8, 9.2];
+// west of the gate's south pillar (x 162–166 since the gate moved to x 164; the pillar is built into this building)
+const DOOR: V2 = [2.8, 5.0];
 const GLAZE: V2 = [2.0, 14.0];
 
 export function buildAdmissionHall(kit: WorldKit): void {

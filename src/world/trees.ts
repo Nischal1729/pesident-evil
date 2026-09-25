@@ -110,6 +110,19 @@ export class TreeSystem {
     this.leafMat.visible = tex.leavesLoaded;
     tex.ready.then(() => { this.barkMat.visible = true; this.leafMat.visible = true; });
     this.group.name = 'trees';
+    this.group.userData.noTerrain = true; // lifted through applyTerrain (the batches rebuild from the tree matrices)
+  }
+
+  /** Lift every tree by f(x, z) (the campus terrain, src/world/terrain.ts). Call after build(). */
+  applyTerrain(f: (x: number, z: number) => number): void {
+    for (const t of this.trees) {
+      const dy = f(t.m.elements[12], t.m.elements[14]);
+      if (!dy) continue;
+      t.m.elements[13] += dy;
+      t.pos.y += dy;
+      for (const b of [this.bark, this.leaves]) if (b && t.idA >= 0) { b.setMatrixAt(t.idA, t.m); b.setMatrixAt(t.idB, t.m); }
+    }
+    this.lastCam.set(1e9, 0, 0); // force a full LOD pass (the impostors copy t.m)
   }
 
   /** `y` lifts the tree onto a planter / terrace (default: ground). */

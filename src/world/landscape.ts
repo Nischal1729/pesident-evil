@@ -310,7 +310,7 @@ export function buildLandscape(kit: WorldKit): void {
 /**
  * Terrace on the east plaza's north side (layout PLAZA_TERRACE): white-plastered retaining walls with a granite coping,
  * a 6 m granite stair up from the plaza between white cheek walls, a white pavilion with dark glazing on its north-east
- * corner, planting beds on top and a ramp down north onto the PES Lawn path. Walkable (podium + stair/ramp prisms).
+ * corner and planting beds on top; its north edge opens onto the raised PES Lawn (layout.ts TERRAIN). Walkable.
  */
 function plazaTerrace(kit: WorldKit): void {
   const T = PLAZA_TERRACE, y = T.y;
@@ -350,24 +350,8 @@ function plazaTerrace(kit: WorldKit): void {
       }
     }
   }
-  // ramp down north onto the lawn path, with white cheek walls
-  {
-    const { x0, x1, zEnd } = T.ramp;
-    const b = kit.buf('granite', (x0 + x1) / 2, (T.zN + zEnd) / 2);
-    const len = T.zN - zEnd, sl = y / len, nl = Math.hypot(1, sl);
-    const i0 = b.vert(x0, y, T.zN, 0, 1 / nl, sl / nl, 0, 0, granite), i1 = b.vert(x1, y, T.zN, 0, 1 / nl, sl / nl, (x1 - x0) / 1.2, 0, granite);
-    const i2 = b.vert(x1, 0.06, zEnd, 0, 1 / nl, sl / nl, (x1 - x0) / 1.2, len / 1.2, granite), i3 = b.vert(x0, 0.06, zEnd, 0, 1 / nl, sl / nl, 0, len / 1.2, granite);
-    b.quad(i0, i3, i2, i1);
-    kit.collision.addRamp(rect(x0, zEnd, x1, T.zN), [(x0 + x1) / 2, T.zN], [(x0 + x1) / 2, zEnd], y, 0, 'concrete', 'ramp');
-    for (const xs of [x0 - 0.15, x1 + 0.15]) {
-      for (let k = 0; k < 4; k++) {
-        const za = T.zN - (len * k) / 4, zb = T.zN - (len * (k + 1)) / 4, h = y * (1 - k / 4) + 0.9;
-        kit.box('plaster', xs, h / 2, (za + zb) / 2, 0.3, h, Math.abs(zb - za), 0, white, 0.5);
-        kit.box('granite', xs, h + 0.04, (za + zb) / 2, 0.38, 0.08, Math.abs(zb - za), 0, coping);
-        kit.collision.addPolygon(rect(xs - 0.15, Math.min(za, zb), xs + 0.15, Math.max(za, zb)), h + 0.08, 'concrete', 'wall');
-      }
-    }
-  }
+  // (the terrace used to ramp down north onto the lawn path; the PES Lawn is raised to the terrace's level now,
+  // layout.ts TERRAIN, so its north edge opens straight onto the lawn)
   // pavilion: white box with dark glazing on its south and west faces, thin roof slab
   {
     const px = (P.x0 + T.x1) / 2, pz = (P.zS + T.zN) / 2, pw = T.x1 - P.x0, pd = P.zS - T.zN;

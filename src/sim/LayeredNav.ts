@@ -165,7 +165,9 @@ export class LayeredNav {
         const x = minX + i + 0.5, z = minZ + j + 0.5;
         if (distToSegment(x, z, gt.a[0], gt.a[1], gt.b[0], gt.b[1]) >= 0.75) continue;
         const c = j * w + i;
-        for (let k = cellStart[c]; k < cellStart[c + 1]; k++) if (nodeY[k] < 0.5) nodeGate[k] = gi;
+        // the ground under the gate (the lowest surface in the cell, which is raised where the campus is): gate leaves
+        // stand on it, and walkways over the gate line are other nodes
+        for (let k = cellStart[c]; k < cellStart[c + 1]; k++) if (nodeY[k] < nodeY[cellStart[c]] + 0.5) nodeGate[k] = gi;
       }
     });
     // 3) edges

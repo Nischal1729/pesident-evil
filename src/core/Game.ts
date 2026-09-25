@@ -13,7 +13,8 @@ import { Post } from '../render/Post';
 import { CameraRig } from '../render/CameraRig';
 import { CharacterManager, WeaponModels } from '../render/Characters';
 import { GlbCharacterLibrary } from '../render/GlbCharacters';
-import { gateInward, World } from '../sim/World';
+import { gateInward, stationY, World } from '../sim/World';
+import { applyTerrain, setTerrainEnabled } from '../world/terrain';
 import type { Look } from '../sim/actors';
 import { CAM_VIEWS } from '../sim/aim';
 import { WEAPONS } from '../sim/weapons';
@@ -124,6 +125,7 @@ export class Game {
     await this.charLib.load(this.assets);
     this.menu.setProgress(0.62, 'Building the campus…');
     await nextFrame();
+    setTerrainEnabled(this.multiLevel); // the legacy flat sim (?flat) keeps the whole campus at y = 0
     const trees = new TreeSystem(tex.bark);
     const builder = new CampusBuilder(tex, trees, this.q);
     this.campus = builder.build();
@@ -132,15 +134,21 @@ export class Game {
     this.menu.setProgress(0.75, 'Dressing the set…');
     await nextFrame();
     const propLoader = Object.values(propModules)[0];
+    let propsGroup: THREE.Object3D | null = null;
     if (propLoader) {
       try {
         const mod = (await propLoader()) as { buildProps?: (...a: unknown[]) => Promise<{ group: THREE.Group }> };
         if (mod.buildProps) {
           const pb = await mod.buildProps(this.assets, this.campus.collision, { quality: this.q, medianPts: builder.medianPts });
           this.engine.scene.add(pb.group);
+          propsGroup = pb.group;
         }
       } catch (err) { console.warn('[props] failed, continuing without', err); }
     }
+    // lift the flat-authored campus onto its terrain (the slope from the main gate down to GJB), before any nav graph
+    const ts = applyTerrain({ roots: [this.campus.group, ...(propsGroup ? [propsGroup] : [])], collision: this.campus.collision, hooks: [trees], edgeGroup: this.campus.group });
+    if (ts.ms) console.info(`[terrain] lifted ${ts.meshes} meshes (${ts.verts} verts, +${ts.added} from subdivision) in ${ts.ms} ms`);
+    for (const [, g] of this.campus.gates) g.panels.forEach((p, i) => g.closedPos[i].copy(p.position)); // gates slide from where they now stand
     this.menu.setProgress(0.85, 'Lighting…');
     this.sky = new Sky(this.engine.renderer, this.engine.scene, this.q.shadowMapSize, this.q.shadowDistance, { low: 4, medium: 6, high: 8, ultra: 10 }[this.settings.quality], { low: 0.35, medium: 0.42, high: 0.5, ultra: 0.6 }[this.settings.quality]);
     this.sky.setTime(0.02);
@@ -524,7 +532,7 @@ export class Game {
     const m4 = new THREE.Matrix4();
     const col = new THREE.Color();
     STATIONS.forEach((s, i) => {
-      m4.makeTranslation(s.pos[0], (this.multiLevel ? s.y ?? 0 : 0) + 0.08, s.pos[1]);
+      m4.makeTranslation(s.pos[0], (this.multiLevel ? stationY(s) : 0) + 0.08, s.pos[1]);
       mesh.setMatrixAt(i, m4);
       col.set(s.kind === 'ammo' ? 0xf2b233 : s.kind === 'health' ? 0xe5484d : 0x46c46e).multiplyScalar(2);
       mesh.setColorAt(i, col);

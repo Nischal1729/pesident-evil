@@ -3,6 +3,7 @@ import { EventBus, type GameEvents, type SurfaceKind } from '../core/Events';
 import type { PlayerInput } from '../core/Input';
 import { GATES, NPC_SPAWNS, PLAYER_SPAWN, PLAYER_SPAWN_YAW, SPAWN_ZONES, STATIONS, WORLD_BOUNDS, type StationDef, type V2 } from '../world/layout';
 import { distToSegment, rng } from '../world/geom';
+import { terrainY } from '../world/terrain';
 import { CAM, cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
 import { CORPSE_FADE_DUR, CORPSE_FADE_START, Survivor, Zombie, type Look, type ZombieType } from './actors';
 import { CLIMB_MAX, STEP_UP, type StaticCollision } from './Collision';
@@ -152,7 +153,7 @@ export class World {
   // ---------------------------------------------------------------------------------------------
   addPlayer(name: string, look: Look): Survivor {
     const p = new Survivor('player', name, look.body === 'female' ? 'female' : 'male', look);
-    p.pos.set(PLAYER_SPAWN[0], 0, PLAYER_SPAWN[1]);
+    p.pos.set(PLAYER_SPAWN[0], terrainY(PLAYER_SPAWN[0], PLAYER_SPAWN[1]), PLAYER_SPAWN[1]);
     p.yaw = PLAYER_SPAWN_YAW;
     p.health = p.maxHealth = 100;
     p.weapons = [newSlot('pistol'), newSlot('bat')];
@@ -166,7 +167,7 @@ export class World {
   addNpc(name: string, voice: 'male' | 'female', look: Look, weapon: WeaponId, spawnIndex: number, accuracy: number): Survivor {
     const n = new Survivor('npc', name, voice, look);
     const sp = NPC_SPAWNS[spawnIndex % NPC_SPAWNS.length];
-    n.pos.set(sp[0], 0, sp[1]);
+    n.pos.set(sp[0], terrainY(sp[0], sp[1]), sp[1]);
     n.yaw = PLAYER_SPAWN_YAW;
     n.health = n.maxHealth = 140;
     n.weapons = [newSlot(weapon), newSlot('bat')];
@@ -291,7 +292,7 @@ export class World {
     for (let tries = 0; tries < 12; tries++) {
       const base = zone.pts[Math.floor(this.rand() * zone.pts.length)];
       const x = base[0] + (this.rand() - 0.5) * 8, z = base[1] + (this.rand() - 0.5) * 8;
-      if (this.nav.isBlocked(x, z)) continue;
+      if (this.nav.isBlocked(x, z, terrainY(x, z))) continue;
       let tooClose = false;
       for (const s of this.survivors) if (s.alive && Math.hypot(s.pos.x - x, s.pos.z - z) < 22) tooClose = true;
       if (tooClose) continue;
@@ -312,7 +313,7 @@ export class World {
     }
     z.maxHealth *= hpScale;
     z.health = z.maxHealth;
-    z.pos.set(pos[0], 0, pos[1]);
+    z.pos.set(pos[0], terrainY(pos[0], pos[1]), pos[1]);
     z.yaw = this.rand() * Math.PI * 2;
     z.snapshotPrev();
     z.groanT = 1 + this.rand() * 6;
@@ -1009,7 +1010,7 @@ export class World {
     }
     const pts = this.points.get(p.id) ?? 0;
     for (const st of STATIONS) {
-      if (Math.hypot(st.pos[0] - p.pos.x, st.pos[1] - p.pos.z) > 2.0 || Math.abs((st.y ?? 0) - p.pos.y) > 1.6) continue;
+      if (Math.hypot(st.pos[0] - p.pos.x, st.pos[1] - p.pos.z) > 2.0 || Math.abs(stationY(st) - p.pos.y) > 1.6) continue;
       let text = '';
       let cost = st.cost;
       if (st.kind === 'ammo') text = `E — Refill ammo (${cost})`;
@@ -1619,6 +1620,11 @@ const _pelletDir = new THREE.Vector3();
 const _endA = new THREE.Vector3();
 const _endB = new THREE.Vector3();
 const _hits: { z: Zombie; t: number; head: boolean }[] = [];
+
+/** Floor height of a station: its own `y` (a floor inside a building) or the campus ground under it. */
+export function stationY(st: StationDef): number {
+  return st.y ?? terrainY(st.pos[0], st.pos[1]);
+}
 
 /** Distance an NPC is willing to engage at with a weapon. */
 export function effectiveRange(d: WeaponDef): number {

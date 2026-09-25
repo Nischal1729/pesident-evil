@@ -372,6 +372,19 @@ export class InstancedProp extends THREE.Group {
     this.cx.push(_cv.x); this.cy.push(_cv.y); this.cz.push(_cv.z); this.cr.push(this.br * s);
   }
 
+  /** Lift every instance by f(x, z) (the campus terrain, src/world/terrain.ts); the bands rebuild from these matrices. */
+  applyTerrain(f: (x: number, z: number) => number): void {
+    for (let i = 0; i < this.cx.length; i++) {
+      const dy = f(this.mats[i * 16 + 12], this.mats[i * 16 + 14]);
+      if (!dy) continue;
+      this.mats[i * 16 + 13] += dy;
+      if (this.matArr.length) this.matArr[i * 16 + 13] += dy;
+      this.cy[i] += dy;
+    }
+    this.last[0] = NaN;
+    if (this.built) this.refresh(null, true);
+  }
+
   /** World positions (instance origins) — debugging. */
   positions(): number[][] {
     const out: number[][] = [];

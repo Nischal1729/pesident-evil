@@ -21,7 +21,8 @@ export function buildFrontRamp(kit: WorldKit, signs: SignUVs): void {
   const zc = (z0 + z1) / 2;
   // --- the ramp: sloped paver deck, side walls solid to the ground, 1.1 m parapets with a granite coping
   const b = kit.buf('stone', (xFoot + xTop) / 2, zc);
-  const slope = (x: number) => L1 * (xFoot - x) / (xFoot - xTop);
+  // the foot stands on the entry road partway up its slope (layout.ts TERRAIN), so the ramp climbs from there to L1
+  const slope = (x: number) => R.footY + (L1 - R.footY) * (xFoot - x) / (xFoot - xTop);
   const steps = 12;
   for (let i = 0; i < steps; i++) {
     const xa = xFoot - (xFoot - xTop) * (i / steps), xb = xFoot - (xFoot - xTop) * ((i + 1) / steps);
@@ -45,7 +46,7 @@ export function buildFrontRamp(kit: WorldKit, signs: SignUVs): void {
     // recessed step lights in the parapets
     if (i % 2 === 1) for (const z of [z0 + 0.02, z1 - 0.02]) kit.box('emissive', (xa + xb) / 2, (ya + yb) / 2 + 0.35, z, 0.3, 0.08, 0.04, 0, col('#ffffff'));
   }
-  c.addRamp(rect(xTop, z0, xFoot, z1), [xFoot, zc], [xTop, zc], 0, L1, 'concrete', 'ramp');
+  c.addRamp(rect(xTop, z0, xFoot, z1), [xFoot, zc], [xTop, zc], R.footY, L1, 'concrete', 'ramp');
   // parapets in stepped pieces so bullets clear the low end (side walls are solid to the ground)
   for (let k = 0; k < 4; k++) {
     const xa = xFoot - ((xFoot - xTop) * k) / 4, xb = xFoot - ((xFoot - xTop) * (k + 1)) / 4;

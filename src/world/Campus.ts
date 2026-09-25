@@ -134,6 +134,8 @@ export class CampusBuilder {
     soil.position.set(60, 0, -40);
     soil.receiveShadow = true;
     soil.matrixAutoUpdate = false; soil.updateMatrix();
+    // stays flat: src/world/terrain.ts covers the raised ground with its own soil surface in this material
+    soil.name = 'ground:soil'; soil.userData.noTerrain = true; soil.userData.terrainOverlay = { y: 0, uv: 5 };
     this.group.add(soil);
 
     // campus paved ground (interlocking pavers)
@@ -142,6 +144,7 @@ export class CampusBuilder {
     const campus = new THREE.Mesh(flatPolyGeometry(CAMPUS_GROUND, 0.02, 2.2), paverMat);
     campus.receiveShadow = true;
     campus.matrixAutoUpdate = false; campus.updateMatrix();
+    campus.name = 'ground:campus'; campus.userData.noTerrain = true; campus.userData.terrainOverlay = { poly: CAMPUS_GROUND, y: 0.02, uv: 2.2 };
     this.group.add(campus);
 
     const off = (m: THREE.Material, f: number) => { m.polygonOffset = true; m.polygonOffsetFactor = f; m.polygonOffsetUnits = f; return m; };
@@ -497,11 +500,17 @@ export class CampusBuilder {
         const th = w.kind === 'hoarding' ? 0.12 : 0.45;
         buf.box(cx, w.height / 2, cz, len + th, w.height, th, rot, undefined, w.kind === 'stone' ? 0.5 : 0.33);
         if (w.kind !== 'hoarding') coping.box(cx, w.height + 0.06, cz, len + 0.6, 0.12, 0.6, rot, undefined, 0.5);
-        if (w.kind === 'hoarding') this.collision.addSegment(a, b, 0.4, w.height + 0.2, 'metal', 'wall');
-        else {
-          // walkable top at the coping; WALLS run with the outside on the left, so (−dz, dx) is the outward normal
-          const id = this.collision.addSegment(a, b, th, w.height + 0.12, 'concrete', 'boundary');
-          this.collision.setLip(id, -dz / len, dx / len);
+        // collision in ≤ 3 m pieces, so each piece stands at the ground height where it is (src/world/terrain.ts lifts
+        // prisms by their centre, and the Ring Road wall steps down where the raised PES Lawn ends)
+        const pieces = Math.max(1, Math.ceil(len / 3));
+        for (let k = 0; k < pieces; k++) {
+          const pa: V2 = [a[0] + (dx * k) / pieces, a[1] + (dz * k) / pieces], pb: V2 = [a[0] + (dx * (k + 1)) / pieces, a[1] + (dz * (k + 1)) / pieces];
+          if (w.kind === 'hoarding') this.collision.addSegment(pa, pb, 0.4, w.height + 0.2, 'metal', 'wall');
+          else {
+            // walkable top at the coping; WALLS run with the outside on the left, so (−dz, dx) is the outward normal
+            const id = this.collision.addSegment(pa, pb, th, w.height + 0.12, 'concrete', 'boundary');
+            this.collision.setLip(id, -dz / len, dx / len);
+          }
         }
         if (w.kind === 'stone') {
           const n = Math.floor(len / 4);
