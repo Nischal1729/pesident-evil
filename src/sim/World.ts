@@ -674,6 +674,8 @@ export class World {
       p.pos.z += p.vel.z * dt;
       this.collision.resolveCircle(p.pos, p.radius, p.pos.y + 0.3);
     }
+    // the render camera follows the interpolated player, camAlpha of the way through this tick's movement
+    p.aimOrigin.addScaledVector(_v3.subVectors(p.pos, p.prev), input.camAlpha);
 
     // facing: face the camera when aiming/shooting, otherwise the direction of travel
     const facingCam = p.anim.aiming || p.meleeT >= 0;

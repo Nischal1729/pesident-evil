@@ -49,6 +49,7 @@ const SQUAD: { name: string; voice: 'male' | 'female'; weapon: 'rifle' | 'smg' |
 const _gateX = new THREE.Vector3(1, 0, 0);
 const _gateZ = new THREE.Vector3();
 const _gateQ = new THREE.Quaternion();
+const _camO = new THREE.Vector3();
 
 export class Game {
   engine!: Engine;
@@ -320,7 +321,13 @@ export class Game {
           this.input.sample(this.pin, first);
           if (!this.input.locked) { this.pin.fire = false; this.pin.aim = false; this.pin.moveX = this.pin.moveZ = 0; }
           if (this.pin.command) w.toggleNpcMode();
-          this.pin.camX = e.camera.position.x; this.pin.camY = e.camera.position.y; this.pin.camZ = e.camera.position.z;
+          // aim from where this frame's render camera will be: the last frame's rig offset moved to the player's
+          // position at the start of this tick, plus the share of the tick's movement the interpolated render shows
+          // (all of it for a tick that isn't the frame's last; none after the 5-step clamp zeroes acc)
+          const rest = this.acc - this.fixed;
+          this.pin.camAlpha = steps === 4 ? 0 : rest < this.fixed ? rest / this.fixed : 1;
+          this.rig.aimOrigin(w.player!.pos, this.pin.yaw, this.pin.pitch, _camO);
+          this.pin.camX = _camO.x; this.pin.camY = _camO.y; this.pin.camZ = _camO.z;
           this.inputs.set(w.localPlayerId, this.pin);
           w.update(this.fixed, this.inputs);
           this.pin.command = false;

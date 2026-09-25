@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { cameraPivot, cameraPose, CAM_VIEWS, type CamView } from '../sim/aim';
+import { cameraPivot, cameraPose, CAM_VIEWS, forwardFromYawPitch, type CamView } from '../sim/aim';
 import type { StaticCollision } from '../sim/Collision';
 
 const _desired = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _pivot = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 const _hit = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground' as const, tag: '' };
 
 /** Over-the-shoulder third-person camera with collision pull-in, aim zoom, and shake. */
@@ -24,6 +25,9 @@ export class CameraRig {
   addShake(a: number): void { this.shake = Math.min(1.2, this.shake + a); }
 
   private pivotY: number | null = null;
+  // camera minus the update() target: its component along the view ray, and the remainder in the yaw frame
+  private offAlong = NaN;
+  private offRest = new THREE.Vector3();
 
   update(dt: number, target: THREE.Vector3, yaw: number, pitch: number, aiming: boolean, sprinting: boolean, downed: boolean): void {
     this.t += dt;
@@ -63,10 +67,24 @@ export class CameraRig {
       this.camera.position.y += Math.sin(this.t * 47 + 1) * s;
     }
     this.camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    forwardFromYawPitch(yaw, pitch, _dir);
+    this.offAlong = _desired.subVectors(this.camera.position, target).dot(_dir);
+    this.offRest.copy(_desired).addScaledVector(_dir, -this.offAlong).applyAxisAngle(_up, -yaw);
     const fov = this.baseFov * THREE.MathUtils.lerp(1, 0.72, this.aimBlend) + (sprinting ? 5 : 0);
     if (Math.abs(this.camera.fov - fov) > 0.05) {
       this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  /**
+   * The last update()'s camera offset re-applied to a target at `pos` with a new yaw/pitch: where the camera will
+   * sit next frame if the rig state doesn't change. A yaw change is carried exactly. The orbit distance lies along
+   * the view ray, so a pitch change moves the result off the view ray by only about
+   * (camera height above target) * sin(pitch) * dPitch.
+   * NaN before the first update().
+   */
+  aimOrigin(pos: THREE.Vector3, yaw: number, pitch: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.offRest).applyAxisAngle(_up, yaw).addScaledVector(forwardFromYawPitch(yaw, pitch, _dir), this.offAlong).add(pos);
   }
 }
