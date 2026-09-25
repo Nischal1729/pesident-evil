@@ -12,6 +12,8 @@ export interface Nav {
   request(kind: FieldKind, targets: { x: number; y?: number; z: number }[], maxCost?: number): void;
   isBlocked(x: number, z: number, y?: number): boolean;
   descend(kind: FieldKind, x: number, z: number, out: { x: number; z: number }, y?: number): number;
+  /** Path cost to the field's targets (10 per metre), INF if unreachable or off the grid. */
+  cost(kind: FieldKind, x: number, z: number, y?: number): number;
 }
 
 /**
@@ -110,7 +112,7 @@ export class NavGrid {
 
   field(kind: FieldKind): Uint32Array { return this.fields.get(kind)!; }
 
-  cost(kind: FieldKind, x: number, z: number): number {
+  cost(kind: FieldKind, x: number, z: number, _y = 0): number {
     const i = Math.floor(x - this.minX), j = Math.floor(z - this.minZ);
     if (i < 0 || j < 0 || i >= this.w || j >= this.h) return INF;
     return this.fields.get(kind)![j * this.w + i];

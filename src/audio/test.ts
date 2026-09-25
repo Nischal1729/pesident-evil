@@ -182,11 +182,16 @@ function playSfx(n: SfxName): void {
 
 const barkSec = el('section', {}, el('h2', { text: 'NPC barks (speechSynthesis)' }));
 let barkVoice: 'male' | 'female' | 'random' = 'random';
+let barkChar = 'none';
 let barkDist = 3;
 const vSel = el('select');
 for (const v of ['random', 'male', 'female']) vSel.append(el('option', { value: v, text: v }));
 vSel.addEventListener('change', () => (barkVoice = vSel.value as typeof barkVoice));
 barkSec.append(el('div', { class: 'row' }, el('label', { text: 'Voice' }), vSel));
+const cSel = el('select');
+for (const c of ['none', 'rahul', 'ananya', 'manjunath']) cSel.append(el('option', { value: c, text: c }));
+cSel.addEventListener('change', () => (barkChar = cSel.value));
+barkSec.append(el('div', { class: 'row' }, el('label', { text: 'Character' }), cSel));
 barkSec.append(slider('Speaker distance', 0, 60, 1, 3, (v) => (barkDist = v), (v) => `${v} m`));
 const barkGrid = el('div', { class: 'grid' });
 for (const cat of Object.keys(BARKS) as BarkCategory[]) {
@@ -197,6 +202,7 @@ for (const cat of Object.keys(BARKS) as BarkCategory[]) {
       lastLine.textContent = `“${line}”`;
       audio.say(line, {
         voice: barkVoice === 'random' ? undefined : barkVoice,
+        character: barkChar === 'none' ? undefined : barkChar,
         position: new Vector3(0, 1.6, -barkDist),
         priority: cat === 'downed' ? 3 : 1,
       });

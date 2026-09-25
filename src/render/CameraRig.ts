@@ -1,57 +1,58 @@
 import * as THREE from 'three';
-import { cameraPivot, cameraPose } from '../sim/aim';
+import { cameraPivot, cameraPose, CAM_VIEWS, forwardFromYawPitch, type CamView } from '../sim/aim';
 import type { StaticCollision } from '../sim/Collision';
 
 const _desired = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _pivot = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 const _hit = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground' as const, tag: '' };
 
-/** Over-the-shoulder third-person camera with collision pull-in, aim zoom, recoil kick and shake. */
+/** Over-the-shoulder third-person camera with collision pull-in, aim zoom, and shake. */
 export class CameraRig {
   aimBlend = 0;
   private shake = 0;
-  private kick = 0;
-  private kickYaw = 0;
   private dist = 99;
   private t = 0;
   baseFov = 62;
   shoulderSide = 1;
   private shoulderS = 1;
+  view = 0; // index into CAM_VIEWS, cycled with T
+  private easedView: CamView = { ...CAM_VIEWS[0] };
 
   constructor(private camera: THREE.PerspectiveCamera, private collision: StaticCollision) {}
 
   addShake(a: number): void { this.shake = Math.min(1.2, this.shake + a); }
-  addKick(pitch: number): void {
-    this.kick += pitch;
-    this.kickYaw += (Math.random() - 0.5) * pitch * 0.6;
-  }
 
   private pivotY: number | null = null;
+  // camera minus the update() target: its component along the view ray, and the remainder in the yaw frame
+  private offAlong = NaN;
+  private offRest = new THREE.Vector3();
 
   update(dt: number, target: THREE.Vector3, yaw: number, pitch: number, aiming: boolean, sprinting: boolean, downed: boolean): void {
     this.t += dt;
     this.aimBlend += ((aiming ? 1 : 0) - this.aimBlend) * Math.min(1, dt * 11);
     this.shoulderS += (this.shoulderSide - this.shoulderS) * Math.min(1, dt * 8);
-    this.kick *= Math.max(0, 1 - dt * 14);
-    this.kickYaw *= Math.max(0, 1 - dt * 14);
+    const tv = CAM_VIEWS[this.view];
+    const ve = Math.min(1, dt * 6);
+    this.easedView.dist += (tv.dist - this.easedView.dist) * ve;
+    this.easedView.shoulder += (tv.shoulder - this.easedView.shoulder) * ve;
+    this.easedView.up += (tv.up - this.easedView.up) * ve;
     this.shake = Math.max(0, this.shake - dt * 2.2);
-    const p = pitch + this.kick;
-    const y = yaw + this.kickYaw;
     const tgt = _pivot.copy(target);
     // smooth the pivot height so snapping up steps / onto ramps doesn't jolt the camera (jumps still read)
     if (this.pivotY === null || Math.abs(tgt.y - this.pivotY) > 3) this.pivotY = tgt.y;
     else this.pivotY += (tgt.y - this.pivotY) * Math.min(1, dt * 14);
     tgt.y = this.pivotY;
     if (downed) tgt.y -= 0.9;
-    cameraPose(tgt, y, p, this.aimBlend, _desired, _dir, this.shoulderS);
-    cameraPivot(tgt, y, this.aimBlend, _pivot, this.shoulderS);
+    cameraPose(tgt, yaw, pitch, this.aimBlend, _desired, _dir, this.shoulderS, this.easedView);
+    cameraPivot(tgt, yaw, this.aimBlend, _pivot, this.shoulderS, this.easedView);
     // collision pull-in (sphere-ish: test a few rays)
     const toCam = _desired.clone().sub(_pivot);
     const full = toCam.length();
     toCam.divideScalar(full);
     let allowed = full;
-    const h = this.collision.raycast(_pivot.x, _pivot.y, _pivot.z, toCam.x, toCam.y, toCam.z, full + 0.3, _hit as any);
+    const h = this.collision.raycast(_pivot.x, _pivot.y, _pivot.z, toCam.x, toCam.y, toCam.z, full + 0.3, _hit as any, true);
     if (h && h.tag !== 'ground') allowed = Math.max(0.35, h.dist - 0.3);
     // ease out, snap in
     if (allowed < this.dist) this.dist = allowed;
@@ -65,11 +66,25 @@ export class CameraRig {
       this.camera.position.x += Math.sin(this.t * 61) * s;
       this.camera.position.y += Math.sin(this.t * 47 + 1) * s;
     }
-    this.camera.rotation.set(p, y, 0, 'YXZ');
+    this.camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    forwardFromYawPitch(yaw, pitch, _dir);
+    this.offAlong = _desired.subVectors(this.camera.position, target).dot(_dir);
+    this.offRest.copy(_desired).addScaledVector(_dir, -this.offAlong).applyAxisAngle(_up, -yaw);
     const fov = this.baseFov * THREE.MathUtils.lerp(1, 0.72, this.aimBlend) + (sprinting ? 5 : 0);
     if (Math.abs(this.camera.fov - fov) > 0.05) {
       this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  /**
+   * The last update()'s camera offset re-applied to a target at `pos` with a new yaw/pitch: where the camera will
+   * sit next frame if the rig state doesn't change. A yaw change is carried exactly. The orbit distance lies along
+   * the view ray, so a pitch change moves the result off the view ray by only about
+   * (camera height above target) * sin(pitch) * dPitch.
+   * NaN before the first update().
+   */
+  aimOrigin(pos: THREE.Vector3, yaw: number, pitch: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.offRest).applyAxisAngle(_up, yaw).addScaledVector(forwardFromYawPitch(yaw, pitch, _dir), this.offAlong).add(pos);
   }
 }

@@ -3,7 +3,7 @@ import { GeoBuffer } from './buildings';
 import { normalizeWinding, rng } from './geom';
 import { col, type WorldKit } from './kit';
 import { hedgeBox } from './landscape';
-import { BUILDINGS, FOUNTAIN_POS, GATES, MAIN_GATE_PORTAL, pesRdZ, type V2 } from './layout';
+import { BUILDINGS, FOUNTAIN_POS, GATES, MAIN_GATE_PORTAL, pesRdZ, PLAYER_SPAWN, type V2 } from './layout';
 import { netTexture } from './materials';
 import type { SignUVs } from './signs';
 import { buildBBlockBits } from './bblock';
@@ -49,7 +49,10 @@ export function buildGate(kit: WorldKit, signs: SignUVs, gates: Map<string, Gate
   // median island between the IN and OUT leaves: kerbed, guard booth, boom barrier inside the IN lane
   const M = G.median;
   kit.box('stone', (M.x0 + M.x1) / 2, 0.13, (M.z0 + M.z1) / 2, M.x1 - M.x0, 0.26, M.z1 - M.z0, 0, col('#a8a49c'));
-  kit.collision.addPolygon([[M.x0, M.z0], [M.x1, M.z0], [M.x1, M.z1], [M.x0, M.z1]], 1.1, 'concrete', 'median');
+  // the 1.1 m block runs through the gate line between the leaves: survivors on it are held back at that line
+  // (+X is out onto the forecourt), so the median is no way out of the campus
+  const medianId = kit.collision.addPolygon([[M.x0, M.z0], [M.x1, M.z0], [M.x1, M.z1], [M.x0, M.z1]], 1.1, 'concrete', 'median');
+  kit.collision.setLip(medianId, 1, 0, x);
   kit.box('plaster', M.x0 + 2.2, 1.35, (M.z0 + M.z1) / 2, 1.3, 2.4, 1.25, 0, WHITE);
   kit.box('plaster', M.x0 + 2.2, 2.62, (M.z0 + M.z1) / 2, 1.6, 0.14, 1.5, 0, col('#2d59a8'));
   kit.box('glass', M.x0 + 2.2, 1.7, (M.z0 + M.z1) / 2, 1.34, 0.7, 1.29, 0, col('#34424e'));
@@ -65,7 +68,7 @@ export function buildGate(kit: WorldKit, signs: SignUVs, gates: Map<string, Gate
     pg.box(0, 2.15, 0, len, 0.12, 0.1);
     pg.box(0, 1.15, 0, len, 0.08, 0.08);
     for (const e of [-1, 1]) pg.box((e * len) / 2, 1.1, 0, 0.12, 2.2, 0.12);
-    for (let s = -len / 2 + 0.12; s <= len / 2 - 0.1; s += 0.14) pg.box(s, 1.15, 0, 0.07, 2.0, 0.035);
+    for (let s = -len / 2 + 0.12; s <= len / 2 - 0.1; s += 0.32) pg.box(s, 1.15, 0, 0.05, 2.0, 0.035);
     for (let s = -len / 2 + 0.2; s < len / 2; s += 1.8) pg.box(s, 0.05, 0, 0.18, 0.1, 0.18); // rollers
     return pg.toGeometry();
   };
@@ -75,6 +78,9 @@ export function buildGate(kit: WorldKit, signs: SignUVs, gates: Map<string, Gate
     const len = Math.hypot(dx, dz);
     const ux = dx / len, uz = dz / len;
     const rot = Math.atan2(-dz, dx);
+    // outward normal of the gate line (away from the player spawn): the leaf tops are campus boundary (setLip)
+    const flip = (PLAYER_SPAWN[0] - gate.a[0]) * -uz + (PLAYER_SPAWN[1] - gate.a[1]) * ux > 0 ? -1 : 1;
+    const outX = -uz * flip, outZ = ux * flip;
     // leaf spans along the gate line (t from a)
     const spans: [number, number][] = gate.id === 'main'
       ? [[G.lanes[1].z0 - gate.a[1], G.lanes[1].z1 - gate.a[1]], [G.lanes[0].z0 - gate.a[1], G.lanes[0].z1 - gate.a[1]]] // OUT (north), IN (south)
@@ -92,7 +98,9 @@ export function buildGate(kit: WorldKit, signs: SignUVs, gates: Map<string, Gate
       panels.push(mesh);
       closedPos.push(pos.clone());
       const a: V2 = [gate.a[0] + ux * t0, gate.a[1] + uz * t0], b: V2 = [gate.a[0] + ux * t1, gate.a[1] + uz * t1];
-      prismIds.push(kit.collision.addSegment(a, b, 0.5, 2.4, 'metal', `gate:${gate.id}`));
+      const id = kit.collision.addSegment(a, b, 0.5, 2.4, 'metal', `gate:${gate.id}`);
+      kit.collision.setLip(id, outX, outZ);
+      prismIds.push(id);
       // per-leaf slide direction: first leaf toward a, second toward b (into the pillars)
       openOffsets.push(new THREE.Vector3(ux * (k === 0 ? -1 : 1) * l, 0, uz * (k === 0 ? -1 : 1) * l));
     });

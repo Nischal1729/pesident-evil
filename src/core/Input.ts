@@ -7,6 +7,8 @@ export interface PlayerInput {
   moveZ: number; // -1..1 forward (+)
   yaw: number; // radians, camera yaw (0 = looking toward -Z)
   pitch: number; // radians, + looks up
+  camX: number; camY: number; camZ: number; // world-space render camera position at the start of the tick; NaN = not provided
+  camAlpha: number; // fraction of this tick's player movement the rendered camera follows (render interpolation alpha)
   fire: boolean;
   aim: boolean;
   sprint: boolean;
@@ -23,7 +25,7 @@ export interface PlayerInput {
 
 export function emptyInput(): PlayerInput {
   return {
-    moveX: 0, moveZ: 0, yaw: 0, pitch: 0, fire: false, aim: false, sprint: false,
+    moveX: 0, moveZ: 0, yaw: 0, pitch: 0, camX: NaN, camY: NaN, camZ: NaN, camAlpha: 0, fire: false, aim: false, sprint: false,
     reload: false, interact: false, interactPressed: false, jump: false, melee: false, command: false,
     weaponSlot: -1, weaponScroll: 0,
   };
@@ -33,6 +35,8 @@ export class Input {
   private keys = new Set<string>();
   private mouseButtons = new Set<number>();
   private latched = { reload: false, interact: false, jump: false, melee: false, command: false, slot: -1, scroll: 0 };
+  private recoilDebt = 0;
+  private sinceShot = 99;
   yaw = 0;
   pitch = -0.08;
   sensitivity = 1;
@@ -101,9 +105,38 @@ export class Input {
     if (!this.locked || !this.enabled) return;
     const s = 0.0022 * this.sensitivity * (this.isDown('aim') ? 0.6 : 1);
     this.yaw -= e.movementX * s;
+    const before = this.pitch;
     this.pitch -= e.movementY * s * (this.invertY ? -1 : 1);
     this.pitch = Math.max(-1.25, Math.min(1.1, this.pitch));
+    // manual downward compensation for recoil shouldn't also be recovered automatically
+    const removed = before - this.pitch;
+    if (removed > 0) this.recoilDebt = Math.max(0, this.recoilDebt - removed);
   };
+
+  /** Camera kick from a shot: raises pitch (owing half back as recoverable debt) and nudges yaw sideways (permanent). */
+  addRecoil(k: number, aiming: boolean): void {
+    const s = aiming ? 0.7 : 1;
+    const up = k * s;
+    const side = (Math.random() * 2 - 1) * k * s * 0.4;
+    const before = this.pitch;
+    this.pitch = Math.max(-1.25, Math.min(1.1, this.pitch + up));
+    this.yaw += side;
+    // owe back only the rise the clamp let through, or recovery at the upper limit drags the aim below where it was held
+    this.recoilDebt += (this.pitch - before) * 0.5;
+    this.sinceShot = 0;
+  }
+
+  resetRecoil(): void { this.recoilDebt = 0; }
+
+  /** Recovers half of each kick's pitch, starting 0.12s after the last shot. */
+  updateRecoil(dt: number): void {
+    this.sinceShot += dt;
+    if (this.sinceShot > 0.12 && this.recoilDebt > 0) {
+      const r = this.recoilDebt * Math.min(1, dt * 8);
+      this.pitch -= r;
+      this.recoilDebt -= r;
+    }
+  }
 
   private onWheel = (e: WheelEvent) => {
     if (!this.locked || !this.enabled) return;

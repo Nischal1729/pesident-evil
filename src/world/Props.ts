@@ -4,7 +4,7 @@ import type { SurfaceKind } from '../core/Events';
 import type { QualityProfile } from '../core/Settings';
 import { StaticCollision } from '../sim/Collision';
 import { distToSegment, pointInPoly, polylineToStrip, rng, samplePolyline } from './geom';
-import { AREAS, BUILDINGS, GATES, GLOBE_POS, ORR, orrPoint, PLAYER_SPAWN, QUAD, ROADS, SPAWN_ZONES, STATIONS, type GateDef, type StationDef, type V2 } from './layout';
+import { AREAS, BUILDINGS, GATES, GLOBE_POS, ORR, orrPoint, PLAYER_SPAWN, QUAD, ROADS, SPAWN_ZONES, STATIONS, STEP_STACKS, type GateDef, type StationDef, type V2 } from './layout';
 import { parkingSlots } from './gjb/parking';
 import { injectWorldLighting } from './materials';
 
@@ -38,7 +38,7 @@ const CHUNK: Record<string, [number, number, number]> = {
   // [cell m (unused), shadow-casting distance m, draw distance m]; LOD'd types cast shadows only from the full model
   // (shadow distance = LOD distance), so each costs two bands (≤ 2 draw calls + 1 shadow draw) when in view
   bike: [32, 13, 120], motorbike: [32, 13, 120], bench: [48, 35, 120], bin: [40, 25, 95], chair: [40, 0, 80], cooler: [40, 25, 95], ammo: [40, 25, 110],
-  medkit: [40, 0, 80], table: [48, 35, 120], sandbags: [48, 50, 170], barricade: [48, 30, 170], metro: [64, 55, 240],
+  medkit: [40, 0, 80], table: [48, 35, 120], sandbags: [48, 50, 170], stackbags: [48, 30, 60], barricade: [48, 30, 170], metro: [64, 55, 240],
   car: [64, 38, 280], car_sedan: [64, 38, 280], auto: [64, 32, 240], bus: [96, 60, 420], college_bus: [96, 60, 380], globe: [128, 120, 420],
 };
 const CHUNK_DEFAULT: [number, number, number] = [96, 70, 250];
@@ -894,6 +894,28 @@ class Dresser {
   // ==================================================================================================
   // Dressing passes
   // ==================================================================================================
+
+  /**
+   * Sandbag step stacks (layout STEP_STACKS): each tier is one flat collision box at its top bag layer, two bags deep,
+   * so gate and wall tops are reached in ≤ 1.3 m climbs. Placed before the scatter passes, which then keep clear.
+   */
+  stepStacks(): void {
+    const f = this.footprint('stackbags');
+    if (!f) return;
+    for (const st of STEP_STACKS) {
+      const u: V2 = [-st.in[1], st.in[0]];
+      const yaw = Math.atan2(-u[1], u[0]); // bag length (local X) along the wall
+      st.layers.forEach((layers, k) => {
+        const d0 = st.gap + k * 2 * f.l;
+        for (let r = 0; r < 2; r++) for (let l = 0; l < layers; l++) {
+          const d = d0 + f.l * (r + 0.5);
+          this.place('stackbags', st.at[0] + st.in[0] * d, st.at[1] + st.in[1] * d, yaw + (((k * 7 + r * 3 + l) % 5) - 2) * 0.012, { force: true, y: l * 0.57 });
+        }
+        const dc = d0 + f.l;
+        this.col.addPolygon(rectPoly(st.at[0] + st.in[0] * dc, st.at[1] + st.in[1] * dc, yaw, f.w, 2 * f.l), f.h + (layers - 1) * 0.57, 'ground', 'prop');
+      });
+    }
+  }
 
   globe(): void {
     const [gx, gz] = GLOBE_POS;
@@ -1771,6 +1793,8 @@ const PROP_DEFS: Record<string, [string, LoadOpts]> = {
   ammo: [P('ammo_crate'), { shadow: 1 }],
   medkit: [P('medkit'), { shadow: 0 }],
   sandbags: [P('sandbags'), {}],
+  // step-stack bags: the same model, own instancer with shorter shadow and draw distances (there is no `_lod`)
+  stackbags: [P('sandbags'), {}],
   w_shotgun: [W('shotgun'), {}],
   w_smg: [W('smg'), {}],
   w_rifle: [W('rifle'), {}],
@@ -1858,6 +1882,7 @@ export async function buildProps(assets: Assets, collision: StaticCollision, opt
   // order matters: fixed anchors first, then set pieces, then scatter (each pass sees the previous ones' collision)
   d.globe();
   d.stations();
+  d.stepStacks();
   d.gateDefence();
   d.forecourt();
   d.orr();

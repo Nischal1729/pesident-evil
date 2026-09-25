@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   BloomEffect, EffectComposer, EffectPass, RenderPass, SMAAEffect, SMAAPreset, ToneMappingEffect, ToneMappingMode, VignetteEffect,
-  ChromaticAberrationEffect, BlendFunction, Effect,
+  ChromaticAberrationEffect, BlendFunction, Effect, OutlineEffect,
 } from 'postprocessing';
 
 /**
@@ -39,6 +39,8 @@ import type { QualityProfile } from '../core/Settings';
 /** Post chain: N8AO (SSAO) → bloom + AGX tone mapping + grade + vignette + hit aberration + SMAA, merged into few passes. */
 export class Post {
   composer: EffectComposer;
+  /** Edges of live zombies (CharacterManager fills the selection); visible edges only, never through walls. */
+  outline: OutlineEffect;
   private ao: N8AOPostPass | null = null;
   private bloom: BloomEffect | null = null;
   private vignette: VignetteEffect;
@@ -60,6 +62,9 @@ export class Post {
       this.composer.addPass(this.ao);
     }
     this.tone = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
+    this.outline = new OutlineEffect(scene, camera, { blendFunction: BlendFunction.SCREEN, edgeStrength: 3, visibleEdgeColor: 0xff5a36, xRay: false, resolutionScale: 0.5 });
+    // Game puts the lights on the selection layer; the shadow map is already current when the mask pass runs
+    (this.outline as unknown as { maskPass: RenderPass }).maskPass.skipShadowMapUpdate = true;
     this.vignette = new VignetteEffect({ offset: 0.35, darkness: 0.45 });
     this.chroma = new ChromaticAberrationEffect({ offset: new THREE.Vector2(0, 0), radialModulation: true, modulationOffset: 0.2 });
     this.grade = new GradeEffect();
@@ -68,7 +73,7 @@ export class Post {
       this.bloom = new BloomEffect({ mipmapBlur: true, luminanceThreshold: 0.85, luminanceSmoothing: 0.25, intensity: 0.9, radius: 0.7 });
       effects.push(this.bloom);
     }
-    effects.push(this.tone, this.grade, this.vignette, this.chroma);
+    effects.push(this.tone, this.outline, this.grade, this.vignette, this.chroma);
     this.composer.addPass(new EffectPass(camera, ...effects));
     if (q.smaa) this.composer.addPass(new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.MEDIUM })));
   }

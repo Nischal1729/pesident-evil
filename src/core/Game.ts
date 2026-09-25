@@ -15,6 +15,7 @@ import { CharacterManager, WeaponModels } from '../render/Characters';
 import { GlbCharacterLibrary } from '../render/GlbCharacters';
 import { gateInward, World } from '../sim/World';
 import type { Look } from '../sim/actors';
+import { CAM_VIEWS } from '../sim/aim';
 import { WEAPONS } from '../sim/weapons';
 import { Hud } from '../ui/Hud';
 import { Menu } from '../ui/Menu';
@@ -48,6 +49,7 @@ const SQUAD: { name: string; voice: 'male' | 'female'; weapon: 'rifle' | 'smg' |
 const _gateX = new THREE.Vector3(1, 0, 0);
 const _gateZ = new THREE.Vector3();
 const _gateQ = new THREE.Quaternion();
+const _camO = new THREE.Vector3();
 
 export class Game {
   engine!: Engine;
@@ -110,6 +112,7 @@ export class Game {
       if (this.state !== 'playing' || !this.world) return;
       if (e.code === 'KeyN') this.world.skipPrep();
       if (e.code === 'KeyC') this.rig.shoulderSide *= -1;
+      if (e.code === 'KeyT') this.rig.view = (this.rig.view + 1) % CAM_VIEWS.length;
     });
     this.applySettings(this.settings, false);
 
@@ -147,6 +150,7 @@ export class Game {
     this.rig = new CameraRig(this.engine.camera, this.campus.collision);
     this.rig.baseFov = this.settings.fov;
     this.chars = new CharacterManager(this.engine.scene, this.weapons, this.q, this.charLib);
+    this.chars.outline = this.post.outline.selection;
     const fxLoader = Object.values(fxModules)[0];
     if (fxLoader) {
       try {
@@ -157,13 +161,64 @@ export class Game {
     this.buildStationMarkers();
     this.menu.setProgress(0.95, 'Warming up shaders…');
     this.menuCamera(0);
-    this.engine.renderer.compile(this.engine.scene, this.engine.camera);
+    // The outline's mask pass draws only the selection layer. Without the lights on it, the renderer's light state
+    // changes twice a frame, and every lit material redoes its program lookup in the next main pass.
+    this.engine.scene.traverse((o) => { if ((o as THREE.Light).isLight) o.layers.enable(this.post.outline.selection.layer); });
+    this.warmShaders();
     this.menu.setProgress(1, 'Ready');
     this.state = 'menu';
     this.menu.show('main');
     (window as unknown as { game: Game }).game = this;
     this.last = performance.now();
     requestAnimationFrame(this.loop);
+  }
+
+  /**
+   * Compile every program play will need before the first frame. A program's cache key includes the output colour
+   * space of the bound render target, and the scene is only ever drawn into the composer's buffers, so compile with
+   * one of them bound. Stand-ins cover what only exists in play (characters, the transparent corpse-fade copy of
+   * their material, weapons, pickups). compile() skips the shadow-depth and outline variants, so one frame is also
+   * drawn with frustum culling off and the stand-in outlined: every object reaches every pass once. A second frame
+   * covers the shadow-depth variants built after an outline frame. The renderer draws shadows before it sets up the
+   * frame's lights, so their key carries the light count of the previous render, and the outline mask pass renders
+   * only the selection layer, which holds no lights. The stand-in materials are never disposed: their programs stay
+   * referenced after the last corpse's private material is disposed, so the next death does not recompile.
+   */
+  private warmShaders(): void {
+    const { renderer, scene, camera } = this.engine;
+    const warm = new THREE.Group();
+    const outlined: THREE.Object3D[] = [];
+    if (this.charLib.ready) {
+      for (const corpse of [false, true]) {
+        const { root, mesh } = this.charLib.instantiate('male', this.charLib.variant('male', {}));
+        if (corpse) {
+          const m = (mesh.material as THREE.Material).clone();
+          m.transparent = true;
+          m.depthWrite = false;
+          mesh.material = m;
+        } else outlined.push(mesh);
+        warm.add(root);
+      }
+    }
+    for (const id of ['pistol', 'smg', 'rifle', 'shotgun', 'bat'] as const) warm.add(this.weapons.create(id));
+    for (const k of ['ammo', 'health'] as const) warm.add(new THREE.Mesh(this.pickupGeo[k], this.pickupMat[k]));
+    // far below the ground, so the warm-up frame shows nothing extra
+    warm.position.y = -1000;
+    warm.traverse((o) => { o.castShadow = true; });
+    scene.add(warm);
+    renderer.setRenderTarget(this.post.composer.inputBuffer);
+    renderer.compile(scene, camera);
+    renderer.setRenderTarget(null);
+    const culled: THREE.Object3D[] = [];
+    scene.traverse((o) => { if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+    for (const o of outlined) this.post.outline.selection.add(o);
+    this.sky.follow(camera.position);
+    this.sky.prepare(camera);
+    this.post.render(0, 0);
+    this.post.render(0, 0);
+    for (const o of outlined) this.post.outline.selection.delete(o);
+    for (const o of culled) o.frustumCulled = true;
+    warm.removeFromParent();
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -197,6 +252,7 @@ export class Game {
     this.world = world;
     this.input.yaw = world.player!.yaw;
     this.input.pitch = -0.05;
+    this.input.resetRecoil();
     this.detach.push(this.audio.attach(world));
     this.hud.attach(world);
     this.attachFx(world);
@@ -221,7 +277,13 @@ export class Game {
     const off: (() => void)[] = [];
     const muzzleWorld = new THREE.Vector3();
     const dir = new THREE.Vector3();
+    let lastRecoilT = -1; // a shotgun trigger pull emits several local 'shot' events in one tick; kick once
     off.push(ev.on('shot', (e) => {
+      // recoil moves the aim, so it must not depend on the FX module having loaded
+      if (e.shooterId === world.localPlayerId && world.time !== lastRecoilT) {
+        lastRecoilT = world.time;
+        this.input.addRecoil(WEAPONS[e.weapon as keyof typeof WEAPONS]?.recoil ?? 0.02, world.player!.aiming);
+      }
       if (!this.fx) return;
       const v = this.chars.view(e.shooterId);
       if (v?.muzzle) v.muzzle.getWorldPosition(muzzleWorld); else muzzleWorld.copy(e.origin);
@@ -232,7 +294,6 @@ export class Game {
         const right = new THREE.Vector3(dir.z, 0, -dir.x).normalize().negate();
         this.fx.shellEject?.(muzzleWorld.clone().addScaledVector(dir, -0.35), right, e.weapon);
       }
-      if (e.shooterId === world.localPlayerId) this.rig.addKick(WEAPONS[e.weapon as keyof typeof WEAPONS]?.recoil ?? 0.02);
     }));
     off.push(ev.on('impact', (e) => this.fx?.impact(e.point, e.normal, e.surface)));
     off.push(ev.on('hit', (e) => {
@@ -293,9 +354,11 @@ export class Game {
   }
 
   // -----------------------------------------------------------------------------------------------
-  private loop = (): void => {
-    const now = performance.now();
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+  private loop = (now: number): void => {
+    // the rAF timestamp is the frame's start time; performance.now() here would add the callback's scheduling
+    // jitter to dt, and with it to the fixed-step count and the interpolation alpha. `last` can be a later
+    // performance.now() (boot, resume), hence the clamp at 0.
+    const dt = Math.min(0.1, Math.max(0, now - this.last) / 1000);
     this.last = now;
     worldUniforms.uTime.value += dt;
     const e = this.engine;
@@ -304,12 +367,20 @@ export class Game {
     if (w && (this.state === 'playing' || this.state === 'gameover')) {
       if (this.state === 'playing') {
         this.acc += dt;
+        this.input.updateRecoil(dt);
         let first = true;
         let steps = 0;
         while (this.acc >= this.fixed && steps < 5) {
           this.input.sample(this.pin, first);
           if (!this.input.locked) { this.pin.fire = false; this.pin.aim = false; this.pin.moveX = this.pin.moveZ = 0; }
           if (this.pin.command) w.toggleNpcMode();
+          // aim from where this frame's render camera will be: the last frame's rig offset moved to the player's
+          // position at the start of this tick, plus the share of the tick's movement the interpolated render shows
+          // (all of it for a tick that isn't the frame's last; none after the 5-step clamp zeroes acc)
+          const rest = this.acc - this.fixed;
+          this.pin.camAlpha = steps === 4 ? 0 : rest < this.fixed ? rest / this.fixed : 1;
+          this.rig.aimOrigin(w.player!.pos, this.pin.yaw, this.pin.pitch, _camO);
+          this.pin.camX = _camO.x; this.pin.camY = _camO.y; this.pin.camZ = _camO.z;
           this.inputs.set(w.localPlayerId, this.pin);
           w.update(this.fixed, this.inputs);
           this.pin.command = false;
@@ -330,9 +401,7 @@ export class Game {
       this.updateGates(dt, w);
       this.updatePickups(dt, w);
       this.audio.update(dt, w, e.camera);
-      const def = p.def;
-      const spread = def.kind === 'gun' ? (p.aiming ? def.spreadAim : def.spreadHip) * (1 + p.bloom) * (Math.hypot(p.vel.x, p.vel.z) > 0.8 ? 1.5 : 1) : 0;
-      this.hud.update(dt, w, e.camera, this.input.yaw, spread);
+      this.hud.update(dt, w, e.camera, this.input.yaw);
       this.sky.follow(pp);
       this.setTime(w.timeOfDay);
       this.fx?.update(dt);

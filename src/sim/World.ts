@@ -3,9 +3,10 @@ import { EventBus, type GameEvents, type SurfaceKind } from '../core/Events';
 import type { PlayerInput } from '../core/Input';
 import { GATES, NPC_SPAWNS, PLAYER_SPAWN, PLAYER_SPAWN_YAW, SPAWN_ZONES, STATIONS, WORLD_BOUNDS, type StationDef, type V2 } from '../world/layout';
 import { distToSegment, rng } from '../world/geom';
-import { cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
-import { Survivor, Zombie, type Look, type ZombieType } from './actors';
+import { CAM, cameraPose, forwardFromYawPitch, rightFromYaw } from './aim';
+import { CORPSE_FADE_DUR, CORPSE_FADE_START, Survivor, Zombie, type Look, type ZombieType } from './actors';
 import { STEP_UP, type StaticCollision } from './Collision';
+import { INF } from './flowfield';
 import { LayeredNav } from './LayeredNav';
 import { NavGrid, type Nav } from './NavGrid';
 import { newSlot, WEAPONS, type WeaponDef, type WeaponId } from './weapons';
@@ -55,6 +56,7 @@ export interface NpcBrain {
   barkCd: Record<string, number>;
   strafeT: number;
   strafeDir: number;
+  trailing: boolean;
 }
 
 export interface InteractPrompt { text: string; progress: number; cost: number; canAfford: boolean }
@@ -62,13 +64,21 @@ export interface InteractPrompt { text: string; progress: number; cost: number; 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
-const _camPos = new THREE.Vector3();
+const _aimPivot = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
-const _dir2 = { x: 0, z: 0 };
+const _dir2 = { x: 0, z: 0, y: 0, thin: false };
 const _hitRes = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground' as SurfaceKind, tag: '' };
 
-/** AI allies deal reduced damage so the player stays the main damage dealer. */
-const NPC_DAMAGE = 0.65;
+// Follow-mode trail: an NPC stands its ground until it falls too far behind, then walks to its formation slot.
+const TRAIL_REPATH = 10; // m: start walking to the slot once this far from the player
+const TRAIL_STOP = 6; // m: stop trailing once back within this range
+const TRAIL_ARRIVE = 1.5; // m: or once the slot itself is reached
+// Squad only engages what the player can plausibly see fighting near them (measured from the player).
+const NPC_ENGAGE_RANGE = 30;
+const NPC_SELF_DEFENSE = 6; // m: always fight back against a zombie this close to the NPC itself (hold mode far from the player)
+// Keep NPCs out of the player's crosshair: push sideways out of a corridor along the camera's forward ray.
+const AIM_CLEAR_LEN = 30;
+const AIM_CLEAR_R = 1.1;
 
 export interface WorldOptions {
   maxZombies: number;
@@ -83,6 +93,8 @@ type Walker = { pos: THREE.Vector3; prev: THREE.Vector3; radius: number; height:
 const GRAVITY = 16;
 /** Falls higher than this hurt survivors. */
 const SAFE_FALL = 4;
+/** Seconds one timed climb (a rise of at most CLIMB_MAX) takes. */
+const CLIMB_DUR = { player: 0.45, npc: 0.6, walker: 0.9, runner: 0.55, brute: 1.2, crawler: 1.4 };
 
 /**
  * Authoritative game simulation. Rendering reads its state; audio/fx/UI listen to events.
@@ -161,12 +173,11 @@ export class World {
     n.infiniteReserve = true;
     n.snapshotPrev();
     this.survivors.push(n);
-    const angle = [-2.3, 2.3, 3.14][spawnIndex % 3];
-    const dist = [3.2, 3.2, 4.2][spawnIndex % 3];
+    const [right, back] = [[-2.3, 5.0], [2.3, 5.0], [0, 7.5]][spawnIndex % 3];
     this.brains.set(n.id, {
-      mode: 'follow', holdPos: n.pos.clone(), formation: new THREE.Vector2(Math.sin(angle) * dist, Math.cos(angle) * dist),
+      mode: 'follow', holdPos: n.pos.clone(), formation: new THREE.Vector2(right, back),
       thinkT: this.rand() * 0.2, targetId: 0, reviveId: 0, accuracy, reaction: 0.25 + this.rand() * 0.2, burst: 0,
-      barkCd: {}, strafeT: 0, strafeDir: 1,
+      barkCd: {}, strafeT: 0, strafeDir: 1, trailing: false,
     });
     return n;
   }
@@ -366,9 +377,9 @@ export class World {
     // zombie-zombie and zombie-survivor soft separation
     for (let i = 0; i < this.zombies.length; i++) {
       const a = this.zombies[i];
-      if (!a.alive) continue;
+      if (!a.alive || a.mantle) continue;
       this.forZombiesNear(a.pos.x, a.pos.z, 1.2, (b, j) => {
-        if (j <= i || !b.alive || Math.abs(b.pos.y - a.pos.y) > 1.2) return;
+        if (j <= i || !b.alive || b.mantle || Math.abs(b.pos.y - a.pos.y) > 1.2) return;
         const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
         const min = a.radius + b.radius;
         const d2 = dx * dx + dz * dz;
@@ -381,10 +392,11 @@ export class World {
         }
       });
     }
+    // a climbing body is on a scripted path and is left alone
     for (const s of this.survivors) {
-      if (!s.alive) continue;
+      if (!s.alive || s.mantle) continue;
       this.forZombiesNear(s.pos.x, s.pos.z, 1.2, (z) => {
-        if (!z.alive || Math.abs(z.pos.y - s.pos.y) > 1.2) return;
+        if (!z.alive || z.mantle || Math.abs(z.pos.y - s.pos.y) > 1.2) return;
         const dx = s.pos.x - z.pos.x, dz = s.pos.z - z.pos.z;
         const min = s.radius + z.radius;
         const d2 = dx * dx + dz * dz;
@@ -397,7 +409,7 @@ export class World {
         }
       });
       for (const o of this.survivors) {
-        if (o === s || !o.alive || o.id < s.id || Math.abs(o.pos.y - s.pos.y) > 1.2) continue;
+        if (o === s || !o.alive || o.id < s.id || o.mantle || Math.abs(o.pos.y - s.pos.y) > 1.2) continue;
         const dx = o.pos.x - s.pos.x, dz = o.pos.z - s.pos.z;
         const min = s.radius + o.radius;
         const d2 = dx * dx + dz * dz;
@@ -408,8 +420,11 @@ export class World {
           o.pos.x += (dx / d) * push; o.pos.z += (dz / d) * push;
         }
       }
-      if (this.levels) this.collision.resolveBody(s.pos, s.radius, s.pos.y, s.height);
-      else this.collision.resolveCircle(s.pos, s.radius, s.pos.y + 0.3);
+      if (this.levels) {
+        this.collision.resolveBody(s.pos, s.radius, s.pos.y, s.height);
+        // after every move and push this tick: nobody leaves the campus over a wall, gate or the median
+        this.collision.clampLip(s.pos, s.pos.y);
+      } else this.collision.resolveCircle(s.pos, s.radius, s.pos.y + 0.3);
     }
   }
 
@@ -451,6 +466,38 @@ export class World {
   private collideWalker(a: Walker, dt: number): void {
     if (this.levels) this.moveBody(a, dt);
     else this.collision.resolveCircle(a.pos, a.radius, 0.3);
+  }
+
+  /**
+   * AI climb: a grounded body whose next step (nav node or chase target) is more than STEP_UP above its feet starts a
+   * timed climb when ledgeAt finds a climbable top ahead along (dx, dz). The caller ignores its steering while it runs.
+   */
+  private tryClimb(a: Survivor | Zombie, dx: number, dz: number, nextY: number, dur: number): boolean {
+    if (!this.levels || !a.grounded || nextY <= a.pos.y + STEP_UP + 0.02) return false;
+    const l = this.collision.ledgeAt(a.pos.x, a.pos.z, dx, dz, a.pos.y, a.radius);
+    if (!l) return false;
+    this.startClimb(a, l, dur);
+    return true;
+  }
+
+  private startClimb(a: Survivor | Zombie, l: { x: number; y: number; z: number }, dur: number): void {
+    a.mantle = { t: 0, dur, fx: a.pos.x, fy: a.pos.y, fz: a.pos.z, tx: l.x, ty: l.y, tz: l.z };
+    a.vel.set(0, 0, 0);
+    a.grounded = false;
+  }
+
+  /** Advance a timed climb: no collision or steering until it ends, grounded and at rest (a gate top is 0.5 m wide). */
+  private stepClimb(a: Survivor | Zombie, dt: number): void {
+    const m = a.mantle!;
+    m.t += dt / m.dur;
+    const t = Math.min(1, m.t), s = t * t * (3 - 2 * t);
+    a.pos.set(m.fx + (m.tx - m.fx) * s, m.fy + (m.ty - m.fy) * Math.min(1, t * 1.6), m.fz + (m.tz - m.fz) * s);
+    if (m.t >= 1) {
+      a.mantle = null;
+      a.grounded = true;
+      a.vy = 0;
+      a.vel.set(0, 0, 0);
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -565,22 +612,41 @@ export class World {
     p.aimYaw = input.yaw;
     p.aimPitch = input.pitch;
     p.anim.aimPitch = input.pitch;
+    const def = p.def;
+    const wantsAim = input.aim && def.kind === 'gun';
+    // aim origin/dir for this tick: the render camera when the client supplied one, else the sim's own camera pose.
+    // Runs every tick (not just on fire) since the squad's aim-corridor check reads p.aimOrigin off the player.
+    if (Number.isFinite(input.camX)) {
+      p.aimOrigin.set(input.camX, input.camY, input.camZ);
+      forwardFromYawPitch(input.yaw, input.pitch, _camDir);
+    } else {
+      cameraPose(p.pos, input.yaw, input.pitch, wantsAim ? 1 : 0, p.aimOrigin, _camDir);
+    }
     if (p.downed) {
       p.vel.set(0, 0, 0);
       p.aiming = false;
       p.anim.aiming = false;
+      // downed mid-climb or mid-air: drop to the floor instead of hanging on the ledge face out of revive reach
+      p.mantle = null;
+      if (this.levels) this.moveBody(p, dt);
       return;
     }
-    const def = p.def;
     // weapon switching
     if (input.weaponSlot >= 0) this.switchWeapon(p, input.weaponSlot);
     else if (input.weaponScroll) this.switchWeapon(p, (p.current + input.weaponScroll + p.weapons.length) % p.weapons.length);
     if (input.reload) this.startReload(p);
 
-    const wantsAim = input.aim && def.kind === 'gun';
     const sprinting = input.sprint && input.moveZ > 0.1 && !wantsAim && !input.fire && p.reloadT < 0;
     p.aiming = wantsAim;
     p.anim.aiming = wantsAim || (input.fire && def.kind === 'gun') || p.sinceFire < 0.8;
+
+    // mantle in progress: scripted climb, no collision, movement, firing or interaction
+    if (p.mantle) {
+      this.stepClimb(p, dt);
+      if (!p.mantle) this.events.emit('land', { actorId: p.id, position: p.pos });
+      p.prevFire = input.fire;
+      return;
+    }
 
     // movement
     const f = forwardFromYawPitch(input.yaw, 0, _v);
@@ -595,10 +661,18 @@ export class World {
     p.vel.x += (wx * speed - p.vel.x) * k;
     p.vel.z += (wz * speed - p.vel.z) * k;
     // jump + gravity
+    // jump: mantle onto a ledge ahead (move direction, else camera forward) when there is one, else a plain hop
     if (input.jump && p.grounded) {
-      p.vy = 5.0;
       p.grounded = false;
       this.events.emit('jump', { actorId: p.id, position: p.pos });
+      const ml = Math.hypot(wx, wz);
+      const l = this.levels ? this.collision.ledgeAt(p.pos.x, p.pos.z, ml > 0.1 ? wx / ml : f.x, ml > 0.1 ? wz / ml : f.z, p.pos.y, p.radius) : null;
+      if (l) {
+        this.startClimb(p, l, CLIMB_DUR.player);
+        p.prevFire = input.fire;
+        return;
+      }
+      p.vy = 5.0;
     }
     if (this.levels) {
       p.pos.x += p.vel.x * dt;
@@ -623,6 +697,8 @@ export class World {
       p.pos.z += p.vel.z * dt;
       this.collision.resolveCircle(p.pos, p.radius, p.pos.y + 0.3);
     }
+    // the render camera follows the interpolated player, camAlpha of the way through this tick's movement
+    p.aimOrigin.addScaledVector(_v3.subVectors(p.pos, p.prev), input.camAlpha);
 
     // facing: face the camera when aiming/shooting, otherwise the direction of travel
     const facingCam = p.anim.aiming || p.meleeT >= 0;
@@ -647,8 +723,8 @@ export class World {
           p.fireCd = 0.25;
           if (p.slot.reserve <= 0 && !p.prevFire) this.events.emit('message', { text: 'Out of ammo — find an ammo crate (E)', kind: 'warn' });
         } else {
-          cameraPose(p.pos, input.yaw, input.pitch, wantsAim ? 1 : 0, _camPos, _camDir);
-          const aimPoint = this.aimPoint(_camPos, _camDir, 250, _v3);
+          _aimPivot.set(p.pos.x, p.pos.y + CAM.pivotY, p.pos.z);
+          const aimPoint = this.aimPoint(p.aimOrigin, _camDir, 250, _v3, _aimPivot);
           const muzzle = this.muzzlePos(p, _v);
           this.fire(p, muzzle, aimPoint, wantsAim);
         }
@@ -668,34 +744,57 @@ export class World {
     return out.set(s.pos.x, s.pos.y + (pistol ? 1.42 : 1.38), s.pos.z).addScaledVector(r, pistol ? 0.18 : 0.22).addScaledVector(f, pistol ? 0.62 : 0.78);
   }
 
-  /** First thing the camera ray hits (static geometry or a zombie), or a far point. */
-  aimPoint(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, out: THREE.Vector3): THREE.Vector3 {
+  /**
+   * First thing the camera ray hits (static geometry or a zombie), or a far point.
+   * `pivot` is the point near the player the ray should be judged from (e.g. the shoulder pivot): geometry or
+   * zombies between `origin` and `pivot` are ignored, so a render camera sitting behind or beside the player
+   * (far/high views, or one pulled through a wall) can't capture the aim on something in front of it.
+   */
+  aimPoint(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, out: THREE.Vector3, pivot: THREE.Vector3): THREE.Vector3 {
+    const tStart = Math.max(0, (pivot.x - origin.x) * dir.x + (pivot.y - origin.y) * dir.y + (pivot.z - origin.z) * dir.z);
     let best = maxDist;
-    const h = this.collision.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, maxDist, _hitRes, true);
-    if (h) best = h.dist;
+    const h = this.collision.raycast(origin.x + dir.x * tStart, origin.y + dir.y * tStart, origin.z + dir.z * tStart, dir.x, dir.y, dir.z, maxDist - tStart, _hitRes, true);
+    if (h) best = tStart + h.dist;
     for (const z of this.zombies) {
       if (!z.alive) continue;
       const t = rayZombie(z, origin, dir, best);
-      if (t && t.t < best) best = t.t;
+      if (t && t.t < best && t.t >= tStart) best = t.t;
     }
-    // don't aim at points behind/very close to the camera (inside the shoulder zone)
-    best = Math.max(best, 2.5);
+    // don't aim at points behind/very close to the pivot (inside the shoulder zone)
+    best = Math.max(best, tStart + 1.0);
     return out.copy(origin).addScaledVector(dir, best);
   }
 
   // ---------------------------------------------------------------------------------------------
   // Shooting
   // ---------------------------------------------------------------------------------------------
+  /** Spread (rad) before the NPC accuracy/skill terms fire() adds on top: shared with playerSpread(). */
+  private baseSpread(s: Survivor, aiming: boolean): number {
+    const moving = Math.hypot(s.vel.x, s.vel.z) > 0.8;
+    let spread = aiming ? s.def.spreadAim : s.def.spreadHip;
+    spread *= (moving ? 1.5 : 1) * (1 + s.bloom) * (s.grounded ? 1 : 2);
+    return spread;
+  }
+
+  /**
+   * Half-angle (rad) of the cone the local player's next shot is guaranteed to land within, for sizing the HUD
+   * reticle: same bloom/moving/airborne terms fire() uses, scaled by perturb()'s worst case (its rand() floor of
+   * 1e-6 caps the deviation any single pellet can get at spread * SPREAD_MAX).
+   */
+  playerSpread(): number {
+    const p = this.player;
+    if (!p || p.def.kind !== 'gun') return 0;
+    return this.baseSpread(p, p.aiming) * SPREAD_MAX;
+  }
+
   fire(s: Survivor, originIn: THREE.Vector3, target: THREE.Vector3, aiming: boolean): void {
     const d = s.def;
     const origin = _fireOrigin.copy(originIn); // callers pass scratch vectors; snapshot before tracing
     s.slot.mag--;
     s.fireCd = 60 / d.rpm;
     s.sinceFire = 0;
-    const moving = Math.hypot(s.vel.x, s.vel.z) > 0.8;
-    let spread = aiming ? d.spreadAim : d.spreadHip;
-    spread *= (moving ? 1.5 : 1) * (1 + s.bloom) * (s.grounded ? 1 : 2);
-    if (s.kind === 'npc') spread = spread * 1.2 + (1 - (this.brains.get(s.id)?.accuracy ?? 0.7)) * 0.05;
+    let spread = this.baseSpread(s, aiming);
+    if (s.kind === 'npc') spread = spread * 1.2 + (1 - (this.brains.get(s.id)?.accuracy ?? 0.7)) * 0.05 + npcSkill(this.wave).spread;
     const dir = _fireDir.copy(target).sub(origin);
     const dist = dir.length();
     if (dist < 0.01) dir.set(-Math.sin(s.yaw), 0, -Math.cos(s.yaw));
@@ -732,7 +831,7 @@ export class World {
     for (const h of _hits) {
       if (pen <= 0) break;
       const fall = h.t > d.falloffStart ? Math.max(0.45, 1 - (h.t - d.falloffStart) / (d.range - d.falloffStart)) : 1;
-      const dmg = d.damage * (h.head ? d.headMult : 1) * fall * (pen < d.penetration + 1 ? 0.7 : 1) * (s.kind === 'npc' ? NPC_DAMAGE : 1);
+      const dmg = d.damage * (h.head ? d.headMult : 1) * fall * (pen < d.penetration + 1 ? 0.7 : 1) * (s.kind === 'npc' ? npcSkill(this.wave).dmg : 1);
       const point = _hitPoint.copy(origin).addScaledVector(dir, h.t);
       this.damageZombie(h.z, dmg, s, point, dir, h.head, d);
       pen--;
@@ -758,7 +857,8 @@ export class World {
       hits++;
       const head = this.rand() < 0.3;
       const point = _v.set(z.pos.x, z.pos.y + 1.3 * z.scale, z.pos.z);
-      this.damageZombie(z, d.damage * (head ? d.headMult : 1), s, point, _v3.set(dx / (dist || 1), 0, dz / (dist || 1)), head, d);
+      const dmg = d.damage * (head ? d.headMult : 1) * (s.kind === 'npc' ? npcSkill(this.wave).dmg : 1);
+      this.damageZombie(z, dmg, s, point, _v3.set(dx / (dist || 1), 0, dz / (dist || 1)), head, d);
     });
     if (hits === 0) {
       // bash the gate or nothing
@@ -794,9 +894,18 @@ export class World {
     z.state = 'dead';
     z.deadT = 0;
     z.anim.dead = true;
-    z.anim.deathVariant = this.rand() < 0.5 ? 0 : 1;
+    // Topple in the direction of the last hit: forward = the hit direction when it came from behind (a forward
+    // stumble), forward = its opposite when hit from the front (a backward fall). Either way the corpse turns
+    // at most 90 degrees to face `deathYaw` (see cleanupCorpses).
+    const hx = z.anim.hitDirX, hz = z.anim.hitDirZ;
+    const fx = -Math.sin(z.yaw), fz = -Math.cos(z.yaw);
+    if (hx === 0 && hz === 0) { z.deathYaw = z.yaw; z.anim.deathVariant = 0; }
+    else if (hx * fx + hz * fz > 0) { z.anim.deathVariant = 1; z.deathYaw = Math.atan2(-hx, -hz); }
+    else { z.anim.deathVariant = 0; z.deathYaw = Math.atan2(hx, hz); }
     z.anim.attackP = -1;
     z.vel.set(0, 0, 0);
+    // killed mid-climb: the corpse lies where the climb started, not in the air against the face
+    if (z.mantle) { z.pos.set(z.mantle.fx, z.mantle.fy, z.mantle.fz); z.mantle = null; }
     this.totalKills++;
     if (by) {
       by.kills++;
@@ -1054,14 +1163,13 @@ export class World {
   }
 
   private cleanupCorpses(dt: number): void {
-    let corpses = 0;
     for (let i = this.zombies.length - 1; i >= 0; i--) {
       const z = this.zombies[i];
       if (z.alive) continue;
       z.deadT += dt;
       z.anim.deadT = z.deadT;
-      corpses++;
-      if (z.deadT > 14 || (corpses > 30 && z.deadT > 3)) this.zombies.splice(i, 1);
+      if (z.deadT < 0.3) z.yaw = turnToward(z.yaw, z.deathYaw, 8 * dt);
+      if (z.deadT > CORPSE_FADE_START + CORPSE_FADE_DUR) this.zombies.splice(i, 1);
     }
   }
 
@@ -1082,6 +1190,13 @@ export class World {
       z.groanT = 3 + this.rand() * 7;
       this.events.emit('zombieGroan', { id: z.id, position: z.pos, kind: z.type === 'runner' && !z.alerted ? 'scream' : this.rand() < 0.3 ? 'near' : 'groan' });
       if (z.type === 'runner') z.alerted = true;
+    }
+    if (z.mantle) {
+      this.stepClimb(z, dt);
+      // arms-forward lunge: the attack pose, driven by the climb's progress
+      a.attackP = z.mantle ? z.mantle.t : -1;
+      a.speed = 0;
+      return;
     }
     // target selection
     z.retargetT -= dt;
@@ -1152,15 +1267,25 @@ export class World {
       z.losT -= dt;
       if (z.losT <= 0) {
         z.losT = 0.35 + this.rand() * 0.2;
-        z.hasLos = dist < 14 && this.collision.los(z.pos.x, z.pos.y + 1.2, z.pos.z, target.pos.x, target.pos.y + 1.2, target.pos.z);
+        // steering LOS: gate bars are see-through but not walk-through, so a closed gate sends it to the field (bash)
+        z.hasLos = dist < 14 && this.collision.los(z.pos.x, z.pos.y + 1.2, z.pos.z, target.pos.x, target.pos.y + 1.2, target.pos.z, true);
       }
-      if (z.hasLos && dist > 0.1) {
+      // a straight line to the target that walks off an edge (a wall or gate top, a stack tier) follows the graph instead;
+      // the probe runs 1.2 m ahead, since steering lags the heading by ~0.3 s
+      const ledge = z.hasLos && dist > 0.1 && this.levels && ((this.nav as LayeredNav).thinAt(z.pos.x, z.pos.z, z.pos.y)
+        || z.pos.y - this.collision.groundAt(z.pos.x + (dx / dist) * 1.2, z.pos.z + (dz / dist) * 1.2, z.pos.y + STEP_UP) > STEP_UP);
+      if (z.hasLos && dist > 0.1 && !ledge) {
         desiredX = dx / dist; desiredZ = dz / dist;
         z.state = 'chase';
+        if (this.tryClimb(z, desiredX, desiredZ, target.pos.y, CLIMB_DUR[z.type])) return;
       } else {
+        _dir2.y = -Infinity;
         const gi = this.nav.descend('zombie', z.pos.x, z.pos.z, _dir2, z.pos.y);
         if (gi === -2) { desiredX = dx / (dist || 1); desiredZ = dz / (dist || 1); }
-        else { desiredX = _dir2.x; desiredZ = _dir2.z; }
+        else {
+          desiredX = _dir2.x; desiredZ = _dir2.z;
+          if (this.tryClimb(z, desiredX, desiredZ, _dir2.y, CLIMB_DUR[z.type])) { z.state = 'chase'; return; }
+        }
         // at a closed gate?
         const gate = gi >= 0 ? this.gates[gi] : null;
         if (gate && !gate.broken) {
@@ -1232,7 +1357,13 @@ export class World {
     const b = this.brains.get(n.id)!;
     const p = this.player;
     n.anim.reviving = false;
-    if (n.downed) { n.vel.set(0, 0, 0); return; }
+    if (n.downed) {
+      n.vel.set(0, 0, 0);
+      // downed mid-climb: drop to the floor, as the player does
+      if (n.mantle) { n.mantle = null; if (this.levels) this.moveBody(n, dt); }
+      return;
+    }
+    if (n.mantle) { this.stepClimb(n, dt); return; }
     b.thinkT -= dt;
     let target = b.targetId ? this.zombies.find((z) => z.id === b.targetId && z.alive) : undefined;
     if (b.thinkT <= 0) {
@@ -1246,8 +1377,11 @@ export class World {
         if (!z.alive) continue;
         const d = Math.hypot(z.pos.x - n.pos.x, z.pos.z - n.pos.z);
         if (d > 75) continue;
+        // the squad only engages what's near the player, not whatever an NPC can see 75 m off on its own
+        const dp = p ? Math.hypot(z.pos.x - p.pos.x, z.pos.z - p.pos.z) : 0;
+        if (p && dp > NPC_ENGAGE_RANGE && d > NPC_SELF_DEFENSE) continue;
         let score = d;
-        if (p && Math.hypot(z.pos.x - p.pos.x, z.pos.z - p.pos.z) < 4) score *= 0.5;
+        if (p && dp < 4) score *= 0.5;
         cands.push({ z, d: score });
       }
       cands.sort((x, y) => x.d - y.d);
@@ -1275,15 +1409,30 @@ export class World {
     // decide where to go
     const goal = _v.copy(n.pos);
     let urgent = false;
+    let closing = false;
     const reviveT = b.reviveId ? this.findSurvivor(b.reviveId) : undefined;
     if (reviveT && reviveT.downed) {
       goal.copy(reviveT.pos);
       urgent = true;
     } else if (b.mode === 'follow' && p && p.alive) {
-      const c = Math.cos(p.yaw), s = Math.sin(p.yaw);
-      // formation offset rotated by player facing (x right, y back)
-      goal.set(p.pos.x + c * b.formation.x + s * b.formation.y, p.pos.y, p.pos.z - s * b.formation.x + c * b.formation.y);
-      if (this.nav.isBlocked(goal.x, goal.z, goal.y)) goal.copy(p.pos);
+      // trail, don't shadow: stand put until too far behind, then walk to the slot; stop once close again.
+      // Distance is along the player field, so a player up on a landing or podium is far from an NPC below it.
+      // INF means the NPC is off the graph (hugging a wall or tree): use the straight line instead.
+      const cost = this.nav.cost('player', n.pos.x, n.pos.z, n.pos.y);
+      const distP = cost === INF ? Math.hypot(p.pos.x - n.pos.x, p.pos.z - n.pos.z) : cost / 10;
+      if (!b.trailing && distP > TRAIL_REPATH) b.trailing = true;
+      if (b.trailing) {
+        const c = Math.cos(p.aimYaw), s = Math.sin(p.aimYaw);
+        // formation offset rotated by camera yaw (x right, y back), so "behind" means behind the view
+        goal.set(p.pos.x + c * b.formation.x + s * b.formation.y, p.pos.y, p.pos.z - s * b.formation.x + c * b.formation.y);
+        if (this.nav.isBlocked(goal.x, goal.z, goal.y)) goal.copy(p.pos);
+        if (Math.hypot(goal.x - n.pos.x, goal.z - n.pos.z) < TRAIL_ARRIVE || distP < TRAIL_STOP) b.trailing = false;
+      } else if (!target) {
+        // not trailing: the NPC holds its ground (goal stays n.pos) while still fighting and kiting below, unless the
+        // player is under attack by something this NPC can't see; then it closes in until it has line of sight
+        this.forZombiesNear(p.pos.x, p.pos.z, 3.5, (z) => { if (z.alive) closing = true; });
+        if (closing) goal.copy(p.pos);
+      }
     } else {
       goal.copy(b.holdPos);
     }
@@ -1302,18 +1451,44 @@ export class World {
         if (!this.nav.isBlocked(want.x, want.z, want.y)) goal.copy(want);
       }
     }
+    // stay out of the player's crosshair: if standing in the aim corridor ahead of the camera, sidestep out of it.
+    // Not while closing in on an unseen attacker: its path to the player may cross the corridor, and the sidestep
+    // would push it back every tick.
+    let aimClear = false;
+    if (!urgent && !closing && p && p.alive) {
+      const ox = p.aimOrigin.x, oz = p.aimOrigin.z;
+      const fx = -Math.sin(p.aimYaw), fz = -Math.cos(p.aimYaw);
+      const nx = n.pos.x - ox, nz = n.pos.z - oz;
+      if (nx * fx + nz * fz > 0) {
+        const d = distToSegment(n.pos.x, n.pos.z, ox, oz, ox + fx * AIM_CLEAR_LEN, oz + fz * AIM_CLEAR_LEN);
+        if (d < AIM_CLEAR_R) {
+          const side = fx * nz - fz * nx >= 0 ? 1 : -1;
+          const m = (AIM_CLEAR_R + 0.8 - d) * side;
+          goal.set(n.pos.x - fz * m, n.pos.y, n.pos.z + fx * m);
+          // hold mode: move the hold spot to the sidestep goal (not by it, which would drift every tick in the corridor)
+          if (b.mode === 'hold') b.holdPos.set(goal.x, b.holdPos.y, goal.z);
+          aimClear = true;
+        }
+      }
+    }
     let mx = 0, mz = 0, speed = 0;
     const gdx = goal.x - n.pos.x, gdz = goal.z - n.pos.z;
     const gdist = Math.hypot(gdx, gdz);
     const followingPlayer = !urgent && b.mode === 'follow' && p && p.alive;
     const stopDist = urgent ? 1.1 : followingPlayer ? 1.4 : 0.8;
-    if (gdist > stopDist) {
+    if (gdist > stopDist || aimClear) {
       speed = gdist > 9 || urgent ? 4.6 : gdist > 4 ? 3.4 : 2.2;
+      _dir2.y = -Infinity;
       const direct = gdist < 10 && Math.abs(goal.y - n.pos.y) < 0.6 && this.collision.los(n.pos.x, n.pos.y + 1.0, n.pos.z, goal.x, goal.y + 1.0, goal.z);
       if (direct) { mx = gdx / gdist; mz = gdz / gdist; }
-      else if (followingPlayer && this.nav.descend('player', n.pos.x, n.pos.z, _dir2, n.pos.y) >= -1 && (_dir2.x || _dir2.z)) { mx = _dir2.x; mz = _dir2.z; }
-      else { mx = gdx / gdist; mz = gdz / gdist; }
+      else if ((followingPlayer || (urgent && reviveT === p)) && this.nav.descend('player', n.pos.x, n.pos.z, _dir2, n.pos.y) >= -1 && (_dir2.x || _dir2.z)) {
+        mx = _dir2.x; mz = _dir2.z;
+        // the squad climbs stack tiers but not onto a thin top (gate, wall): the tier below is as far as it goes
+        if (_dir2.thin && _dir2.y > n.pos.y + STEP_UP + 0.02) speed = 0;
+        else if (this.tryClimb(n, mx, mz, _dir2.y, CLIMB_DUR.npc)) return;
+      } else { mx = gdx / gdist; mz = gdz / gdist; }
     }
+    if (aimClear) speed = Math.max(speed, 3.0);
     // kite away from close zombies
     let threatX = 0, threatZ = 0, threat = false;
     this.forZombiesNear(n.pos.x, n.pos.z, 3.6, (z) => {
@@ -1347,7 +1522,7 @@ export class World {
     this.collideWalker(n, dt);
 
     // revive
-    if (reviveT && reviveT.downed && Math.hypot(reviveT.pos.x - n.pos.x, reviveT.pos.z - n.pos.z) < 1.6) {
+    if (reviveT && reviveT.downed && Math.hypot(reviveT.pos.x - n.pos.x, reviveT.pos.z - n.pos.z) < 1.6 && Math.abs(reviveT.pos.y - n.pos.y) < 1.5) {
       n.vel.multiplyScalar(0.1);
       n.anim.reviving = true;
       reviveT.reviveProgress += dt / 3.5;
@@ -1361,7 +1536,8 @@ export class World {
     // facing + shooting
     let faceYaw = n.yaw;
     if (target) {
-      const aimY = target.type === 'crawler' ? 0.4 : (b.accuracy > 0.8 && this.rand() < 0.35 ? 1.55 : 1.2) * target.scale;
+      const skill = npcSkill(this.wave);
+      const aimY = target.type === 'crawler' ? 0.4 : (skill.head && b.accuracy > 0.8 && this.rand() < 0.35 ? 1.55 : 1.2) * target.scale;
       const tx = target.pos.x - n.pos.x, tz = target.pos.z - n.pos.z;
       faceYaw = Math.atan2(-tx, -tz);
       n.yaw = turnToward(n.yaw, faceYaw, 9 * dt);
@@ -1369,7 +1545,10 @@ export class World {
       n.anim.aimPitch = Math.atan2(target.pos.y + aimY - (n.pos.y + 1.45), Math.hypot(tx, tz));
       const aligned = Math.abs(angleDiff(n.yaw, faceYaw)) < 0.2;
       const d = n.def;
-      const inRange = Math.hypot(target.pos.x - n.pos.x, target.pos.z - n.pos.z) <= effectiveRange(d) + 4;
+      // the player-radius cap is also applied at fire time: knockback can carry a target past it between thinks
+      const tdist = Math.hypot(target.pos.x - n.pos.x, target.pos.z - n.pos.z);
+      const inRange = tdist <= effectiveRange(d) + 4
+        && (!p || tdist <= NPC_SELF_DEFENSE || Math.hypot(target.pos.x - p.pos.x, target.pos.z - p.pos.z) <= NPC_ENGAGE_RANGE);
       if (d.kind === 'gun' && aligned && inRange && n.fireCd <= 0 && n.reloadT < 0 && n.switchT < 0) {
         if (n.slot.mag <= 0) this.startReload(n);
         else {
@@ -1379,7 +1558,7 @@ export class World {
           const lead = _v3.set(target.pos.x + target.vel.x * 0.1, target.pos.y + aimY, target.pos.z + target.vel.z * 0.1);
           this.fire(n, muzzle, lead, true);
           b.burst--;
-          if (b.burst <= 0) n.fireCd = Math.max(n.fireCd, b.reaction + this.rand() * 0.25 + (d.auto ? 0.15 : 0.2));
+          if (b.burst <= 0) n.fireCd = Math.max(n.fireCd, b.reaction + skill.reaction + this.rand() * 0.25 + (d.auto ? 0.15 : 0.2));
           else n.fireCd = Math.max(n.fireCd, 60 / d.rpm * 1.25);
         }
       }
@@ -1416,6 +1595,13 @@ export function effectiveRange(d: WeaponDef): number {
   return d.kind === 'melee' ? 2 : Math.min(70, d.pellets > 1 ? d.range * 0.8 : d.range * 0.75);
 }
 
+/** Squad skill scales with wave: weak and spread-happy early, full effectiveness (the old flat 0.65 damage) by wave 5. */
+function npcSkill(wave: number): { dmg: number; spread: number; reaction: number; head: boolean } {
+  if (wave <= 2) return { dmg: 0.40, spread: 0.035, reaction: 0.30, head: false };
+  if (wave <= 4) return { dmg: 0.55, spread: 0.015, reaction: 0.10, head: true };
+  return { dmg: 0.65, spread: 0, reaction: 0, head: true };
+}
+
 export function angleDiff(a: number, b: number): number {
   let d = b - a;
   while (d > Math.PI) d -= Math.PI * 2;
@@ -1428,6 +1614,9 @@ export function turnToward(cur: number, target: number, maxStep: number): number
   if (Math.abs(d) <= maxStep) return target;
   return cur + Math.sign(d) * maxStep;
 }
+
+/** perturb()'s rand() is floored at 1e-6, so this is the largest multiple of `spread` it can ever deviate by. */
+export const SPREAD_MAX = Math.sqrt(-2 * Math.log(1e-6)) * 0.5;
 
 function perturb(dir: THREE.Vector3, spread: number, out: THREE.Vector3, rand: () => number): THREE.Vector3 {
   if (spread <= 0) return out.copy(dir);

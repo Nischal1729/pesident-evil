@@ -148,9 +148,21 @@ audio.say(line: string, opts?: { voice?: 'male'|'female'; position?: Vector3 }) 
 * **Walking** (`World.moveBody`): bodies collide with solids that occupy `[y + STEP_UP, y + AGENT_HEIGHT]`
   (`resolveBody`), so anything ≤ 0.45 m (kerbs, tiers, low planters) is stepped onto. Ground follows `groundAt()`
   (seam-tolerant), with gravity off ledges, head bumps under ceilings and fall damage above 4 m for survivors.
+* **Climbing** (`ledgeAt`, `World.startClimb` / `stepClimb`): a timed climb onto a top more than STEP_UP and at most
+  `CLIMB_MAX` (1.3 m) above the feet, on a solid whose tag passes `climbableTag` (props, planters, stair and tier
+  sides, gate leaves, `'boundary'` compound walls). The player climbs on jump (0.45 s; a plain hop peaks at 0.74 m).
+  Zombies (0.55-1.4 s by type) and NPCs (0.6 s) climb when their next nav node, or a chase target in sight, is a
+  climb up ahead. Zombie reach is also 1.3 m, so no single climb leaves reach. Gate (2.4 m) and wall tops (2.62 /
+  2.72 m) are reached by the sandbag `STEP_STACKS` in two climbs plus a step. NPCs stop on the tier below a gate or
+  wall top.
+* **Boundary lips** (`setLip`, `clampLip`): compound walls, gate leaves and the main-gate median carry an outward
+  normal. They are climbable only from the inside, and a survivor on one is held back at its outer face, so nobody
+  leaves the campus over the top.
 * **Navigation** (`src/sim/LayeredNav.ts`): a 1 m grid where each cell holds one node per walkable surface with
-  head-room. Neighbours link across steps ≤ STEP_UP or continuous slopes. Flow fields (Dial's algorithm) spread along
-  reversed edges in the nav worker. The graph is built once per collision world (~60 ms for the campus, ~180k nodes).
+  head-room. Neighbours link across steps ≤ STEP_UP, continuous slopes, or straight climbs ≤ CLIMB_MAX onto a
+  climbable top (the `ledgeAt` rule, cost +30, never starting on a gate node). Wall, gate and scooter tops narrower
+  than a cell get nodes on their centreline. Flow fields (Dial's algorithm) spread along reversed edges in the nav
+  worker. The graph is built once per collision world (~200 ms for the campus with props, ~184k nodes).
 * Sight lines, zombie reach, melee, interactions, pickups and NPC aim all use actor heights; separation only pushes
   bodies on the same level. `StationDef.y` gives a station's floor height.
 * Doorways need ≥ 1.8 m and corridors ≥ 2.2 m so the 1 m nav grid (agent radius 0.38) routes through them.
