@@ -91,7 +91,7 @@ const SLAB = 0.3;
 /** Visual ceiling per floor (the 2nd floor has a false ceiling under the solid block above). */
 const CEIL = [L.F1 - SLAB, L.F2 - SLAB, L.top - 0.2];
 const HEAD = 2.4; // doorway head height above the floor
-const TOWER = { s: 9, d0: -0.8, slot: 2, slotD: 4 };
+const TOWER = { s: 9, d0: -0.8, slot: 2.5, slotD: 4, head: 42 };
 const LOBBY = { s: 6, glass: 0.6, d1: 10 };
 const MEZZ = 7.2; // front edge of the 1st/2nd-floor galleries over the lobby (they run back to d = 10)
 const LC = { s: 3.4, d0: 10, d1: 12.6 }; // lift core behind the lobby
@@ -279,13 +279,16 @@ function buildBEEntrance(kit: WorldKit, signs: SignUVs): void {
   for (let s = -LOBBY.s + 0.4; s < LOBBY.s - 0.2; s += 0.6) bx(mb, s - 0.03, s + 0.03, -0.25, 0.25, 8.3, TOP - 0.25, col('#e3e1db'));
   for (const y of [8.9, 9.6]) bx(mb, -LOBBY.s, LOBBY.s, -0.2, -0.1, y, y + 0.06, col('#d8d6d0'));
   kit.collision.addPolygon(rect(-LOBBY.s, LOBBY.s, TOWER.d0, LOBBY.glass), TOP - 7.0, 'concrete', 'be:lintel', 7.0);
-  // the slot reads as a deep shadowed recess (key frame 1406): darker cheeks, dark glazing strips at its back
+  // the recess reads as a deep shadowed portal (key frames 1406 / 1928): darker cheeks and head, a glazed wall at its
+  // back with a stone spandrel at every floor
   {
-    const yb = TOP + 0.3, yt = 56.4;
+    const yb = TOP + 0.3, yt = TOWER.head;
     const kb = kit.buf('stone', P(0, 2)[0], P(0, 2)[1]);
     for (const sg of [-1, 1]) bx(kb, sg * (TOWER.slot - 0.05), sg * TOWER.slot, TOWER.d0 + 0.3, TOWER.slotD, yb, yt, col('#9c8d78'), 0.5);
     const gl = kit.buf('glass', P(0, 2)[0], P(0, 2)[1]);
-    for (let y = yb + 1.2; y < yt - 1.5; y += 3.5) bx(gl, -1.4, 1.4, TOWER.slotD - 0.06, TOWER.slotD - 0.01, y, y + 2.2, col('#3a434a'));
+    bx(gl, -TOWER.slot + 0.05, TOWER.slot - 0.05, TOWER.slotD - 0.06, TOWER.slotD - 0.01, yb, yt - 0.3, col('#3e4a52'));
+    for (let y = 14.0; y < yt - 1; y += 3.5) bx(kb, -TOWER.slot + 0.05, TOWER.slot - 0.05, TOWER.slotD - 0.12, TOWER.slotD - 0.05, y - 0.35, y + 0.35, col('#a89883'), 0.5);
+    for (const s of [-1.2, 0, 1.2]) bx(kit.buf('metal', P(0, 2)[0], P(0, 2)[1]), s - 0.04, s + 0.04, TOWER.slotD - 0.1, TOWER.slotD - 0.05, yb, yt - 0.3, col('#3a3d41'));
   }
   // floor of the tower's slot (open to the sky above the lintel)
   bx(kit.buf('concrete', P(0, 0)[0], P(0, 0)[1]), -TOWER.slot, TOWER.slot, TOWER.d0, TOWER.slotD, TOP, TOP + 0.3, col('#a8a49c'), 0.5);

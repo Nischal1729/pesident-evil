@@ -287,9 +287,15 @@ export const BUILDINGS: BuildingDef[] = [
     roof: { solar: true, tanks: 4 },
     sign: { text: 'BE BLOCK', sub: 'COMPUTER SCIENCE & ENGG', edge: 14, offset: 0.5, color: '#2f3a40' },
   },
+  // the tower's deep portal-like recess runs up its east face to a solid stone head ~2 floors above the 10th-floor
+  // balcony band (key frames 1406 / 1928 / 0002), so the tower is a notched shaft plus a solid head
   {
-    id: 'bblock_tower', name: 'B-Block crest tower (over the entrance)', style: 'bblockTower', floors: 13, floorH: 3.5, base: BE_LEVELS.top, top: 57, soffit: 'grey',
-    poly: [bePt(-9, -0.8), bePt(-2, -0.8), bePt(-2, 4), bePt(2, 4), bePt(2, -0.8), bePt(9, -0.8), bePt(9, 18), bePt(-9, 18)],
+    id: 'bblock_tower', name: 'B-Block crest tower (over the entrance)', style: 'bblockTower', floors: 9, floorH: 3.5, base: BE_LEVELS.top, top: 42, soffit: 'grey', roof: { parapet: 0 },
+    poly: [bePt(-9, -0.8), bePt(-2.5, -0.8), bePt(-2.5, 4), bePt(2.5, 4), bePt(2.5, -0.8), bePt(9, -0.8), bePt(9, 18), bePt(-9, 18)],
+  },
+  {
+    id: 'bblock_tower_head', name: 'B-Block crest tower (solid head)', style: 'bblockTower', floors: 4, floorH: 3.5, base: 42, top: 57, soffit: 'grey',
+    poly: [bePt(-9, -0.8), bePt(9, -0.8), bePt(9, 18), bePt(-9, 18)],
   },
   {
     id: 'bblock_core', name: 'BE block (over the enterable core)', style: 'bblock', floors: 11, floorH: 3.5, base: BE_LEVELS.top, top: 50.15, soffit: 'grey', roof: { parapet: 0 },
