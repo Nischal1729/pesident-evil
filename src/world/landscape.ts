@@ -240,7 +240,8 @@ export function buildLandscape(kit: WorldKit): void {
       const ring: V2[] = [];
       for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; ring.push([x + Math.cos(a) * rr * 1.3, z + Math.sin(a) * rr]); }
       const purple = r() < 0.6;
-      kit.buf('stone', x, z).flatPoly(ring, 0.07, purple ? col('#4f2744') : col('#6b1f2e'), 2);
+      // each bed 4 mm above the previous one: the random beds overlap, and at one height they z-fought
+      kit.buf('stone', x, z).flatPoly(ring, 0.07 + i * 0.004, purple ? col('#4f2744') : col('#6b1f2e'), 2);
       // low purple-heart / maroon ground cover filling the bed
       const pr = rng(i * 97 + 13);
       for (let k = 0; k < rr * rr * 3.2; k++) {

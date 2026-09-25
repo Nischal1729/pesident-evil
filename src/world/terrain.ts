@@ -65,9 +65,12 @@ const XM = WORLD_BOUNDS.maxX + 8, ZM = WORLD_BOUNDS.minZ - 8;
  */
 const PLATEAU: V2[] = [
   [TERRAIN.slopeX1, -110.2], [119.6, -110.2], [119.6, -111.35], [133.99, -111.35], [133.99, -111.0], [137.5, -111.0],
-  [137.5, -111.35], [137.95, -111.35], [137.95, -110.5], [156.2, -110.5], [156.2, -106.4], [XM, -106.4], [XM, ZM],
+  [137.5, -111.35], [137.95, -111.35], [137.95, -110.48], [156.15, -110.48], [156.15, -106.4], [XM, -106.4], [XM, ZM],
   [TERRAIN.orrX1, ZM], ...WALL_OUT, [TERRAIN.orrX0, -162], [114, -162], [114, -139.5], [TERRAIN.slopeX1, -139.5],
 ]; // (the plaza terrace, built at H, is notched out: x 96 … 114, z −162 … −153.4)
+// The edge at z −110.48 / x 156.15 stands 2–5 cm proud of the boundary wall's coping (z −110.5) and the admission
+// building's west face (x 156.2): on the old line those faces were half lifted (vertices exactly on the edge are not
+// inside) and z-fought with the retaining face drawn along it (a flickering streak, a sheared coping and mural).
 /** The entry road with its walkways and the PES Lawn promenade, sloping down west to GJB level (slopeY). */
 const SLOPE: V2[] = [
   [TERRAIN.slopeX0, -139.5], [TERRAIN.slopeX1, -139.5], [TERRAIN.slopeX1, -110.2], [104, -110.2], [104, -117.5], [TERRAIN.slopeX0, -117.5],

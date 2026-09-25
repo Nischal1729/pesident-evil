@@ -373,7 +373,9 @@ export class CampusBuilder {
       if (b.style === 'hostel') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.45, 0.22, ledge, FACADE_STYLES.hostel.band, 2, exposed);
       else if (b.style === 'fWing') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.55, 0.18, ledge, col('#e2d4b8'), 2, exposed);
       else if (b.style === 'oldCream') addLedgesAt(b.poly, floorYs(b.floors - 1), 0.5, 0.15, ledge, col('#e6e1d8'), 2, exposed);
-      if (b.style === 'fTower' || b.style === 'fPodium' || b.style === 'fWing') addLedgesAt(b.poly, [top + 0.2], 0.8, 0.7, ledge, b.style === 'fWing' ? col('#b8604a') : col('#9e4a38'), 2, exposed);
+      // (the wings' band 1 cm higher: where it meets a terracotta block's band at the same roof height, the overlapping
+      // corners z-fought)
+      if (b.style === 'fTower' || b.style === 'fPodium' || b.style === 'fWing') addLedgesAt(b.poly, [top + (b.style === 'fWing' ? 0.21 : 0.2)], 0.8, 0.7, ledge, b.style === 'fWing' ? col('#b8604a') : col('#9e4a38'), 2, exposed);
       if (b.style === 'mrd') addLedgesAt(b.poly, [top + 0.1], 1.0, 0.45, ledge, col('#1f2b45'), 3, exposed);
       if (b.roof && (base === 0 || b.roof.tanks)) roofClutter(b.poly, top, seed, b.roof, tanks, solar, cabins.get('cabin', c[0], c[1]), col('#e2ddd2'));
       if (b.roof?.skylights) {

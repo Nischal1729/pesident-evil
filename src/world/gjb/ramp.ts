@@ -56,7 +56,9 @@ export function buildFrontRamp(kit: WorldKit, signs: SignUVs): void {
   const Ld = R.landing, NO = driveNorthZ;
   const land: V2[] = [[Ld.x0, Ld.zN], [Ld.x1, Ld.zN], [Ld.x1, NO(84)], [84, NO(84)], [Ld.x0, NO(Ld.x0)]];
   kit.buf('stone', 82, -133).flatPoly(land, L1 + 0.02, buff, 3);
-  kit.buf('stone', 82, -133).flatPoly(land, L1 - 0.5, col('#bab8b2'), 3, true);
+  // soffit and parapet bottoms 3 cm above the porch deck soffit (both at L1 − 0.5): the porch deck's straight north edge
+  // cuts ~1 m into the landing at its west end, and the coplanar soffits z-fought there
+  kit.buf('stone', 82, -133).flatPoly(land, L1 - 0.47, col('#bab8b2'), 3, true);
   c.addPolygon(land, 0.5, 'concrete', 'landing', L1 - 0.5);
   for (const [x, z] of [[85.4, -137.2], [79.5, -130.1], [85.4, -130.1]] as V2[]) {
     kit.box('stone', x, (L1 - 0.5) / 2, z, 0.6, L1 - 0.5, 0.6, 0, side, 0.5);
@@ -64,7 +66,7 @@ export function buildFrontRamp(kit: WorldKit, signs: SignUVs): void {
   }
   // landing parapets (open to the ramp on the east, to the porch on the south, to the MRD bridge on the west)
   const edge = (a: V2, bb: V2, off: number) => {
-    kit.segBox('stone', a, bb, L1 - 0.5, L1 + 1.1, 0.3, parapet, off, 0.15);
+    kit.segBox('stone', a, bb, L1 - 0.47, L1 + 1.1, 0.3, parapet, off, 0.15);
     kit.segBox('stone', a, bb, L1 + 1.1, L1 + 1.17, 0.36, col('#2c2e30'), off, 0.15);
     c.addPolygon(segPoly(a, bb, 0.3, off), 1.6, 'concrete', 'parapet', L1 - 0.5);
   };
@@ -95,8 +97,9 @@ export function buildFrontRamp(kit: WorldKit, signs: SignUVs): void {
   // --- canopy over the west half of the landing (joins the porch roof)
   const cY = L1 + 5.2, cT = 0.7;
   const canopy = rect(tx0, tz0, tx1, NO(tx1) - 0.3);
-  kit.buf('stone', 80.6, -134).flatPoly(canopy, cY + cT, deck, 3);
-  kit.buf('stone', 80.6, -134).flatPoly(canopy, cY, col('#6b4a36'), 3, true);
+  // top and soffit 2 cm inside the porch roof's (same heights): the porch roof's fascia runs across the canopy
+  kit.buf('stone', 80.6, -134).flatPoly(canopy, cY + cT - 0.02, deck, 3);
+  kit.buf('stone', 80.6, -134).flatPoly(canopy, cY + 0.02, col('#6b4a36'), 3, true);
   kit.segBox('stone', [tx1, tz0], [tx1, NO(tx1) - 0.3], cY, cY + cT, 0.3, col('#e8e2d5'), -0.15);
   c.addPolygon(canopy, cT, 'concrete', 'canopy', cY);
   // (the PES signboard box that stood on this canopy moved to MRD's NE–SE sign bridge, see the header)

@@ -655,10 +655,11 @@ function buildBEInterior(kit: WorldKit): void {
         if (o.b <= o.a) break;
         if (o.door) {
           bx(pl, s - 0.1, s + 0.1, o.a, o.b, fy + HEAD, cy, C.white); // lintel
+          // frame: jambs and head 1 cm proud of the reveals and the lintel soffit (flush, they z-fought with them)
           const fr = B('wood');
-          bx(fr, s - 0.13, s + 0.13, o.a - 0.06, o.a, fy, fy + HEAD, C.frame);
-          bx(fr, s - 0.13, s + 0.13, o.b, o.b + 0.06, fy, fy + HEAD, C.frame);
-          bx(fr, s - 0.13, s + 0.13, o.a - 0.06, o.b + 0.06, fy + HEAD, fy + HEAD + 0.06, C.frame);
+          bx(fr, s - 0.13, s + 0.13, o.a - 0.06, o.a + 0.01, fy, fy + HEAD - 0.01, C.frame);
+          bx(fr, s - 0.13, s + 0.13, o.b - 0.01, o.b + 0.06, fy, fy + HEAD - 0.01, C.frame);
+          bx(fr, s - 0.13, s + 0.13, o.a - 0.06, o.b + 0.06, fy + HEAD - 0.01, fy + HEAD + 0.06, C.frame);
           // two leaves swung open into the room, against the wall
           const inS = sg * (HALL.s + 0.12);
           bx(fr, inS, inS + sg * 0.04, o.a - 0.95, o.a - 0.05, fy + 0.02, fy + HEAD - 0.05, C.door);

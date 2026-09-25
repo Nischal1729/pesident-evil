@@ -271,8 +271,8 @@ export function buildMrdInterior(kit: WorldKit): void {
   }
   // (the 1st-floor door at s −12 was hidden behind the pilaster at s −12.2)
   for (const [s, t, y] of [[-9.8, at1 - 0.21, F0], [4.8, at1 - 0.21, F0], [-10.2, at1 - 0.21, F1], [-6.0, at1 - 0.21, F1]] as number[][]) {
-    k.fbox('wood', s - 0.55, y, t - 0.03, s + 0.55, y + 2.3, t, DOOR, 0.5);
-    k.fbox('plaster', s - 0.62, y + 2.3, t - 0.03, s + 0.62, y + 2.45, t, col('#111214'));
+    k.fbox('wood', s - 0.55, y, t - 0.04, s + 0.55, y + 2.3, t, DOOR, 0.5); // 1 cm proud of the skirting (flush, they z-fought)
+    k.fbox('plaster', s - 0.62, y + 2.3, t - 0.04, s + 0.62, y + 2.45, t, col('#111214'));
   }
   // notice boards on the east wall, clear of the lift core (to t 18.0) and the pilasters (t 20, 26, 31.4)
   for (const [t, y] of [[21.8, F0], [29.9, F0]] as V2[]) { k.fbox('wood', as1 - 0.23, y + 1.1, t - 0.8, as1 - 0.2, y + 2.1, t + 0.8, col('#7b5a3a'), 0.5); k.fbox('plaster', as1 - 0.235, y + 1.16, t - 0.72, as1 - 0.23, y + 2.04, t + 0.72, col('#f4f1e8')); }
@@ -394,7 +394,7 @@ export function buildMrdInterior(kit: WorldKit): void {
       for (let t = a; t <= b + 0.01; t += (b - a) / 3) k.fbox('metal', s0 + 0.06, F1 + 1.0, t - 0.03, s0 + 0.14, F1 + 2.4, t + 0.03, BLACK);
       k.fbox('metal', s0 + 0.06, F1 + 1.66, a, s0 + 0.14, F1 + 1.72, b, BLACK);
     }
-    k.fbox('wood', s0 - 0.02, F1 + 2.4, t0 + 5.1, s0 + 0.22, F1 + 2.55, t0 + 7.3, DOOR, 0.5);
+    k.fbox('wood', s0 - 0.02, F1 + 2.39, t0 + 5.1, s0 + 0.22, F1 + 2.55, t0 + 7.3, DOOR, 0.5); // just below the lintel soffit
     // green board + teacher's desk on the far wall, desk-bench rows facing it
     // (the wooden frame stood 2.5 cm in front of the board and hid most of it)
     const bs = (s0 + 0.2 + s1) / 2;
@@ -736,7 +736,7 @@ export function buildMrdAuditorium(kit: WorldKit): void {
   const hall = inset(outline, AUD.wall);
   // the hall's walls are drawn from 3 cm inside the outline: their outer faces were coplanar with the shell's facade and
   // z-fought through it (magenta / yellow patches on the outside)
-  const skin = inset(outline, 0.03);
+  const skin = inset(outline, 0.03), trim = inset(outline, 0.05);
   const worldOut = bd.poly;
   const MAG = col('#a8386c'), RED = col('#8e2b2b'), WOOD = col('#9a6a3e'), SEATY = col('#e8b923');
 
@@ -758,9 +758,11 @@ export function buildMrdAuditorium(kit: WorldKit): void {
     const a2 = skin[i], b2 = skin[(i + 1) % outline.length];
     k.wall('plaster', a2[0], a2[1], b2[0], b2[1], 0, AUD.ceil, AUD.wall - 0.03, c, openings, null, side);
     wallCollision(C, a, b, 0, AUD.roofTop, AUD.wall, side, openings);
-    // magenta band + skirting on every wall
-    k.wall('plaster', a2[0], a2[1], b2[0], b2[1], 4.6, 6.2, AUD.wall, MAG, [], null, side);
-    k.wall('polished', a2[0], a2[1], b2[0], b2[1], 0, 0.14, AUD.wall, SKIRT, openings, null, side);
+    // magenta band + skirting on every wall, 3 cm proud of it inside; drawn from 5 cm in (from the skin, their outer faces
+    // were coplanar with the wall's and flickered through the facade at a distance)
+    const a3 = trim[i], b3 = trim[(i + 1) % outline.length];
+    k.wall('plaster', a3[0], a3[1], b3[0], b3[1], 4.6, 6.2, AUD.wall - 0.02, MAG, [], null, side);
+    k.wall('polished', a3[0], a3[1], b3[0], b3[1], 0, 0.14, AUD.wall - 0.02, SKIRT, openings, null, side);
   }
   k.fflat('plaster', hall, AUD.ceil, CEIL, 3, true);
   C.addPolygon(worldOut, AUD.roofTop - AUD.ceil, 'concrete', 'mrd:roof', AUD.ceil);
@@ -834,7 +836,7 @@ export function buildMrdAuditorium(kit: WorldKit): void {
     C.addPolygon(F.poly(st), AUD.stageH, 'concrete', 'mrd:stage');
     k.fflat('wood', clipBand(hall, AUD.stageT, 200), AUD.stageH + 0.004, WOOD, 1);
     const [s0, s1] = spanAt(hall, AUD.stageT);
-    k.fbox('dark', s0, 0, AUD.stageT - 0.03, s1, AUD.stageH, AUD.stageT, col('#2a1d1a'));
+    k.fbox('dark', s0, 0, AUD.stageT - 0.03, s1, AUD.stageH - 0.01, AUD.stageT, col('#2a1d1a')); // top under the side stairs' top step
     // magenta proscenium header over the stage front, the screen
     k.fbox('plaster', s0, 8.2, AUD.stageT - 0.3, s1, AUD.ceil, AUD.stageT, MAG, 0.5);
     // (the back wall is a V: the hall is only s −13.5…−4.0 wide at t 66.5, so the screen stops short of the east wall)
@@ -876,7 +878,7 @@ export function buildMrdAuditorium(kit: WorldKit): void {
       // backboard on brackets from the side wall behind the baseline
       const bs = end - dir * 1.2, wallS = dir > 0 ? wS0 : wS1;
       k.fbox('plaster', bs - 0.03, 2.9, tc - 0.9, bs + 0.03, 3.95, tc + 0.9, col('#f6f6f4'), 0.5);
-      k.fbox('dark', bs - 0.035, 3.05, tc - 0.3, bs + 0.035, 3.5, tc + 0.3, col('#c8342e'));
+      k.fbox('dark', bs - 0.045, 3.05, tc - 0.3, bs + 0.045, 3.5, tc + 0.3, col('#c8342e'));
       const ring = F.at(bs + dir * 0.45, tc);
       k.b('metal').cylinder(ring[0], 3.05, ring[1], 0.23, 0.03, 12, col('#e8622a'), false);
       for (const yb of [3.6, 4.4]) k.fbox('metal', Math.min(bs, wallS), yb, tc - 0.05, Math.max(bs, wallS), yb + 0.1, tc + 0.05, col('#3a3d42'));
@@ -891,8 +893,9 @@ export function buildMrdAuditorium(kit: WorldKit): void {
     C.addPolygon(F.poly([[-6.6, pt0], [-4.2, pt0], [-4.2, 39.19], [-6.6, 38.7]]), F0, 'concrete', 'mrd:floor');
     k.fflat('polished', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], F0 + 0.006, MARBLE, 2);
     k.fflat('plaster', [[-6.6, pt0], [-4.2, pt0], [-4.2, 38.9], [-6.6, 38.4]], L.u1 - 0.02, CEIL, 2, true);
-    k.fbox('plaster', -6.64, F0, pt0, -6.6, L.u1, 38.4, YELLOW, 0.5);
-    k.fbox('plaster', -4.2, F0, pt0, -4.16, L.u1, 38.9, YELLOW, 0.5);
+    // yellow linings inside the passage: on its outline they were coplanar with the central wings' facades and flickered
+    k.fbox('plaster', -6.6, F0, pt0, -6.56, L.u1, 38.4, YELLOW, 0.5);
+    k.fbox('plaster', -4.24, F0, pt0, -4.2, L.u1, 38.9, YELLOW, 0.5);
     k.flight(-5.4, L.u1 - 0.05, 36.2, 0.6, 1.2);
   }
 
