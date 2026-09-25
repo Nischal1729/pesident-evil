@@ -5,6 +5,7 @@ import type { QualityProfile } from '../core/Settings';
 import { type Actor, type AnimHints, type Look, type Survivor, type Zombie, CORPSE_FADE_DUR, CORPSE_FADE_START } from '../sim/actors';
 import type { World } from '../sim/World';
 import type { WeaponId } from '../sim/weapons';
+import type { Selection } from 'postprocessing';
 import { buildCharacterGeometry, buildSkeleton, type BodyColors, type BoneName } from './ProceduralCharacter';
 import { GlbCharacterView, lookColors, type GlbCharacterLibrary } from './GlbCharacters';
 
@@ -424,6 +425,7 @@ export class CharacterView {
 // -------------------------------------------------------------------------------------------------
 interface ViewLike {
   root: THREE.Object3D;
+  mesh: THREE.Object3D;
   muzzle: THREE.Object3D | null;
   update(dt: number, alpha: number, camPos: THREE.Vector3, q: QualityProfile): void;
   dispose(): void;
@@ -431,6 +433,7 @@ interface ViewLike {
 
 export class CharacterManager {
   views = new Map<number, ViewLike>();
+  outline: Selection | null = null;
   private material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0 });
   private zombieGeo = new Map<string, ReturnType<typeof buildCharacterGeometry>>();
   group = new THREE.Group();
@@ -482,11 +485,12 @@ export class CharacterManager {
     for (const z of world.zombies) {
       seen.add(z.id);
       let v = this.views.get(z.id);
-      if (!v) { v = this.makeZombie(z); this.views.set(z.id, v); this.group.add(v.root); }
+      if (!v) { v = this.makeZombie(z); this.views.set(z.id, v); this.group.add(v.root); this.outline?.add(v.mesh); }
+      if (z.anim.dead) this.outline?.delete(v.mesh);
       v.update(dt, alpha, camPos, this.q);
     }
     for (const [id, v] of this.views) {
-      if (!seen.has(id)) { v.dispose(); this.views.delete(id); }
+      if (!seen.has(id)) { this.outline?.delete(v.mesh); v.dispose(); this.views.delete(id); }
     }
   }
 

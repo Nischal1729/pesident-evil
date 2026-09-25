@@ -149,6 +149,7 @@ export class Game {
     this.rig = new CameraRig(this.engine.camera, this.campus.collision);
     this.rig.baseFov = this.settings.fov;
     this.chars = new CharacterManager(this.engine.scene, this.weapons, this.q, this.charLib);
+    this.chars.outline = this.post.outline.selection;
     const fxLoader = Object.values(fxModules)[0];
     if (fxLoader) {
       try {
