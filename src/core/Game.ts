@@ -439,7 +439,7 @@ export class Game {
     for (let i = 0; i < steps; i++) {
       this.inputs.set(w.localPlayerId, pin);
       w.update(this.fixed, this.inputs);
-      pin.reload = pin.jump = pin.melee = pin.interactPressed = false;
+      pin.reload = pin.jump = pin.melee = pin.interactPressed = pin.grenade = false;
       pin.weaponSlot = -1;
     }
   }

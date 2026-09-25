@@ -10,7 +10,7 @@ import { CLIMB_MAX, STEP_UP, type StaticCollision } from './Collision';
 import { INF } from './flowfield';
 import { LayeredNav } from './LayeredNav';
 import { NavGrid, type Nav } from './NavGrid';
-import { newSlot, WEAPONS, type WeaponDef, type WeaponId } from './weapons';
+import { GRENADE, newSlot, WEAPONS, type WeaponDef, type WeaponId } from './weapons';
 
 export interface GateState {
   id: string;
@@ -41,6 +41,20 @@ export function gateInward(a: V2, b: V2): V2 {
 }
 
 export interface Pickup { id: number; kind: 'ammo' | 'health'; pos: THREE.Vector3; ttl: number }
+
+/**
+ * A live frag grenade (plain numbers, so a co-op host can stream them as they are). (x, y, z) is its centre this
+ * tick, (px, py, pz) last tick's for render interpolation; `rolling` = on a surface, rolling or at rest.
+ */
+export interface Grenade {
+  id: number;
+  ownerId: number;
+  x: number; y: number; z: number;
+  px: number; py: number; pz: number;
+  vx: number; vy: number; vz: number;
+  fuse: number;
+  rolling: boolean;
+}
 
 export type DirectorState = 'intro' | 'prep' | 'active' | 'gameover';
 
@@ -110,6 +124,7 @@ export class World {
   zombies: Zombie[] = [];
   gates: GateState[] = [];
   pickups: Pickup[] = [];
+  grenades: Grenade[] = [];
   brains = new Map<number, NpcBrain>();
   points = new Map<number, number>();
   localPlayerId = 0;
@@ -129,6 +144,7 @@ export class World {
   private fieldT = 0;
   private reviveT = new Map<number, number>();
   private pickupId = 1;
+  private grenadeId = 1;
   private waveMessageShown = new Set<string>();
 
   constructor(public collision: StaticCollision, public opts: WorldOptions) {
@@ -157,6 +173,7 @@ export class World {
     p.yaw = PLAYER_SPAWN_YAW;
     p.health = p.maxHealth = 100;
     p.weapons = [newSlot('pistol'), newSlot('bat')];
+    p.grenades = GRENADE.start;
     p.snapshotPrev();
     this.survivors.push(p);
     this.points.set(p.id, 500);
@@ -204,6 +221,7 @@ export class World {
     }
     for (let i = 0; i < this.zombies.length; i++) this.updateZombie(this.zombies[i], i, dt);
     this.separate();
+    this.updateGrenades(dt);
     this.updateGateStates();
     this.updatePickups(dt);
     this.cleanupCorpses(dt);
@@ -591,6 +609,14 @@ export class World {
       if (s.meleeT >= 1) s.meleeT = -1;
     }
     a.meleeP = s.meleeT;
+    // grenade throw: the grenade leaves the hand part-way through (downed mid-throw cancels it, see damageSurvivor)
+    if (s.throwT >= 0) {
+      const before = s.throwT;
+      s.throwT += dt / GRENADE.throwDur;
+      if (before < GRENADE.releaseAt && s.throwT >= GRENADE.releaseAt && s.active) this.releaseGrenade(s);
+      if (s.throwT >= 1) s.throwT = -1;
+    }
+    a.throwP = s.throwT;
     // downed / bleed-out
     if (s.downed) {
       s.bleedout -= dt;
@@ -618,7 +644,7 @@ export class World {
 
   private startReload(s: Survivor): void {
     const d = s.def;
-    if (d.kind !== 'gun' || s.reloadT >= 0) return;
+    if (d.kind !== 'gun' || s.reloadT >= 0 || s.throwT >= 0) return;
     if (s.slot.mag >= d.mag) return;
     if (s.slot.reserve <= 0 && !s.infiniteReserve) return;
     s.reloadT = 0;
@@ -628,7 +654,7 @@ export class World {
   }
 
   private switchWeapon(s: Survivor, idx: number): void {
-    if (idx < 0 || idx >= s.weapons.length || idx === s.current) return;
+    if (idx < 0 || idx >= s.weapons.length || idx === s.current || s.throwT >= 0) return;
     s.current = idx;
     s.reloadT = -1;
     s.meleeT = -1;
@@ -733,21 +759,21 @@ export class World {
     p.aimOrigin.addScaledVector(_v3.subVectors(p.pos, p.prev), input.camAlpha);
 
     // facing: face the camera when aiming/shooting, otherwise the direction of travel
-    const facingCam = p.anim.aiming || p.meleeT >= 0;
+    const facingCam = p.anim.aiming || p.meleeT >= 0 || p.throwT >= 0;
     let targetYaw = p.yaw;
     if (facingCam) targetYaw = input.yaw;
     else if (Math.hypot(p.vel.x, p.vel.z) > 0.6) targetYaw = Math.atan2(-p.vel.x, -p.vel.z);
     p.yaw = turnToward(p.yaw, targetYaw, (facingCam ? 18 : 10) * dt);
 
     // melee (bat equipped + fire, or quick melee key)
-    if ((input.melee || (def.kind === 'melee' && input.fire && !p.prevFire)) && p.meleeT < 0 && p.switchT < 0) {
+    if ((input.melee || (def.kind === 'melee' && input.fire && !p.prevFire)) && p.meleeT < 0 && p.switchT < 0 && p.throwT < 0) {
       p.meleeT = 0;
       p.meleeDone = false;
       p.reloadT = -1;
       this.events.emit('meleeSwing', { actorId: p.id, position: p.pos });
     }
     // shooting
-    if (def.kind === 'gun' && input.fire && p.fireCd <= 0 && p.reloadT < 0 && p.switchT < 0 && p.meleeT < 0) {
+    if (def.kind === 'gun' && input.fire && p.fireCd <= 0 && p.reloadT < 0 && p.switchT < 0 && p.meleeT < 0 && p.throwT < 0) {
       const semiOk = def.auto || !p.prevFire;
       if (semiOk) {
         if (p.slot.mag <= 0) {
@@ -763,6 +789,15 @@ export class World {
       }
     }
     p.prevFire = input.fire;
+    // grenade: G pulls the pin (cancelling a reload); updateSurvivorCommon lets it go along the aim part-way through
+    if (input.grenade && p.throwT < 0) {
+      if (p.grenades <= 0) this.events.emit('message', { text: 'No grenades — ammo crates restock them (E)', kind: 'warn' });
+      else if (p.meleeT < 0 && p.switchT < 0) {
+        p.throwT = 0;
+        p.reloadT = -1;
+        this.events.emit('grenadeThrow', { actorId: p.id, stage: 'pin', position: p.pos });
+      }
+    }
 
     // interaction
     this.handleInteract(p, input, dt);
@@ -897,7 +932,7 @@ export class World {
     }
   }
 
-  damageZombie(z: Zombie, dmg: number, by: Survivor | null, point: THREE.Vector3, dir: THREE.Vector3, head: boolean, d: WeaponDef | null): void {
+  damageZombie(z: Zombie, dmg: number, by: Survivor | null, point: THREE.Vector3, dir: THREE.Vector3, head: boolean, d: WeaponDef | null, cause: 'weapon' | 'grenade' = 'weapon'): void {
     if (!z.alive) return;
     z.health -= dmg;
     z.anim.hitT = 0;
@@ -918,10 +953,10 @@ export class World {
       z.knock.z += dir.z * kb;
     }
     if (by && by.kind === 'player') this.addPoints(by, 10, '');
-    if (z.health <= 0) this.killZombie(z, by, head, d);
+    if (z.health <= 0) this.killZombie(z, by, head, d, cause);
   }
 
-  private killZombie(z: Zombie, by: Survivor | null, head: boolean, d: WeaponDef | null): void {
+  private killZombie(z: Zombie, by: Survivor | null, head: boolean, d: WeaponDef | null, cause: 'weapon' | 'grenade' = 'weapon'): void {
     z.alive = false;
     z.state = 'dead';
     z.deadT = 0;
@@ -941,7 +976,7 @@ export class World {
     this.totalKills++;
     if (by) {
       by.kills++;
-      if (by.kind === 'player') this.addPoints(by, 50 + (head ? 40 : 0) + (d?.kind === 'melee' ? 30 : 0), head ? 'Headshot' : d?.kind === 'melee' ? 'Sixer!' : 'Kill');
+      if (by.kind === 'player') this.addPoints(by, 50 + (head ? 40 : 0) + (d?.kind === 'melee' ? 30 : 0), head ? 'Headshot' : d?.kind === 'melee' ? 'Sixer!' : cause === 'grenade' ? 'Grenade kill' : 'Kill');
       else if (this.rand() < 0.12) this.bark(by, 'kill', 4);
     }
     this.events.emit('death', { id: z.id, kind: 'zombie', killerId: by?.id ?? 0, headshot: head, position: z.pos.clone() });
@@ -973,6 +1008,7 @@ export class World {
       s.bleedout = s.kind === 'player' ? 30 : 40;
       s.reloadT = -1;
       s.meleeT = -1;
+      s.throwT = -1;
       s.vel.set(0, 0, 0);
       this.events.emit('downed', { id: s.id, kind: s.kind === 'player' ? 'player' : 'npc', position: s.pos.clone() });
       if (s.kind === 'npc') this.bark(s, 'downed', 0);
@@ -1013,7 +1049,7 @@ export class World {
       if (Math.hypot(st.pos[0] - p.pos.x, st.pos[1] - p.pos.z) > 2.0 || Math.abs(stationY(st) - p.pos.y) > 1.6) continue;
       let text = '';
       let cost = st.cost;
-      if (st.kind === 'ammo') text = `E — Refill ammo (${cost})`;
+      if (st.kind === 'ammo') text = `E — Refill ammo & grenades (${cost})`;
       else if (st.kind === 'health') text = `E — Patch up (${cost})`;
       else if (st.kind === 'weapon' && st.item) {
         const owned = p.has(st.item as WeaponId);
@@ -1073,6 +1109,7 @@ export class World {
         if (d.kind !== 'gun') continue;
         if (w.reserve < d.reserve) { w.reserve = d.reserve; changed = true; }
       }
+      if (p.grenades < GRENADE.max) { p.grenades = GRENADE.max; changed = true; }
       if (!changed) { this.events.emit('message', { text: 'Ammo already full', kind: 'info' }); return; }
       this.events.emit('pickup', { playerId: p.id, kind: 'ammo', item: 'crate' });
     } else if (st.kind === 'health') {
@@ -1192,6 +1229,153 @@ export class World {
       }
       if (taken || pk.ttl <= 0) this.pickups.splice(i, 1);
     }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Grenades
+  // ---------------------------------------------------------------------------------------------
+  /**
+   * The grenade leaves `s`'s left hand on a ballistic arc that lands where the crosshair points (the same camera ray
+   * as shooting, at most GRENADE.maxRange away): the flight time grows with distance, so near throws are flat and
+   * far ones lob.
+   */
+  private releaseGrenade(s: Survivor): void {
+    if (s.grenades <= 0) return;
+    s.grenades--;
+    const G = GRENADE, c = this.collision;
+    const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw), rx = Math.cos(s.yaw), rz = -Math.sin(s.yaw);
+    let hx = s.pos.x + fx * 0.35 - rx * 0.2, hy = s.pos.y + 1.72, hz = s.pos.z + fz * 0.35 - rz * 0.2;
+    // pressed against a wall: the hand stays on the body's side of it
+    const cx = s.pos.x, cy = s.pos.y + 1.4, cz = s.pos.z;
+    const ex = hx - cx, ey = hy - cy, ez = hz - cz, el = Math.hypot(ex, ey, ez);
+    const wall = c.raycast(cx, cy, cz, ex / el, ey / el, ez / el, el + G.r, _gHit, false);
+    if (wall) {
+      const t = Math.max(0, wall.dist - G.r - 0.02);
+      hx = cx + (ex / el) * t; hy = cy + (ey / el) * t; hz = cz + (ez / el) * t;
+    }
+    const dir = forwardFromYawPitch(s.aimYaw, s.aimPitch, _gDir);
+    _aimPivot.set(s.pos.x, s.pos.y + CAM.pivotY, s.pos.z);
+    const tgt = this.aimPoint(s.aimOrigin, dir, G.maxRange + 4, _gTgt, _aimPivot);
+    let tx = tgt.x - hx, ty = tgt.y - hy, tz = tgt.z - hz;
+    const hd = Math.hypot(tx, tz);
+    if (hd > G.maxRange) { tx *= G.maxRange / hd; tz *= G.maxRange / hd; }
+    ty = Math.min(ty, 10);
+    const d = Math.hypot(tx, ty, tz);
+    const t = Math.min(1.6, Math.max(0.45, 0.4 + d / 22));
+    this.grenades.push({
+      id: this.grenadeId++, ownerId: s.id, x: hx, y: hy, z: hz, px: hx, py: hy, pz: hz,
+      vx: tx / t, vy: ty / t + 0.5 * G.gravity * t, vz: tz / t, fuse: G.fuse, rolling: false,
+    });
+    this.events.emit('grenadeThrow', { actorId: s.id, stage: 'release', position: s.pos });
+  }
+
+  private updateGrenades(dt: number): void {
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      const g = this.grenades[i];
+      g.px = g.x; g.py = g.y; g.pz = g.z;
+      g.fuse -= dt;
+      if (g.fuse <= 0) {
+        this.grenades.splice(i, 1);
+        this.explodeGrenade(g);
+        continue;
+      }
+      if (g.rolling) this.rollGrenade(g, dt);
+      else this.flyGrenade(g, dt);
+      if (g.y < -20) this.grenades.splice(i, 1);
+    }
+  }
+
+  /** Ballistic step against the static world (walls, floors, ceilings, props, the ground; gate bars are solid). */
+  private flyGrenade(g: Grenade, dt: number): void {
+    const G = GRENADE;
+    g.vy -= G.gravity * dt;
+    const mx = g.vx * dt, my = g.vy * dt, mz = g.vz * dt;
+    const len = Math.hypot(mx, my, mz);
+    if (len < 1e-7) return;
+    const dx = mx / len, dy = my / len, dz = mz / len;
+    const h = this.collision.raycast(g.x, g.y, g.z, dx, dy, dz, len + G.r, _gHit, false);
+    if (!h) { g.x += mx; g.y += my; g.z += mz; return; }
+    // stop a radius short of the surface (plus a hair along its normal) and bounce
+    const t = Math.max(0, h.dist - G.r);
+    g.x += dx * t + h.nx * 0.005; g.y += dy * t + h.ny * 0.005; g.z += dz * t + h.nz * 0.005;
+    const vn = g.vx * h.nx + g.vy * h.ny + g.vz * h.nz;
+    if (vn >= 0) return;
+    const tx = g.vx - h.nx * vn, ty = g.vy - h.ny * vn, tz = g.vz - h.nz * vn;
+    const fr = h.ny > 0.6 ? G.floorFriction : G.wallFriction;
+    g.vx = tx * fr - h.nx * vn * G.restitution;
+    g.vy = ty * fr - h.ny * vn * G.restitution;
+    g.vz = tz * fr - h.nz * vn * G.restitution;
+    if (-vn > 2.2) this.events.emit('grenadeBounce', { id: g.id, position: new THREE.Vector3(g.x, g.y, g.z), speed: -vn, surface: h.surface });
+    // a floor-like surface and little bounce left: settle into rolling
+    if (h.ny > 0.6 && -vn * G.restitution < 1.1) {
+      g.rolling = true;
+      g.vy = 0;
+    }
+  }
+
+  /** Roll along the surface underneath (slowing to rest), glance off walls, drop off edges back into flight. */
+  private rollGrenade(g: Grenade, dt: number): void {
+    const G = GRENADE, c = this.collision;
+    const sp = Math.hypot(g.vx, g.vz);
+    if (sp > 1e-4) {
+      const ns = Math.max(0, sp - G.rollDecel * dt);
+      g.vx *= ns / sp; g.vz *= ns / sp;
+      const len = ns * dt;
+      if (len > 1e-6) {
+        const dx = g.vx / ns, dz = g.vz / ns;
+        const h = c.raycast(g.x, g.y, g.z, dx, 0, dz, len + G.r, _gHit, false);
+        if (h && h.ny < 0.5) {
+          const t = Math.max(0, h.dist - G.r);
+          g.x += dx * t + h.nx * 0.005; g.z += dz * t + h.nz * 0.005;
+          const hn = Math.hypot(h.nx, h.nz) || 1, nx = h.nx / hn, nz = h.nz / hn;
+          const vn = g.vx * nx + g.vz * nz;
+          if (vn < 0) { g.vx -= nx * vn * (1 + G.restitution); g.vz -= nz * vn * (1 + G.restitution); }
+        } else { g.x += g.vx * dt; g.z += g.vz * dt; }
+      }
+    }
+    // stay on whatever is underneath (slopes, small steps down); nothing within reach: fall
+    const f = c.raycast(g.x, g.y, g.z, 0, -1, 0, G.r + 0.3, _gHit, false);
+    if (f && f.dist - G.r < 0.14) g.y -= f.dist - G.r - 0.002;
+    else { g.rolling = false; g.vy = 0; }
+  }
+
+  /**
+   * Blast: zombies within GRENADE.radius that the blast can reach (walls, floors and solid cover shield them; gate
+   * bars don't) take heavy damage falling off with distance, are staggered and thrown back. Kills and points go to
+   * the thrower like gun kills. Survivors and gates are never hurt.
+   */
+  private explodeGrenade(g: Grenade): void {
+    const G = GRENADE, c = this.collision;
+    const owner = this.findSurvivor(g.ownerId) ?? null;
+    const cx = g.x, cy = g.y + 0.12, cz = g.z;
+    const R = G.radius;
+    const dmg0 = G.damage * (1 + Math.max(0, this.wave - 1) * 0.1);
+    let kills = 0;
+    this.forZombiesNear(cx, cz, R + 1, (z) => {
+      if (!z.alive) return;
+      const s = z.scale, crawl = z.type === 'crawler';
+      const tx = z.pos.x, tz = z.pos.z, ty = z.pos.y + (crawl ? 0.3 : 1.0) * s;
+      const dx = tx - cx, dy = ty - cy, dz = tz - cz;
+      const d = Math.max(0, Math.hypot(dx, dy, dz) - z.radius);
+      if (d > R) return;
+      if (!c.los(cx, cy, cz, tx, ty, tz) && !c.los(cx, cy, cz, tx, z.pos.y + (crawl ? 0.15 : 1.55) * s, tz)) return;
+      const k = Math.min(1, Math.max(0, (d - 1) / (R - 1)));
+      const f = 0.1 + 0.9 * Math.pow(1 - k, 1.35);
+      let hl = Math.hypot(dx, dz), hx = dx, hz = dz;
+      if (hl < 0.05) { const a = this.rand() * Math.PI * 2; hx = Math.cos(a); hz = Math.sin(a); hl = 1; }
+      const dir = _gDir.set(hx / hl, 0, hz / hl);
+      // stagger and throw back (brutes barely budge)
+      const brute = z.type === 'brute';
+      z.stunT = Math.max(z.stunT, (brute ? 0.4 : 1.1) * f);
+      if (z.attackT >= 0) { z.attackT = -1; z.anim.attackP = -1; }
+      const kb = 5.5 * f * (brute ? 0.2 : 1);
+      z.knock.x += dir.x * kb; z.knock.z += dir.z * kb;
+      this.damageZombie(z, dmg0 * f, owner, _gPt.set(tx, ty, tz), dir, false, null, 'grenade');
+      if (!z.alive) kills++;
+    });
+    const fl = c.raycast(g.x, g.y, g.z, 0, -1, 0, 3, _gHit, false);
+    const floorY = fl ? fl.y : g.y - G.r;
+    this.events.emit('grenadeExplode', { id: g.id, ownerId: g.ownerId, position: new THREE.Vector3(g.x, g.y, g.z), floorY, radius: R, kills });
   }
 
   private cleanupCorpses(dt: number): void {
@@ -1620,6 +1804,10 @@ const _pelletDir = new THREE.Vector3();
 const _endA = new THREE.Vector3();
 const _endB = new THREE.Vector3();
 const _hits: { z: Zombie; t: number; head: boolean }[] = [];
+const _gHit = { dist: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, surface: 'ground' as SurfaceKind, tag: '' };
+const _gDir = new THREE.Vector3();
+const _gTgt = new THREE.Vector3();
+const _gPt = new THREE.Vector3();
 
 /** Floor height of a station: its own `y` (a floor inside a building) or the campus ground under it. */
 export function stationY(st: StationDef): number {

@@ -46,3 +46,33 @@ export function newSlot(id: WeaponId, full = true): WeaponSlot {
   const d = WEAPONS[id];
   return { id, mag: full ? d.mag : 0, reserve: full ? d.reserve : 0 };
 }
+
+/**
+ * Frag grenade (thrown with G). Sim-only numbers; the World owns every live grenade (World.grenades) and announces
+ * throws, bounces and blasts on the EventBus for render / audio / HUD.
+ */
+export const GRENADE = {
+  /** carried at spawn / the most a survivor can hold (ammo crates top up to this) */
+  start: 2,
+  max: 4,
+  /** seconds from leaving the hand to the blast */
+  fuse: 2.5,
+  /** blast radius (m) and damage at the centre on wave 1 (falls to 10 % at the edge, +10 % per wave) */
+  radius: 7,
+  damage: 320,
+  /** throw animation length (s): no firing, reloading or switching while it plays */
+  throwDur: 0.62,
+  /** fraction of the throw at which the grenade leaves the hand */
+  releaseAt: 0.42,
+  /** farthest point (m from the hand) a throw is aimed at */
+  maxRange: 28,
+  gravity: 13,
+  /** collision radius (m) */
+  r: 0.07,
+  /** bounce: share of the normal speed kept; share of the tangential speed kept off floors / off walls */
+  restitution: 0.32,
+  floorFriction: 0.5,
+  wallFriction: 0.75,
+  /** deceleration while rolling (m/s²): it comes to rest a few metres past where it lands */
+  rollDecel: 5,
+} as const;
