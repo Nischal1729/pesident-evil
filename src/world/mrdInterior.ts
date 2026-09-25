@@ -192,7 +192,7 @@ export function buildMrdInterior(kit: WorldKit): void {
   }
   // back wall of the lobby: the passage (centre) and the administrative office door (north); dark doors, notice boards
   fwall(k, 'plaster', -12.5, 8.6, 12.3, 8.8, F0, U1, CREAM, [[10.9, 14.1, F0, F0 + 3.6], [17.3, 19.7, F0, F0 + 2.5]]);
-  for (const s of [-10.6, -5.2]) { k.fbox('wood', s - 0.55, F0, 8.57, s + 0.55, F0 + 2.3, 8.6, DOOR, 0.5); k.fbox('metal', s + 0.35, F0 + 1.0, 8.55, s + 0.43, F0 + 1.1, 8.57, col('#b8bcc0')); }
+  for (const s of [-10.0, -5.2]) { k.fbox('wood', s - 0.55, F0, 8.57, s + 0.55, F0 + 2.3, 8.6, DOOR, 0.5); k.fbox('metal', s + 0.35, F0 + 1.0, 8.55, s + 0.43, F0 + 1.1, 8.57, col('#b8bcc0')); }
   for (const s of [-8, 3.4, 9.6]) { k.fbox('wood', s - 0.7, F0 + 1.1, 8.56, s + 0.7, F0 + 2.1, 8.6, col('#7b5a3a'), 0.5); k.fbox('plaster', s - 0.62, F0 + 1.16, 8.555, s + 0.62, F0 + 2.04, 8.56, col('#f4f1e8')); }
   // skirting along every lobby wall
   for (const [s0, t0, s1, t1] of [[-12.5, 8.56, 12.3, 8.6], [12.26, 0, 12.3, 8.6], [-12.5, 0, -12.46, 8.6]] as number[][]) k.fbox('polished', s0, F0, t0, s1, F0 + 0.12, t1, SKIRT);
@@ -205,11 +205,13 @@ export function buildMrdInterior(kit: WorldKit): void {
   { const p = F.at(0, 4.185); signQuad(sb, SG.edu, p[0], F0 + 1.75, p[1], 8.2, 2.56, -F.n[0], -F.n[1]); }
   for (const s of [-10.4, -6.2, 6.2, 10.4]) column(k, s, 4.35, F0, U1, 0.32);
   // black granite reception desks in front of both mosaics, black steel waiting benches
-  // (desks run into the end walls: no player-sized gap is left behind them that the navigation cannot reach)
+  // (desks run into the end walls and back to the skirting of the lobby's back wall: no player-sized gap is left behind
+  // them that the navigation cannot reach; the 0.8 m slot at t 7.8…8.6 was one. Their fronts stop at t 5.95: at 5.6 the
+  // floor between the south desk, the column and the end wall was a 1 m nav cell cut off from its neighbours.)
   for (const [s0, s1] of [[10.6, 12.3], [-12.5, -10.8]] as V2[]) {
-    k.fbox('polished', s0, F0, 5.6, s1, F0 + 1.05, 7.8, BLACK, 0.5);
-    k.fbox('polished', s0 - 0.05, F0 + 1.05, 5.55, s1 + 0.05, F0 + 1.1, 7.85, col('#2a2c2e'));
-    C.addPolygon(R(s0, 5.6, s1, 7.8), 1.1, 'concrete', 'desk', F0);
+    k.fbox('polished', s0, F0, 5.95, s1, F0 + 1.05, 8.56, BLACK, 0.5);
+    k.fbox('polished', s0 - 0.05, F0 + 1.05, 5.9, s1 + 0.05, F0 + 1.1, 8.6, col('#2a2c2e'));
+    C.addPolygon(R(s0, 5.95, s1, 8.6), 1.1, 'concrete', 'desk', F0);
   }
   bench(k, C, -8.0, 8.1, F0, 0);
   bench(k, C, 2.9, 8.1, F0, 0);
@@ -233,8 +235,9 @@ export function buildMrdInterior(kit: WorldKit): void {
   for (const [s, t] of [[4.7, 11.8], [8.0, 11.8]] as V2[]) desk(k, C, s, t, F0);
   for (let s = 2.4; s < 11.8; s += 1.0) k.fbox('metal', s, F0, 14.55, s + 0.9, F0 + 2.0, 15.1, col('#8d9096'));
   C.addPolygon(R(2.4, 14.55, 11.8, 15.1), 2.0, 'metal', 'prop', F0);
-  k.fbox('wood', 11.0, F0, 9.6, 12.3, F0 + 1.05, 12.6, col('#6b4b33'), 0.5);
-  C.addPolygon(R(11.0, 9.6, 12.3, 12.6), 1.05, 'wood', 'desk', F0);
+  // service counter against the east wall, run back to the lobby wall (a 0.8 m slot at t 8.8…9.6 was left behind it)
+  k.fbox('wood', 11.0, F0, 8.8, 12.3, F0 + 1.05, 11.8, col('#6b4b33'), 0.5);
+  C.addPolygon(R(11.0, 8.8, 12.3, 11.8), 1.05, 'wood', 'desk', F0);
   for (const s of [4, 8]) for (const t of [10.6, 13.4]) k.flight(s, U1 - 0.03, t, 1.2, 0.6);
 
   // ================================================================ atrium walls (ground + 1st floor)
@@ -257,13 +260,22 @@ export function buildMrdInterior(kit: WorldKit): void {
   for (const [s, dir] of [[-6.6, 1], [-4.2, -1]] as V2[]) k.fbox('wood', s, F0, at1 - 0.2 + 0.05, s + dir * 0.06, F0 + 2.5, at1 + 1.2, col('#141516'), 0.5);
   k.fbox('metal', -6.66, F0 + 2.55, at1 - 0.24, -4.14, F0 + 2.65, at1 - 0.18, col('#141516'));
   for (const [t0, t1] of [[23.5, 28.5]] as V2[]) k.fbox('plaster', as1 - 0.23, F0 + 0.12, t0, as1 - 0.2, U1 - 0.4, t1, YELLOW, 0.5);
-  for (const s of [-12.2, -1.4, 7.8]) k.fbox('stone', s - 0.35, F0, at1 - 0.5, s + 0.35, U2, at1 - 0.2, NAVY, 0.5);
-  for (const t of [20.0, 26.0, 31.4]) k.fbox('stone', as1 - 0.5, F0, t - 0.35, as1 - 0.2, U1, t + 0.35, NAVY, 0.5);
-  for (const [s, t, y] of [[-9.8, at1 - 0.21, F0], [4.8, at1 - 0.21, F0], [-12.0, at1 - 0.21, F1], [-6.0, at1 - 0.21, F1]] as number[][]) {
+  // navy pilasters (solid: they stand 0.3 m proud of the walls)
+  for (const s of [-12.2, -1.4, 7.8]) {
+    k.fbox('stone', s - 0.35, F0, at1 - 0.5, s + 0.35, U2, at1 - 0.2, NAVY, 0.5);
+    C.addPolygon(R(s - 0.35, at1 - 0.5, s + 0.35, at1 - 0.2), U2 - F0, 'concrete', 'column', F0);
+  }
+  for (const t of [20.0, 26.0, 31.4]) {
+    k.fbox('stone', as1 - 0.5, F0, t - 0.35, as1 - 0.2, U1, t + 0.35, NAVY, 0.5);
+    C.addPolygon(R(as1 - 0.5, t - 0.35, as1 - 0.2, t + 0.35), U1 - F0, 'concrete', 'column', F0);
+  }
+  // (the 1st-floor door at s −12 was hidden behind the pilaster at s −12.2)
+  for (const [s, t, y] of [[-9.8, at1 - 0.21, F0], [4.8, at1 - 0.21, F0], [-10.2, at1 - 0.21, F1], [-6.0, at1 - 0.21, F1]] as number[][]) {
     k.fbox('wood', s - 0.55, y, t - 0.03, s + 0.55, y + 2.3, t, DOOR, 0.5);
     k.fbox('plaster', s - 0.62, y + 2.3, t - 0.03, s + 0.62, y + 2.45, t, col('#111214'));
   }
-  for (const [t, y] of [[18.2, F0], [30.5, F0]] as V2[]) { k.fbox('wood', as1 - 0.23, y + 1.1, t - 0.8, as1 - 0.2, y + 2.1, t + 0.8, col('#7b5a3a'), 0.5); k.fbox('plaster', as1 - 0.235, y + 1.16, t - 0.72, as1 - 0.23, y + 2.04, t + 0.72, col('#f4f1e8')); }
+  // notice boards on the east wall, clear of the lift core (to t 18.0) and the pilasters (t 20, 26, 31.4)
+  for (const [t, y] of [[21.8, F0], [29.9, F0]] as V2[]) { k.fbox('wood', as1 - 0.23, y + 1.1, t - 0.8, as1 - 0.2, y + 2.1, t + 0.8, col('#7b5a3a'), 0.5); k.fbox('plaster', as1 - 0.235, y + 1.16, t - 0.72, as1 - 0.23, y + 2.04, t + 0.72, col('#f4f1e8')); }
   // navy lift core in the NE corner (lift doors on both floors)
   k.fbox('stone', 7.0, F0, at0 + 0.2, as1 - 0.2, U2, 18.0, NAVY, 0.5);
   C.addPolygon(R(7.0, at0 + 0.2, as1 - 0.2, 18.0), U2 - F0, 'concrete', 'mrd:core', F0);
@@ -470,8 +482,17 @@ export function mrdGlazing(kit: WorldKit): { doors: V2[] } {
   const doors: V2[] = [[-1.2, 1.2], [5.2, 7.6]];
   const frame = col('#1e2226'), blue = col('#4f6d8c');
   // blue-grey columns every 3.2 m (key 0332) and stone end piers closing the face under the extruded block
-  for (const s of [-11.2, -8.0, -4.8, -1.6, 1.6, 4.8, 8.0, 11.2]) { const p = F.at(s, tg - 0.2); kit.box('stone', p[0], (F0 + U1) / 2, p[1], 0.52, U1 - F0, 0.46, F.rot, blue, 0.5); }
-  for (const [s0, s1] of [[-13.2, -12.7], [12.5, 13.2]] as V2[]) { const p = F.at((s0 + s1) / 2, -0.1); kit.box('stone', p[0], (U1 + 0.4) / 2, p[1], s1 - s0, U1 + 0.4, 0.4, F.rot, col('#c8b89e'), 0.5); }
+  // (both solid: the columns stand on the forecourt in front of the glazing line, the piers straddle the face)
+  for (const s of [-11.2, -8.0, -4.8, -1.6, 1.6, 4.8, 8.0, 11.2]) {
+    const p = F.at(s, tg - 0.2);
+    kit.box('stone', p[0], (F0 + U1) / 2, p[1], 0.52, U1 - F0, 0.46, F.rot, blue, 0.5);
+    kit.collision.addPolygon(R(s - 0.26, tg - 0.43, s + 0.26, tg + 0.03), U1 - F0, 'concrete', 'column', F0);
+  }
+  for (const [s0, s1] of [[-13.2, -12.7], [12.5, 13.2]] as V2[]) {
+    const p = F.at((s0 + s1) / 2, -0.1);
+    kit.box('stone', p[0], (U1 + 0.4) / 2, p[1], s1 - s0, U1 + 0.4, 0.4, F.rot, col('#c8b89e'), 0.5);
+    kit.collision.addPolygon(R(s0, -0.3, s1, 0.1), U1 + 0.4, 'concrete', 'column');
+  }
   // mullions, transoms and the navy spandrel over the glazing
   const runs: V2[] = [];
   let a = -12.7;
