@@ -161,6 +161,9 @@ export class Game {
     this.buildStationMarkers();
     this.menu.setProgress(0.95, 'Warming up shaders…');
     this.menuCamera(0);
+    // The outline's mask pass draws only the selection layer. Without the lights on it, the renderer's light state
+    // changes twice a frame, and every lit material redoes its program lookup in the next main pass.
+    this.engine.scene.traverse((o) => { if ((o as THREE.Light).isLight) o.layers.enable(this.post.outline.selection.layer); });
     this.warmShaders();
     this.menu.setProgress(1, 'Ready');
     this.state = 'menu';

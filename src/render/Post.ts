@@ -63,6 +63,8 @@ export class Post {
     }
     this.tone = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
     this.outline = new OutlineEffect(scene, camera, { blendFunction: BlendFunction.SCREEN, edgeStrength: 3, visibleEdgeColor: 0xff5a36, xRay: false, resolutionScale: 0.5 });
+    // Game puts the lights on the selection layer; the shadow map is already current when the mask pass runs
+    (this.outline as unknown as { maskPass: RenderPass }).maskPass.skipShadowMapUpdate = true;
     this.vignette = new VignetteEffect({ offset: 0.35, darkness: 0.45 });
     this.chroma = new ChromaticAberrationEffect({ offset: new THREE.Vector2(0, 0), radialModulation: true, modulationOffset: 0.2 });
     this.grade = new GradeEffect();
