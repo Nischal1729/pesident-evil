@@ -43,6 +43,12 @@ kbd { font-family: Inter, sans-serif; font-weight: 700; font-size: 0.85em; paddi
 .hud-weapon-name { display: flex; gap: 10px; justify-content: flex-end; font-size: 12px; opacity: 0.85; margin-bottom: 4px; }
 .hud-weapon-name span { opacity: 0.55; }
 .hud-weapon-name span.on { opacity: 1; color: var(--accent); font-weight: 700; }
+.hud-ammo-row { display: flex; align-items: flex-end; justify-content: flex-end; gap: 18px; }
+.hud-nades { display: flex; align-items: center; gap: 4px; padding-bottom: 9px; }
+.hud-nades kbd { font-size: 10px; padding: 0 4px; margin-right: 4px; opacity: 0.75; }
+.hud-nades i { display: block; width: 13px; height: 18px; color: var(--ink); opacity: 0.28; }
+.hud-nades i.on { opacity: 1; color: #c3cf8e; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); }
+.hud-nades svg { display: block; width: 100%; height: 100%; }
 .hud-ammo { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 58px; line-height: 1; }
 .hud-ammo span { font-size: 28px; opacity: 0.7; margin-left: 6px; }
 .hud-ammo.low b { color: var(--danger); }

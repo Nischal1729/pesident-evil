@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { GameEvents } from '../core/Events';
 import type { Survivor } from '../sim/actors';
 import { SPREAD_MAX, type World } from '../sim/World';
-import { WEAPONS } from '../sim/weapons';
+import { GRENADE, WEAPONS } from '../sim/weapons';
 import { BUILDINGS, GATES, ROADS, STATIONS, WALLS, WORLD_BOUNDS, type V2 } from '../world/layout';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] => {
@@ -11,6 +11,11 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
   if (html !== undefined) e.innerHTML = html;
   return e;
 };
+
+/** Frag grenade silhouette for the HUD count (body, fuse head, lever, pull ring). */
+const NADE_SVG = '<svg viewBox="0 0 12 17" aria-hidden="true"><ellipse cx="6" cy="11" rx="4.3" ry="5.2" fill="currentColor"/>'
+  + '<rect x="4.3" y="3.2" width="3.4" height="2.8" rx="0.6" fill="currentColor"/><path d="M7.6 3.6 L10.4 10.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>'
+  + '<circle cx="3.1" cy="3" r="1.7" fill="none" stroke="currentColor" stroke-width="0.9"/></svg>';
 
 export class Hud {
   root = el('div', 'hud');
@@ -24,6 +29,7 @@ export class Hud {
   private promptBar = el('div', 'hud-prompt-bar');
   private weaponName = el('div', 'hud-weapon-name');
   private ammo = el('div', 'hud-ammo');
+  private nades = el('div', 'hud-nades');
   private points = el('div', 'hud-points');
   private popups = el('div', 'hud-popups');
   private health = el('div', 'hud-health');
@@ -44,6 +50,7 @@ export class Hud {
   private hitHead = false;
   private lastPoints = -1;
   private lastAmmo = '';
+  private lastNades = -1;
   private fpsAcc = 0;
   private fpsN = 0;
   showFps = false;
@@ -56,7 +63,9 @@ export class Hud {
     );
     this.prompt.append(el('span'), this.promptBar);
     const wbox = el('div', 'hud-weapon');
-    wbox.append(this.weaponName, this.ammo, this.points);
+    const ammoRow = el('div', 'hud-ammo-row');
+    ammoRow.append(this.nades, this.ammo);
+    wbox.append(this.weaponName, ammoRow, this.points);
     this.root.append(wbox);
     this.health.append(this.healthFill, this.healthTxt);
     this.root.append(this.health);
@@ -84,6 +93,7 @@ export class Hud {
     on('waveStart', (e) => this.bannerShow(`WAVE ${e.wave}`, e.wave === 1 ? 'They broke through the Ring Road. Hold the main gate!' : `${e.count} of them. Stay together.`));
     on('waveEnd', (e) => this.bannerShow(`WAVE ${e.wave} SURVIVED`, 'Restock at the ammo crates. Repair the gate (hold E).', 'good'));
     on('gateBroken', () => this.bannerShow('GATE BREACHED', 'Fall back and regroup!', 'bad'));
+    on('grenadeExplode', (e) => { if (e.ownerId === world.localPlayerId && e.kills >= 2) this.popup(`${e.kills}× grenade multi-kill`, true); });
     on('pickup', (e) => { if (e.kind === 'weapon') this.message(`Picked up ${WEAPONS[e.item as keyof typeof WEAPONS]?.name ?? e.item}`, 'good'); });
     on('downed', (e) => { const s = world.survivors.find((x) => x.id === e.id); if (s && s.kind === 'npc') this.message(`${s.name} is down! Hold E near them to revive.`, 'warn'); });
   }
@@ -146,6 +156,13 @@ export class Hud {
       this.ammo.innerHTML = ammoTxt;
       this.ammo.classList.toggle('low', def.kind === 'gun' && slot.mag <= Math.ceil(def.mag * 0.25));
       this.lastAmmo = ammoTxt;
+    }
+    if (p.grenades !== this.lastNades) {
+      this.lastNades = p.grenades;
+      let icons = '<kbd>G</kbd>';
+      for (let i = 0; i < GRENADE.max; i++) icons += `<i class="${i < p.grenades ? 'on' : ''}">${NADE_SVG}</i>`;
+      this.nades.innerHTML = icons;
+      this.nades.title = `${p.grenades} grenade${p.grenades === 1 ? '' : 's'}`;
     }
     this.weaponName.innerHTML = p.weapons.map((w, i) => `<span class="${i === p.current ? 'on' : ''}">${i + 1} ${WEAPONS[w.id].name}</span>`).join('');
     const pts = world.points.get(p.id) ?? 0;
