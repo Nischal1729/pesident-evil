@@ -12,9 +12,10 @@ import type { SignUVs } from './signs';
  * B-Block = "BE block" (students' name; the 2021 campus tour's "Block BE" with "the 13th floor", the 2023 "BE BLOCK
  * TOUR") — see reference/BE_NOTES.md. 14 storeys of beige stone cladding with pilaster fins and a pink-grey stone base.
  *
- * The block has ONE centre on its east face: the buff-stone crest tower (deep slot, white roof sign) stands over the
- * main entrance, and the portico deck over the B/MRD link road hangs off the tower's base (satellite roof, 2026 tour
- * key frames 1406 / 1928, 2021 tour be21_0186…0198). Layout: BUILDINGS ids bblock (notched), bblock_tower, bblock_core.
+ * The block has ONE centre on its east face: the buff-stone crest tower (deep portal-like recess under a solid head,
+ * white roof sign) stands over the main entrance, and the portico deck over the B/MRD link road hangs off the tower's
+ * base (satellite roof, 2026 tour key frames 0002 / 1406 / 1928, 2021 tour be21_0186…0198). Layout: BUILDINGS ids
+ * bblock (notched footprint), bblock_tower (shaft with the recess), bblock_tower_head, bblock_core.
  *
  * This file builds, in the BE frame of layout.ts (s = south along the east facade, d = west into the block):
  *  - the two stacked steel-truss skybridges to the GJBC library, the crest sign, cornice / 10th-floor balcony bands;
@@ -290,7 +291,7 @@ function buildBEEntrance(kit: WorldKit, signs: SignUVs): void {
     for (let y = 14.0; y < yt - 1; y += 3.5) bx(kb, -TOWER.slot + 0.05, TOWER.slot - 0.05, TOWER.slotD - 0.12, TOWER.slotD - 0.05, y - 0.35, y + 0.35, col('#a89883'), 0.5);
     for (const s of [-1.2, 0, 1.2]) bx(kit.buf('metal', P(0, 2)[0], P(0, 2)[1]), s - 0.04, s + 0.04, TOWER.slotD - 0.1, TOWER.slotD - 0.05, yb, yt - 0.3, col('#3a3d41'));
   }
-  // floor of the tower's slot (open to the sky above the lintel)
+  // floor of the tower's recess (open above the lintel up to the tower head)
   bx(kit.buf('concrete', P(0, 0)[0], P(0, 0)[1]), -TOWER.slot, TOWER.slot, TOWER.d0, TOWER.slotD, TOP, TOP + 0.3, col('#a8a49c'), 0.5);
   kit.collision.addPolygon(rect(-TOWER.slot, TOWER.slot, TOWER.d0, TOWER.slotD), 0.3, 'concrete', 'be:slot', TOP);
 
@@ -450,15 +451,6 @@ function decalTexture(): { tex: THREE.CanvasTexture; uv: Record<string, [number,
     g.beginPath(); g.arc(700, 440, 26, 0, Math.PI * 2); g.moveTo(660, 480); g.lineTo(740, 480); g.lineTo(700, 410); g.closePath(); g.stroke();
     reg('chalk', 384, 384, 384, 128);
   }
-  // PES University info screen still (for the lobby TV / hanging atrium TVs, shown through the lamp material tint)
-  {
-    const grd = g.createLinearGradient(768, 384, 1024, 512);
-    grd.addColorStop(0, '#1d4f8f'); grd.addColorStop(1, '#6fb3e0');
-    g.fillStyle = grd; g.fillRect(768, 384, 256, 128);
-    g.fillStyle = '#ffffff'; g.font = `800 26px ${SANS}`; g.textAlign = 'center'; g.fillText('PES UNIVERSITY', 896, 430);
-    g.font = `500 16px ${SANS}`; g.fillText('Dept. of CSE · Welcome', 896, 462);
-    reg('tv', 768, 384, 256, 128);
-  }
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
@@ -612,17 +604,16 @@ function buildBEInterior(kit: WorldKit): void {
       for (let y = L.G + 0.5; y < CEIL[2] - 0.8; y += 0.38) wv.beam(pt(y), pt(y + 0.4), 0.13, 0.05, C.wave);
     }
     // lift doors: two at G facing the lobby (TV between), two per upper floor in the passages beside the core
-    const liftDoor = (s: number, d: number, fy: number, n: P3, alongS: boolean) => {
+    const liftDoor = (s: number, d: number, fy: number, alongS: boolean) => {
       const mt = B('metal');
       if (alongS) { bx(mt, s - 0.7, s + 0.7, d - 0.04, d + 0.04, fy, fy + 2.3, col('#7b7f84')); bx(mt, s - 0.6, s + 0.6, d - 0.06, d + 0.06, fy, fy + 2.15, C.steel); bx(mt, s - 0.01, s + 0.01, d - 0.07, d + 0.07, fy, fy + 2.15, col('#6a6e73')); }
       else { bx(mt, s - 0.04, s + 0.04, d - 0.7, d + 0.7, fy, fy + 2.3, col('#7b7f84')); bx(mt, s - 0.06, s + 0.06, d - 0.6, d + 0.6, fy, fy + 2.15, C.steel); bx(mt, s - 0.07, s + 0.07, d - 0.01, d + 0.01, fy, fy + 2.15, col('#6a6e73')); }
-      void n;
     };
-    for (const s of [-1.75, 1.75]) liftDoor(s, LC.d0, L.G, NEG(ND), true);
+    for (const s of [-1.75, 1.75]) liftDoor(s, LC.d0, L.G, true);
     bx(B('dark'), -0.65, 0.65, LC.d0 - 0.06, LC.d0 - 0.01, L.G + 2.3, L.G + 3.05, C.screen);
     bx(B('lamp'), -0.58, 0.58, LC.d0 - 0.07, LC.d0 - 0.06, L.G + 2.35, L.G + 3.0, col('#6f9fd6'));
     decal('plate13', 0, LC.d0 - 0.01, L.G + 3.3, 0.6, 0.3, NEG(ND));
-    for (const fy of [L.F1, L.F2]) for (const sg of [-1, 1]) liftDoor(sg * LC.s, (LC.d0 + LC.d1) / 2, fy, sg > 0 ? NS : NEG(NS), false);
+    for (const fy of [L.F1, L.F2]) for (const sg of [-1, 1]) liftDoor(sg * LC.s, (LC.d0 + LC.d1) / 2, fy, false);
   }
   // hall walls at s = ±7.6 with doorways (lintels), windows onto the hall between the doorways, door leaves
   for (const sg of [-1, 1]) {
@@ -734,7 +725,7 @@ function buildBEInterior(kit: WorldKit): void {
       bx(B('granite'), LSTAIR.s0, LSTAIR.s1, d, d + run, yt - 0.18, yt, col('#b7b4ad'), 0.5);
     }
     B('plaster').beam(P3at((LSTAIR.s0 + LSTAIR.s1) / 2, LSTAIR.d0, G - 0.15), P3at((LSTAIR.s0 + LSTAIR.s1) / 2, LSTAIR.d1, L.F1 - 0.2), LSTAIR.s1 - LSTAIR.s0, 0.14, C.white);
-    sloped(B('metal'), 'd', LSTAIR.d0, LSTAIR.d1, LSTAIR.s0 + 0.04, G, L.F1);
+    sloped(B('metal'), LSTAIR.d0, LSTAIR.d1, LSTAIR.s0 + 0.04, G, L.F1);
     // reception counter, black benches, potted plants, entrance mat
     bx(B('plaster'), -5.3, -2.3, 3.6, 4.4, G, G + 1.05, col('#f3f2ee'));
     bx(B('wood'), -5.4, -2.2, 3.5, 4.5, G + 1.05, G + 1.1, C.timberDark);
@@ -755,7 +746,7 @@ function buildBEInterior(kit: WorldKit): void {
 
   // ============================================================ atrium: floating timber stairs, railings, sculpture, TVs, boards
   {
-    const timberFlight = (axis: 'd', lo: number, hi: number, s0: number, s1: number, y0: number, y1: number) => {
+    const timberFlight = (lo: number, hi: number, s0: number, s1: number, y0: number, y1: number) => {
       const n = Math.round((y1 - y0) / 0.175), run = (hi - lo) / n;
       const tb = B('wood');
       for (let i = 0; i < n; i++) {
@@ -766,13 +757,12 @@ function buildBEInterior(kit: WorldKit): void {
       const sm = (s0 + s1) / 2;
       tb.beam(P3at(sm, lo, y0 - 0.25), P3at(sm, hi, y1 - 0.25), s1 - s0, 0.38, C.timberDark);
       for (const s of [s0 + 0.03, s1 - 0.03]) tb.beam(P3at(s, lo, y0 + 0.02), P3at(s, hi, y1 + 0.02), 0.06, 0.5, C.timber);
-      void axis;
     };
-    timberFlight('d', T1.d0, T1.d1, T1.s0, T1.s1, L.G, L.F1);
-    timberFlight('d', T2.d1, T2.d0, T2.s0, T2.s1, L.F1, L.F2);
-    sloped(B('metal'), 'd', T1.d0, T1.d1, T1.s1 - 0.04, L.G, L.F1);
-    sloped(B('metal'), 'd', T2.d1, T2.d0, T2.s0 + 0.04, L.F1, L.F2);
-    sloped(B('metal'), 'd', T2.d1, T2.d0, T2.s1 - 0.04, L.F1, L.F2);
+    timberFlight(T1.d0, T1.d1, T1.s0, T1.s1, L.G, L.F1);
+    timberFlight(T2.d1, T2.d0, T2.s0, T2.s1, L.F1, L.F2);
+    sloped(B('metal'), T1.d0, T1.d1, T1.s1 - 0.04, L.G, L.F1);
+    sloped(B('metal'), T2.d1, T2.d0, T2.s0 + 0.04, L.F1, L.F2);
+    sloped(B('metal'), T2.d1, T2.d0, T2.s1 - 0.04, L.F1, L.F2);
     for (const [f, fy] of [[1, L.F1], [2, L.F2]] as [number, number][]) {
       const m = B('metal');
       railVisual(m, -VOID.s, VOID.d0, f === 2 ? T2.s0 : VOID.s, VOID.d0, fy);
@@ -963,7 +953,7 @@ function railVisual(b: GeoBuffer, sa: number, da: number, sb: number, db: number
 }
 
 /** Sloped handrail + posts along a flight edge (cross position `at`). */
-function sloped(b: GeoBuffer, axis: 'd', lo: number, hi: number, at: number, y0: number, y1: number): void {
+function sloped(b: GeoBuffer, lo: number, hi: number, at: number, y0: number, y1: number): void {
   b.beam(P3at(at, lo, y0 + 1.0), P3at(at, hi, y1 + 1.0), 0.05, 0.05, C.black);
   b.beam(P3at(at, lo, y0 + 0.55), P3at(at, hi, y1 + 0.55), 0.02, 0.02, C.black);
   const n = Math.max(2, Math.round(Math.abs(hi - lo) / 1.4));
@@ -971,5 +961,4 @@ function sloped(b: GeoBuffer, axis: 'd', lo: number, hi: number, at: number, y0:
     const d = lo + ((hi - lo) * i) / n, y = y0 + ((y1 - y0) * i) / n;
     bx(b, at - 0.025, at + 0.025, d - 0.025, d + 0.025, y, y + 1.0, C.black);
   }
-  void axis;
 }
