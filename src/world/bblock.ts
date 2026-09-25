@@ -218,6 +218,36 @@ function buildBEEntrance(kit: WorldKit, signs: SignUVs): void {
   kit.collision.addRamp(rect(PL.s0, PL.s1, dSteps, PL.d0), P(0, dSteps), P(0, PL.d0), 0, G, 'concrete', 'be:steps');
   // paved drop-off apron between the steps and the link road
   kit.buf('stone', P(0, -6)[0], P(0, -6)[1]).flatPoly([P(PL.s0, dSteps + 0.4), P(PL.s1, dSteps + 0.4), [-4.55, -150.0], [-5.3, -170.0]], 0.066, col('#a9a69f'), 1.5);
+  // raised paved walkway along the rest of the east face (2021 tour be21_0180 / 0190 / 0194): 0.3 m granite kerb,
+  // potted palms against the wall, white ventilation boxes, a red hose cabinet. No trees against the facade.
+  {
+    const WH = 0.3, WD = -2.4;
+    const wb = kit.buf('granite', P(0, -1)[0], P(0, -1)[1]);
+    const stoneB = kit.buf('stone', P(0, -1)[0], P(0, -1)[1]);
+    for (const [s0, s1] of [[-37.35, PL.s0], [PL.s1, 45.6]] as V2[]) {
+      hq(wb, s0, s1, WD, 0, WH, true, col('#a5a39d'), 0.5);
+      vqS(wb, WD, s0, s1, 0, WH, -1, col('#6f6d69'));
+      vqD(wb, s0, WD, 0, 0, WH, -1, col('#6f6d69'));
+      vqD(wb, s1, WD, 0, 0, WH, 1, col('#6f6d69'));
+      kit.collision.addPolygon(rect(s0, s1, WD, 0), WH, 'concrete', 'be:walk');
+      const dir = s1 > 0 ? 1 : -1, start = dir > 0 ? s0 : s1;
+      for (let k = 0; ; k++) {
+        const s = start + dir * (1.1 + k * 2.2);
+        if ((dir > 0 && s > s1 - 0.8) || (dir < 0 && s < s0 + 0.8)) break;
+        const q = P(s, -0.45);
+        pottedPlant(kit, q[0], WH, q[1], 1.05);
+        if (k % 4 === 2) { // ventilation box between the pots (the low white boxes with grilles)
+          bx(stoneB, s - 0.7, s + 0.7, -1.75, -0.95, WH, WH + 0.5, col('#f1efea'), 0.5);
+          bx(stoneB, s - 0.55, s + 0.55, -1.77, -1.74, WH + 0.1, WH + 0.35, col('#55585c'), 0.5);
+          kit.collision.addPolygon(rect(s - 0.7, s + 0.7, -1.75, -0.95), WH + 0.5, 'concrete', 'prop', 0);
+        }
+      }
+    }
+    // red fire-hose cabinet on a post near the south end
+    const hs = 30;
+    bx(kit.buf('paint', P(hs, -1)[0], P(hs, -1)[1]), hs - 0.35, hs + 0.35, -1.95, -1.65, WH + 0.9, WH + 1.5, col('#b3261e'));
+    bx(kit.buf('metal', P(hs, -1)[0], P(hs, -1)[1]), hs - 0.04, hs + 0.04, -1.84, -1.76, WH, WH + 0.9, col('#8a1c16'));
+  }
   // potted palms along the plinth edge, clear of the doors and the piers' fronts
   for (let s = PL.s0 + 0.8; s < PL.s1 - 0.5; s += 1.3) {
     if (Math.abs(s) < 2.6) continue;
@@ -742,6 +772,7 @@ function buildBEInterior(kit: WorldKit): void {
     }
     // skylight diffusers over the atrium, tube lights along the galleries and the ground-floor hall
     for (const s of [-2.4, 0, 2.4]) for (const d of [16.5, 19, 21.5, 24]) bx(B('lamp'), s - 1.0, s + 1.0, d - 1.0, d + 1.0, CEIL[2] - 0.02, CEIL[2], col('#fdfcf6'));
+    { const q = P(0, 20); kit.lampPoints.push(new THREE.Vector3(q[0], CEIL[2] - 0.6, q[1])); } // baked into the lamp light map (night)
     for (let f = 0; f < 3; f++) {
       const cy = CEIL[f];
       for (let d = 11.2; d < 27; d += 2.8) { tube(-6.2, d, cy, false); tube(6.2, d, cy, false); }

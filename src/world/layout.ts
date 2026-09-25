@@ -453,9 +453,9 @@ export const AREAS: AreaDef[] = [
   { id: 'oat_lawn', kind: 'concrete', poly: [[4.0, -120.5], [3.7, -149.7], [12.5, -150.2], [21.4, -146.4], [27.6, -138.6], [31.5, -123.6], [10.4, -121.3]] },
   // lawn around B-block front
   { id: 'bblock_lawn', kind: 'lawn', poly: [[-58, -150], [-54, -176], [-51, -113.5], [-58, -114]] },
-  // lawn east of B-Block along the link road
-  { id: 'bblock_east_lawn', kind: 'lawn', poly: [[-6.5, -118], [-5.8, -148], [-8.5, -148], [-7.4, -118]] },
-  { id: 'bblock_east_lawn_n', kind: 'lawn', poly: [[-5.9, -172], [-6.8, -195], [-10.4, -195], [-9.35, -172]] },
+  // drive apron east of B-Block along the link road (a raised walkway runs along the facade, bblock.ts; 2021 tour)
+  { id: 'bblock_east_lawn', kind: 'concrete', poly: [[-6.5, -118], [-5.8, -148], [-8.5, -148], [-7.4, -118]] },
+  { id: 'bblock_east_lawn_n', kind: 'concrete', poly: [[-5.9, -172], [-6.8, -195], [-10.4, -195], [-9.35, -172]] },
   // (the Quad, the covered plaza and the inner court are granite floors on the L1 podium, drawn by gjbc.ts — see GJB_L1_FLOORS)
   // GJBC east forecourt (bus drop-off)
   { id: 'gjbc_east_forecourt', kind: 'greypaver', poly: [[86.2, -117.2], [104, -115.3], [104, -94], [86.8, -94]] },
