@@ -94,8 +94,10 @@ Built from the 2021 / 2023 interior shots; plausible Indian-college fill where f
   stairs** (G→1st rising west, 1st→2nd rising east — an X in elevation), white gallery bands with black railings,
   skylight diffusers, a hanging TV, the white stacked-block sculpture and pin boards of student work on the ground
   floor, the **wave relief wall** on the lift core.
-* **Rooms** off the galleries (north and south wings, two per wing per floor): G01 CSE office, classrooms (wooden
-  3-seater benches, green board on a dais, ceiling fans, tube lights, notice board), CSE labs (rows of monitors),
+* **Rooms** off the galleries (north and south wings s ±7.6…±18.5 = `BE_WING` in layout.ts, two per wing per floor,
+  10.8 × 10.9 m): G01 CSE office, classrooms (wooden 3-seater benches in **three columns** with two ≈ 2.1 m aisles —
+  BE classrooms generally have three columns of tables (user, 2026-09-25) — green board on a dais, ceiling fans, tube
+  lights, notice board), CSE labs (two columns of monitor benches, 2 m between rows),
   glazed panels with black bars onto the galleries (2021 lab view), orange room plates, the red CSE department sign
   (1st floor) and the ECE department sign (2nd floor; ECE shares the block, UOVu_0124).
 * **Stair core** (west end): dog-leg flights with mid landings, floor numbers, WC block.

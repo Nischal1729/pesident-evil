@@ -285,6 +285,11 @@ export function bePt(s: number, d: number): V2 {
 }
 /** Floor tops of the enterable BE-block core (G = entrance plinth) and the underside of the solid block above it. */
 export const BE_LEVELS = { G: 0.45, F1: 3.95, F2: 7.45, top: 10.65 };
+/**
+ * Half-width (s) of the enterable core's room wings (d 10…32). Wide enough for BE classrooms with three columns of
+ * benches and two ≥ 2 m aisles; the footprint notch of `bblock` and the `bblock_core` cap use it.
+ */
+export const BE_WING = 18.5;
 
 // ---------------------------------------------------------------------------------------------
 // Buildings
@@ -397,7 +402,7 @@ export const BUILDINGS: BuildingDef[] = [
   {
     id: 'bblock', name: 'B-Block (BE block)', style: 'bblock', floors: 14, floorH: 3.5,
     poly: [[-54.8, -177.2], [-41.0, -178.0], [-42.1, -195.0], [-12.8, -196.8], [-11.2, -171.4],
-      bePt(-9, 0), bePt(-9, 10), bePt(-15, 10), bePt(-15, 32), bePt(15, 32), bePt(15, 10), bePt(9, 10), bePt(9, 0),
+      bePt(-9, 0), bePt(-9, 10), bePt(-BE_WING, 10), bePt(-BE_WING, 32), bePt(BE_WING, 32), bePt(BE_WING, 10), bePt(9, 10), bePt(9, 0),
       [-7.6, -113.9], [-50.6, -111.2]],
     roof: { solar: true, tanks: 4 },
     sign: { text: 'BE BLOCK', sub: 'COMPUTER SCIENCE & ENGG', edge: 14, offset: 0.5, color: '#2f3a40' },
@@ -414,7 +419,7 @@ export const BUILDINGS: BuildingDef[] = [
   },
   {
     id: 'bblock_core', name: 'BE block (over the enterable core)', style: 'bblock', floors: 11, floorH: 3.5, base: BE_LEVELS.top, top: 50.15, soffit: 'grey', roof: { parapet: 0 },
-    poly: [bePt(-15, 10), bePt(-9, 10), bePt(-9, 18), bePt(9, 18), bePt(9, 10), bePt(15, 10), bePt(15, 32), bePt(-15, 32)],
+    poly: [bePt(-BE_WING, 10), bePt(-9, 10), bePt(-9, 18), bePt(9, 18), bePt(9, 10), bePt(BE_WING, 10), bePt(BE_WING, 32), bePt(-BE_WING, 32)],
   },
   // OSM "Admission Enquiry" (way 347418529), the white mural building the main gate's south pillar is built into. Its
   // ground floor is an enterable enquiry hall facing the entry walkway (src/world/admissionHall.ts): a walls-only shell
