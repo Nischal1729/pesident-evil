@@ -19,3 +19,6 @@ tools/blender/_renders/
 
 # vegetation tool downloads (Poly Haven / ambientCG sources, npm tarballs)
 tools/trees/_downloads/
+
+# rendered videos / trailers
+media/
