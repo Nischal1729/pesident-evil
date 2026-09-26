@@ -76,6 +76,9 @@ reference/           tour-video frames, CAMPUS_NOTES.md (layout + look reference
 * Transport (`Net.ts`): PeerJS. The host registers the peer id `pesident-evil-v1-<ROOM>`; the public broker only
   introduces browsers. Each link has the reliable PeerJS data connection (raw: JSON control messages, batched events)
   and a pre-negotiated unordered, no-retransmit `RTCDataChannel` (id 100) for binary snapshots and inputs.
+  An open room keeps its registration: a worker-driven tick (`core/wakeTimer.ts`, not throttled in background tabs)
+  sends a broker heartbeat every 4 s and re-registers the same code when the broker link drops; broker errors after
+  the room opens are never fatal. Joining retries twice before reporting 'Room not found'.
 * Host (`CoopHost`): holds the room and roster; on start it adds a `Survivor` per member (no AI squad) and sends each
   client `start` (its survivor id + everyone's name/look). Every host tick `fillInputs` turns each client's latest
   input packet into a `PlayerInput` (one-shot actions are wrapping press counters, so a lost packet loses nothing);
