@@ -1,5 +1,6 @@
 import Peer, { type DataConnection } from 'peerjs';
 import { wakeInterval } from '../core/wakeTimer';
+import { iceConfig, routeOf } from './ice';
 import type { CtrlMsg } from './protocol';
 
 /**
@@ -40,6 +41,9 @@ export class Link {
     conn.on('close', () => this.close());
     conn.on('error', () => this.close());
   }
+
+  /** 'direct' or 'relay' (TURN) once open. */
+  route(): Promise<'direct' | 'relay' | 'unknown'> { return routeOf(this.conn.peerConnection); }
 
   /** Both ends create the same pre-negotiated channel on the connection's RTCPeerConnection (no extra signalling). */
   openFast(): void {
@@ -95,6 +99,13 @@ const describe = (e: { type?: string; message?: string }) =>
       : e.type === 'browser-incompatible' ? 'This browser does not support WebRTC.'
         : e.message ?? String(e.type ?? e);
 
+/** Shown when two browsers found each other but no network path opened between them. */
+export function blockedMessage(relay: boolean): string {
+  return relay
+    ? "Couldn't connect to the host, even through the relay server. Try again, or try another network (a phone hotspot)."
+    : "Couldn't open a connection to the host: your networks don't allow a direct browser-to-browser link right now (common on mobile data, Jio / Airtel fibre and campus Wi-Fi) and no relay server is set up. Try joining again, both on the same Wi-Fi, or one of you on a phone hotspot.";
+}
+
 /**
  * Hosting: registers the room code and accepts connections. The registration must outlive a host who leaves the tab
  * in the background while friends get the code: PeerJS's own 5 s broker heartbeat runs on page timers, which a
@@ -111,13 +122,15 @@ export class NetHost {
   onLink: (link: Link) => void = () => {};
   onError: (msg: string) => void = () => {};
   onStatus: (status: string) => void = () => {};
+  /** a player's connection reached us but no network path opened (see blockedMessage) */
+  onJoinFailed: () => void = () => {};
   private tries = 0;
   private opened = false;
   private stopped = false;
   private stopTick: (() => void) | null = null;
 
   start(): void {
-    this.register(newRoomCode());
+    void this.register(newRoomCode());
     this.stopTick ??= wakeInterval(4000, () => this.keepAlive());
   }
 
@@ -127,26 +140,31 @@ export class NetHost {
     this.onStatus(s);
   }
 
-  private register(code: string): void {
+  private async register(code: string): Promise<void> {
     this.code = code;
-    const peer = new Peer(PREFIX + code, { debug: 1 });
+    const ice = await iceConfig();
+    if (this.stopped) return;
+    const peer = new Peer(PREFIX + code, { debug: 1, config: { iceServers: ice.servers } });
     this.peer = peer;
     peer.on('open', () => {
       this.setStatus('');
       if (!this.opened) { this.opened = true; this.onReady(this.code); }
     });
     peer.on('connection', (conn) => {
+      let opened = false;
       conn.on('open', () => {
+        opened = true;
         const link = new Link(conn);
         link.openFast();
         this.onLink(link);
       });
+      conn.on('error', (e: { type?: string }) => { if (!opened && e.type === 'negotiation-failed') this.onJoinFailed(); });
     });
     peer.on('error', (e: { type?: string; message?: string }) => {
       if (e.type === 'peer-unavailable') return; // a client that vanished mid-handshake
       if (!this.opened) {
         // a brand-new room whose random code is taken: try another code
-        if (e.type === 'unavailable-id' && this.tries++ < 4) { peer.destroy(); this.register(newRoomCode()); return; }
+        if (e.type === 'unavailable-id' && this.tries++ < 4) { peer.destroy(); void this.register(newRoomCode()); return; }
         this.onError(describe(e));
         return;
       }
@@ -160,7 +178,7 @@ export class NetHost {
   private keepAlive(): void {
     if (this.stopped || !this.opened) return;
     const p = this.peer;
-    if (!p || p.destroyed) { this.register(this.code); return; }
+    if (!p || p.destroyed) { void this.register(this.code); return; }
     if (p.disconnected) {
       this.setStatus('Reconnecting to the matchmaking server… (players already in stay connected)');
       try { p.reconnect(); } catch { /* a reconnect is already under way */ }
@@ -179,8 +197,10 @@ export class NetHost {
 }
 
 /**
- * Joining: connects to a room code. A room that doesn't answer is retried a few times before giving up: its host may
- * be re-registering with the broker right then (see NetHost).
+ * Joining: connects to a room code. A room that doesn't answer our offer is retried a few times: its host may be
+ * re-registering with the broker right then (see NetHost). When the host answers but the connectivity checks fail
+ * (no network path: NAT / firewall), the attempt is retried too, since direct paths between some networks only open
+ * some of the time; a relay server (ice.ts) makes these reliable. The last failure's cause is reported with advice.
  */
 export class NetClient {
   peer: Peer | null = null;
@@ -190,26 +210,38 @@ export class NetClient {
   onStatus: (status: string) => void = () => {};
   private destroyed = false;
 
-  connect(code: string, attempt = 1): void {
+  async connect(code: string, attempt = 1): Promise<void> {
     const ATTEMPTS = 3;
-    const peer = new Peer({ debug: 1 });
+    const ice = await iceConfig();
+    if (this.destroyed) return;
+    const peer = new Peer({ debug: 1, config: { iceServers: ice.servers } });
     this.peer = peer;
     let done = false;
-    const retry = (why: string) => {
+    let checking = false; // the host answered and connectivity checks began
+    let lastMsg = 'Timed out connecting to the room.';
+    const fail = (why: 'blocked' | 'retryable' | 'fatal') => {
       if (done) return;
       done = true;
       clearTimeout(timer);
       peer.destroy();
       if (this.destroyed) return;
+      if (why === 'blocked') lastMsg = blockedMessage(ice.relay);
       if (attempt < ATTEMPTS && why !== 'fatal') {
-        this.onStatus(`The room isn't answering yet — trying again (${attempt + 1}/${ATTEMPTS})…`);
-        setTimeout(() => { if (!this.destroyed) this.connect(code, attempt + 1); }, 2500);
-      } else this.onError(why === 'fatal' || why === 'timeout' ? lastMsg : 'Room not found — check the code, or ask the host to open a new room.');
+        this.onStatus(why === 'blocked'
+          ? `No network path to the host on that try — trying again (${attempt + 1}/${ATTEMPTS})…`
+          : `The room isn't answering yet — trying again (${attempt + 1}/${ATTEMPTS})…`);
+        setTimeout(() => { if (!this.destroyed) void this.connect(code, attempt + 1); }, 2000);
+      } else this.onError(lastMsg);
     };
-    let lastMsg = 'Timed out connecting to the room.';
-    const timer = setTimeout(() => retry('timeout'), 15000);
+    // a relayed path over TCP can take a while to come up; checks that started and never finished mean "no path"
+    const timer = setTimeout(() => fail(checking ? 'blocked' : 'retryable'), 20000);
     peer.on('open', () => {
       const conn = peer.connect(PREFIX + normalizeCode(code), { reliable: true, serialization: 'raw' });
+      conn.on('iceStateChanged', (st: RTCIceConnectionState) => {
+        if (st === 'checking' && !checking) { checking = true; this.onStatus(`Found the room — connecting${attempt > 1 ? ` (try ${attempt}/${ATTEMPTS})` : ''}…`); }
+        if (st === 'failed') fail('blocked');
+      });
+      conn.on('error', (e: { type?: string }) => { if (e.type === 'negotiation-failed') fail('blocked'); });
       conn.on('open', () => {
         if (done) return;
         done = true;
@@ -222,9 +254,9 @@ export class NetClient {
     });
     peer.on('error', (e: { type?: string; message?: string }) => {
       if (done) return;
-      lastMsg = describe(e);
-      // the room's id isn't registered (host re-registering?) or the link failed: worth another try
-      retry(e.type === 'peer-unavailable' || e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'webrtc' ? e.type : 'fatal');
+      lastMsg = e.type === 'peer-unavailable' ? 'Room not found — check the code, or ask the host to open a new room.' : describe(e);
+      // the room's id isn't registered (host re-registering?) or the broker link failed: worth another try
+      fail(e.type === 'peer-unavailable' || e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'webrtc' ? 'retryable' : 'fatal');
     });
   }
 

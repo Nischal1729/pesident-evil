@@ -103,6 +103,7 @@ export class Game {
   private rafId = 0;
   private hiddenTicker: (() => void) | null = null;
   private clientStatus = '';
+  private joinFailures = 0;
   private preview: { root: THREE.Object3D; mixer: THREE.AnimationMixer; key: string } | null = null;
 
   async boot(): Promise<void> {
@@ -350,6 +351,7 @@ export class Game {
   // -----------------------------------------------------------------------------------------------
   private hostRoom(): void {
     this.leaveRoom(false);
+    this.joinFailures = 0;
     const host = new CoopHost(this.profile, {
       onReady: () => this.refreshLobby(),
       onStatus: (st) => {
@@ -357,6 +359,11 @@ export class Game {
         if (this.world) this.hud.message(st ? 'Matchmaking server lost — reconnecting (players in the game are fine)' : 'Matchmaking server back: new players can join', st ? 'warn' : 'info');
       },
       onRoster: () => this.refreshLobby(),
+      onJoinFailed: () => {
+        this.joinFailures++;
+        this.refreshLobby();
+        if (this.world) this.hud.message("A player couldn't connect: no network path between you (they can try again; a relay server fixes this — see README)", 'warn');
+      },
       onError: (msg) => { this.leaveRoom(false); this.menu.coopFailed(msg); },
       onJoinInGame: (m) => this.hostAddMember(m),
       onLeaveInGame: (m) => {
@@ -393,8 +400,9 @@ export class Game {
   private refreshLobby(): void {
     const c = this.coop;
     if (!c) { this.menu.setLobby(null); return; }
-    if (c.role === 'host') this.menu.setLobby({ role: 'host', code: c.code, players: c.roster(), status: c.net.status || (c.code ? 'Share the code with your friends, then press Start.' : 'Contacting the matchmaking server…'), inGame: c.inGame });
-    else this.menu.setLobby({ role: 'client', code: this.joinCode, players: c.roster, status: c.link ? '' : this.clientStatus || 'Connecting…', inGame: false });
+    const failed = this.joinFailures ? ` · ${this.joinFailures} join attempt${this.joinFailures > 1 ? 's' : ''} couldn't connect (no network path between you and them — they can retry; see README for a relay server)` : '';
+    if (c.role === 'host') this.menu.setLobby({ role: 'host', code: c.code, players: c.roster(), status: (c.net.status || (c.code ? 'Share the code with your friends, then press Start.' : 'Contacting the matchmaking server…')) + failed, inGame: c.inGame });
+    else this.menu.setLobby({ role: 'client', code: this.joinCode, players: c.roster, status: c.link ? (this.clientStatus.startsWith('Connected') ? this.clientStatus : '') : this.clientStatus || 'Connecting…', inGame: false });
   }
 
   /** Co-op has no AI squad: zombie strength follows the head count (coopDifficulty). */

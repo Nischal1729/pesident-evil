@@ -22,3 +22,7 @@ tools/trees/_downloads/
 
 # rendered videos / trailers
 media/
+
+# local relay credentials (src/net/ice.ts)
+.env.local
+.env.*.local

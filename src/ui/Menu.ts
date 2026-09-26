@@ -200,7 +200,7 @@ export class Menu {
         const f = Math.max(1, n) / 4;
         html = `<div class="m-panel m-left"><h2>${v.role === 'host' ? 'Your room' : 'Room'}</h2>
           <div class="m-code">${v.code ? `<span>ROOM CODE</span><b>${esc(v.code)}</b>${v.role === 'host' ? '<button data-a="copy">Copy</button>' : ''}` : '<span>Opening a room…</span>'}</div>
-          <div class="m-players">${v.players.map((pl) => `<div><i style="background:${pl.look.shirt}"></i>${esc(pl.name)}${pl.host ? ' <em>host</em>' : ''}</div>`).join('')}</div>
+          <div class="m-players">${v.players.map((pl) => `<div><i style="background:${pl.look.shirt}"></i>${esc(pl.name)}${pl.host ? ' <em>host</em>' : ''}${pl.route === 'relay' ? ' <small>via relay</small>' : pl.route === 'direct' ? ' <small>direct</small>' : ''}</div>`).join('')}</div>
           <div class="m-note">${n} / ${MAX_PLAYERS} players · no AI squad in co-op · zombies ×${Math.pow(f, 0.6).toFixed(2)}, health ×${Math.pow(f, 0.4).toFixed(2)} of solo</div>
           ${v.status ? `<div class="m-note">${esc(v.status)}</div>` : ''}
           <div class="m-buttons">

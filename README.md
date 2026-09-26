@@ -68,6 +68,16 @@ npm run build
 - There is no AI squad in co-op. A wave's total zombie health scales with players / 4 (more zombies and tougher
   ones). Downed players can be revived by teammates; a player who dies sits out (watching a teammate) and comes back
   when the wave is cleared. The game ends when everyone is dead.
+- **If friends can't join** ("No network path to the host" / timeouts; the host's console shows "ICE failed"): some
+  networks (mobile data, Jio / Airtel fibre, campus Wi-Fi) don't allow direct browser-to-browser links, and the free
+  relays PeerJS used to provide are gone. A relay (TURN) server fixes it. Free option: sign up at
+  [ExpressTURN](https://www.expressturn.com/) (free plan, 1000 GB/month; a relayed player uses ~95 MB/hour), then add
+  three repository secrets under Settings → Secrets and variables → Actions:
+  `TURN_URLS` = `turn:<server>:3478,turn:<server>:3478?transport=tcp`, `TURN_USERNAME`, `TURN_CREDENTIAL`. The next
+  deploy uses them (the lobby then tags each player "direct" or "via relay"). For local testing put the same values
+  in a `.env.local` as `VITE_TURN_URLS` / `VITE_TURN_USERNAME` / `VITE_TURN_CREDENTIAL`. Alternatively
+  `TURN_ENDPOINT` can point at a URL returning `{"iceServers": [...]}` with short-lived credentials (e.g. a Cloudflare
+  Worker in front of Cloudflare TURN, which also reaches port 443 through strict firewalls).
 - The bottom-left leaderboard ranks players by score, the points they earned (spending doesn't lower it), then kills.
   Names float over teammates' heads. Players can join a game in progress and leave at any time.
 

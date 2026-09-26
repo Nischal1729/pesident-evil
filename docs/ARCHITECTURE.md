@@ -79,6 +79,11 @@ reference/           tour-video frames, CAMPUS_NOTES.md (layout + look reference
   An open room keeps its registration: a worker-driven tick (`core/wakeTimer.ts`, not throttled in background tabs)
   sends a broker heartbeat every 4 s and re-registers the same code when the broker link drops; broker errors after
   the room opens are never fatal. Joining retries twice before reporting 'Room not found'.
+* ICE servers (`ice.ts`): Google + Cloudflare STUN, plus an optional TURN relay from build-time settings
+  (`VITE_TURN_URLS` / `_USERNAME` / `_CREDENTIAL`, or `VITE_TURN_ENDPOINT` returning `{iceServers}`), fed from
+  repository secrets by the Pages workflow. PeerJS's own relays no longer answer. Without a relay, players whose
+  networks allow no direct path can't join; the client retries (direct paths between some NATs open only sometimes),
+  then says why, and the host's lobby counts failed attempts. The lobby tags each link 'direct' or 'via relay'.
 * Host (`CoopHost`): holds the room and roster; on start it adds a `Survivor` per member (no AI squad) and sends each
   client `start` (its survivor id + everyone's name/look). Every host tick `fillInputs` turns each client's latest
   input packet into a `PlayerInput` (one-shot actions are wrapping press counters, so a lost packet loses nothing);

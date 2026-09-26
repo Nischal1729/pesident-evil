@@ -15,7 +15,7 @@ export const MAX_PLAYERS = 10;
 
 export interface Profile { name: string; look: Look }
 
-export interface RosterEntry { peer: string; name: string; look: Look; host: boolean }
+export interface RosterEntry { peer: string; name: string; look: Look; host: boolean; /** how this player's link to the host is routed */ route?: 'direct' | 'relay' | 'unknown' }
 
 export interface StartSurvivor { id: number; kind: 'player' | 'npc'; name: string; look: Look; voice: 'male' | 'female'; peer?: string }
 

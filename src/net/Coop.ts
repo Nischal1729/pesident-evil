@@ -21,6 +21,7 @@ export interface Member {
   last: InputPacket | null;
   primed: boolean;
   seen: InputCounters;
+  route: 'direct' | 'relay' | 'unknown';
   scroll: number;
   fall: number;
   pin: PlayerInput;
@@ -33,6 +34,8 @@ export interface HostHooks {
   onStatus(status: string): void;
   onRoster(): void;
   onError(msg: string): void;
+  /** a player's connection reached the host but no network path opened between them */
+  onJoinFailed(): void;
   /** a client finished its handshake while a game runs: add their survivor and return it (or null to refuse) */
   onJoinInGame(m: Member): StartSurvivor | null;
   onLeaveInGame(m: Member): void;
@@ -59,6 +62,7 @@ export class CoopHost {
     this.net.onReady = (code) => { this.code = code; hooks.onReady(code); };
     this.net.onError = (msg) => hooks.onError(msg);
     this.net.onStatus = (s) => hooks.onStatus(s);
+    this.net.onJoinFailed = () => hooks.onJoinFailed();
     this.net.onLink = (link) => this.accept(link);
     this.net.start();
   }
@@ -74,9 +78,11 @@ export class CoopHost {
       if (msg.t === 'hello' && !m) {
         if (msg.v !== PROTOCOL) { link.send({ t: 'reject', reason: 'Different game version — both players need to reload the page.' }); setTimeout(() => link.close(), 500); return; }
         if (this.members.size + 1 >= MAX_PLAYERS) { link.send({ t: 'reject', reason: `The room is full (${MAX_PLAYERS} players).` }); setTimeout(() => link.close(), 500); return; }
-        m = { link, peer: link.conn.peer, profile: sanitize(msg.profile), survivorId: 0, last: null, primed: false, seen: newCounters(), scroll: 0, fall: 0, pin: emptyInput(), rtt: 0 };
+        m = { link, peer: link.conn.peer, profile: sanitize(msg.profile), survivorId: 0, last: null, primed: false, seen: newCounters(), route: 'unknown', scroll: 0, fall: 0, pin: emptyInput(), rtt: 0 };
         this.members.set(m.peer, m);
         this.broadcastRoster();
+        const mm = m;
+        setTimeout(() => link.route().then((r) => { mm.route = r; if (this.members.get(mm.peer) === mm) this.broadcastRoster(); }), 1500);
         if (this.inGame && this.start) {
           const ss = this.hooks.onJoinInGame(m);
           if (ss) {
@@ -110,7 +116,7 @@ export class CoopHost {
   }
 
   roster(): RosterEntry[] {
-    return [{ peer: 'host', name: this.profile.name, look: this.profile.look, host: true }, ...[...this.members.values()].map((m) => ({ peer: m.peer, name: m.profile.name, look: m.profile.look, host: false }))];
+    return [{ peer: 'host', name: this.profile.name, look: this.profile.look, host: true }, ...[...this.members.values()].map((m) => ({ peer: m.peer, name: m.profile.name, look: m.profile.look, host: false, route: m.route }))];
   }
 
   private broadcastRoster(): void {
@@ -264,6 +270,7 @@ export class CoopClient {
       link.onBinary = (b) => this.onBinary(b);
       link.onClose = () => this.end('Lost connection to the host.');
       link.send({ t: 'hello', v: PROTOCOL, profile: this.profile });
+      setTimeout(() => link.route().then((r) => { if (r !== 'unknown') this.hooks.onStatus(r === 'relay' ? 'Connected via the relay server.' : 'Connected directly to the host.'); }), 1500);
     };
     this.net.connect(code);
   }
