@@ -1,4 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs';
+import { wakeInterval } from '../core/wakeTimer';
 import type { CtrlMsg } from './protocol';
 
 /**
@@ -94,20 +95,46 @@ const describe = (e: { type?: string; message?: string }) =>
       : e.type === 'browser-incompatible' ? 'This browser does not support WebRTC.'
         : e.message ?? String(e.type ?? e);
 
-/** Hosting: registers the room code and accepts connections. */
+/**
+ * Hosting: registers the room code and accepts connections. The registration must outlive a host who leaves the tab
+ * in the background while friends get the code: PeerJS's own 5 s broker heartbeat runs on page timers, which a
+ * hidden tab throttles to about once a minute, and the broker then forgets the room. So a worker-driven tick sends
+ * our own heartbeat every 4 s and re-registers the same code whenever the broker link drops. Once the room is open,
+ * broker trouble is never fatal: players already connected talk to us directly and stay.
+ */
 export class NetHost {
   peer: Peer | null = null;
   code = '';
+  /** '' when the room is registered, else what's happening (shown in the lobby) */
+  status = '';
   onReady: (code: string) => void = () => {};
   onLink: (link: Link) => void = () => {};
   onError: (msg: string) => void = () => {};
+  onStatus: (status: string) => void = () => {};
   private tries = 0;
+  private opened = false;
+  private stopped = false;
+  private stopTick: (() => void) | null = null;
 
   start(): void {
-    this.code = newRoomCode();
-    const peer = new Peer(PREFIX + this.code, { debug: 1 });
+    this.register(newRoomCode());
+    this.stopTick ??= wakeInterval(4000, () => this.keepAlive());
+  }
+
+  private setStatus(s: string): void {
+    if (s === this.status) return;
+    this.status = s;
+    this.onStatus(s);
+  }
+
+  private register(code: string): void {
+    this.code = code;
+    const peer = new Peer(PREFIX + code, { debug: 1 });
     this.peer = peer;
-    peer.on('open', () => this.onReady(this.code));
+    peer.on('open', () => {
+      this.setStatus('');
+      if (!this.opened) { this.opened = true; this.onReady(this.code); }
+    });
     peer.on('connection', (conn) => {
       conn.on('open', () => {
         const link = new Link(conn);
@@ -116,29 +143,71 @@ export class NetHost {
       });
     });
     peer.on('error', (e: { type?: string; message?: string }) => {
-      if (e.type === 'unavailable-id' && this.tries++ < 4) { peer.destroy(); this.start(); return; }
       if (e.type === 'peer-unavailable') return; // a client that vanished mid-handshake
-      this.onError(describe(e));
+      if (!this.opened) {
+        // a brand-new room whose random code is taken: try another code
+        if (e.type === 'unavailable-id' && this.tries++ < 4) { peer.destroy(); this.register(newRoomCode()); return; }
+        this.onError(describe(e));
+        return;
+      }
+      // an open room keeps its code (friends already have it); keepAlive retries. 'unavailable-id' here means the
+      // broker still holds our dropped session and frees it within about a minute.
+      this.setStatus('Reconnecting to the matchmaking server… (players already in stay connected)');
     });
-    // the broker link can drop (idle timeouts); peers already connected stay connected, new ones need it back
-    peer.on('disconnected', () => { if (!peer.destroyed) setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 1500); });
   }
 
-  destroy(): void { this.peer?.destroy(); this.peer = null; }
+  /** Every 4 s, unthrottled: our own heartbeat on the broker socket, or a re-registration of the same code. */
+  private keepAlive(): void {
+    if (this.stopped || !this.opened) return;
+    const p = this.peer;
+    if (!p || p.destroyed) { this.register(this.code); return; }
+    if (p.disconnected) {
+      this.setStatus('Reconnecting to the matchmaking server… (players already in stay connected)');
+      try { p.reconnect(); } catch { /* a reconnect is already under way */ }
+      return;
+    }
+    (p.socket as unknown as { send(m: object): void }).send({ type: 'HEARTBEAT' });
+  }
+
+  destroy(): void {
+    this.stopped = true;
+    this.stopTick?.();
+    this.stopTick = null;
+    this.peer?.destroy();
+    this.peer = null;
+  }
 }
 
-/** Joining: connects to a room code. */
+/**
+ * Joining: connects to a room code. A room that doesn't answer is retried a few times before giving up: its host may
+ * be re-registering with the broker right then (see NetHost).
+ */
 export class NetClient {
   peer: Peer | null = null;
   link: Link | null = null;
   onLink: (link: Link) => void = () => {};
   onError: (msg: string) => void = () => {};
+  onStatus: (status: string) => void = () => {};
+  private destroyed = false;
 
-  connect(code: string): void {
+  connect(code: string, attempt = 1): void {
+    const ATTEMPTS = 3;
     const peer = new Peer({ debug: 1 });
     this.peer = peer;
     let done = false;
-    const timer = setTimeout(() => { if (!done) { done = true; this.onError('Timed out connecting to the room.'); } }, 15000);
+    const retry = (why: string) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      peer.destroy();
+      if (this.destroyed) return;
+      if (attempt < ATTEMPTS && why !== 'fatal') {
+        this.onStatus(`The room isn't answering yet — trying again (${attempt + 1}/${ATTEMPTS})…`);
+        setTimeout(() => { if (!this.destroyed) this.connect(code, attempt + 1); }, 2500);
+      } else this.onError(why === 'fatal' || why === 'timeout' ? lastMsg : 'Room not found — check the code, or ask the host to open a new room.');
+    };
+    let lastMsg = 'Timed out connecting to the room.';
+    const timer = setTimeout(() => retry('timeout'), 15000);
     peer.on('open', () => {
       const conn = peer.connect(PREFIX + normalizeCode(code), { reliable: true, serialization: 'raw' });
       conn.on('open', () => {
@@ -152,12 +221,12 @@ export class NetClient {
       });
     });
     peer.on('error', (e: { type?: string; message?: string }) => {
-      if (done && e.type !== 'peer-unavailable') return;
-      done = true;
-      clearTimeout(timer);
-      this.onError(describe(e));
+      if (done) return;
+      lastMsg = describe(e);
+      // the room's id isn't registered (host re-registering?) or the link failed: worth another try
+      retry(e.type === 'peer-unavailable' || e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'webrtc' ? e.type : 'fatal');
     });
   }
 
-  destroy(): void { this.link?.close(); this.peer?.destroy(); this.peer = null; this.link = null; }
+  destroy(): void { this.destroyed = true; this.link?.close(); this.peer?.destroy(); this.peer = null; this.link = null; }
 }

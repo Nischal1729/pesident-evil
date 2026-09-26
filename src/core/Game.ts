@@ -5,6 +5,7 @@ import { Engine } from './Engine';
 import { emptyInput, Input, type PlayerInput } from './Input';
 import { loadHighScore, loadSettings, QUALITY, saveHighScore, saveSettings, type QualityProfile, type Settings } from './Settings';
 import { loadProfile, saveProfile } from './Profile';
+import { wakeInterval } from './wakeTimer';
 import { CoopClient, CoopHost, type Member } from '../net/Coop';
 import { normalizeCode } from '../net/Net';
 import type { CtrlMsg, StartSurvivor } from '../net/protocol';
@@ -100,7 +101,8 @@ export class Game {
   coop: CoopHost | CoopClient | null = null;
   private joinCode = '';
   private rafId = 0;
-  private hiddenTicker: Worker | null = null;
+  private hiddenTicker: (() => void) | null = null;
+  private clientStatus = '';
   private preview: { root: THREE.Object3D; mixer: THREE.AnimationMixer; key: string } | null = null;
 
   async boot(): Promise<void> {
@@ -213,11 +215,9 @@ export class Game {
   private updateHiddenTicker(): void {
     const want = document.hidden && this.coop?.role === 'host' && !!this.world;
     if (want && !this.hiddenTicker) {
-      const url = URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 16)'], { type: 'text/javascript' }));
-      this.hiddenTicker = new Worker(url);
-      this.hiddenTicker.onmessage = () => { if (document.hidden) this.loop(performance.now()); };
+      this.hiddenTicker = wakeInterval(16, () => { if (document.hidden) this.loop(performance.now()); });
     } else if (!want && this.hiddenTicker) {
-      this.hiddenTicker.terminate();
+      this.hiddenTicker();
       this.hiddenTicker = null;
       this.last = performance.now();
     }
@@ -352,6 +352,10 @@ export class Game {
     this.leaveRoom(false);
     const host = new CoopHost(this.profile, {
       onReady: () => this.refreshLobby(),
+      onStatus: (st) => {
+        this.refreshLobby();
+        if (this.world) this.hud.message(st ? 'Matchmaking server lost — reconnecting (players in the game are fine)' : 'Matchmaking server back: new players can join', st ? 'warn' : 'info');
+      },
       onRoster: () => this.refreshLobby(),
       onError: (msg) => { this.leaveRoom(false); this.menu.coopFailed(msg); },
       onJoinInGame: (m) => this.hostAddMember(m),
@@ -370,8 +374,10 @@ export class Game {
     this.leaveRoom(false);
     this.joinCode = normalizeCode(code);
     const fail = (msg: string) => { this.leaveRoom(false); this.menu.coopFailed(msg); };
+    this.clientStatus = '';
     this.coop = new CoopClient(this.joinCode, this.profile, {
       onRoster: () => this.refreshLobby(),
+      onStatus: (st) => { this.clientStatus = st; this.refreshLobby(); },
       onStart: (msg) => this.clientStart(msg),
       onJoin: (ss) => { this.world?.addMirrorSurvivor(ss.id, ss.kind, ss.name, ss.voice, ss.look); if (this.world) this.hud.message(`${ss.name} joined the game.`, 'info'); },
       onLeave: (id) => {
@@ -387,8 +393,8 @@ export class Game {
   private refreshLobby(): void {
     const c = this.coop;
     if (!c) { this.menu.setLobby(null); return; }
-    if (c.role === 'host') this.menu.setLobby({ role: 'host', code: c.code, players: c.roster(), status: c.code ? 'Share the code with your friends, then press Start.' : 'Contacting the matchmaking server…', inGame: c.inGame });
-    else this.menu.setLobby({ role: 'client', code: this.joinCode, players: c.roster, status: c.link ? '' : 'Connecting…', inGame: false });
+    if (c.role === 'host') this.menu.setLobby({ role: 'host', code: c.code, players: c.roster(), status: c.net.status || (c.code ? 'Share the code with your friends, then press Start.' : 'Contacting the matchmaking server…'), inGame: c.inGame });
+    else this.menu.setLobby({ role: 'client', code: this.joinCode, players: c.roster, status: c.link ? '' : this.clientStatus || 'Connecting…', inGame: false });
   }
 
   /** Co-op has no AI squad: zombie strength follows the head count (coopDifficulty). */

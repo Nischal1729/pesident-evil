@@ -29,6 +29,8 @@ export interface Member {
 
 export interface HostHooks {
   onReady(code: string): void;
+  /** the broker link (matchmaking) came or went: '' = fine */
+  onStatus(status: string): void;
   onRoster(): void;
   onError(msg: string): void;
   /** a client finished its handshake while a game runs: add their survivor and return it (or null to refuse) */
@@ -56,6 +58,7 @@ export class CoopHost {
   constructor(public profile: Profile, private hooks: HostHooks) {
     this.net.onReady = (code) => { this.code = code; hooks.onReady(code); };
     this.net.onError = (msg) => hooks.onError(msg);
+    this.net.onStatus = (s) => hooks.onStatus(s);
     this.net.onLink = (link) => this.accept(link);
     this.net.start();
   }
@@ -218,6 +221,8 @@ export class CoopHost {
 
 export interface ClientHooks {
   onRoster(players: RosterEntry[], inGame: boolean): void;
+  /** connecting progress ('' once in) */
+  onStatus(status: string): void;
   onStart(msg: Extract<CtrlMsg, { t: 'start' }>): void;
   onJoin(ss: StartSurvivor): void;
   onLeave(id: number): void;
@@ -251,8 +256,10 @@ export class CoopClient {
 
   constructor(code: string, private profile: Profile, private hooks: ClientHooks, onConnectError: (msg: string) => void) {
     this.net.onError = (msg) => { if (!this.link) onConnectError(msg); };
+    this.net.onStatus = (s) => this.hooks.onStatus(s);
     this.net.onLink = (link) => {
       this.link = link;
+      this.hooks.onStatus('');
       link.onCtrl = (m) => { this.inQ = this.inQ.then(() => this.onCtrl(m)); };
       link.onBinary = (b) => this.onBinary(b);
       link.onClose = () => this.end('Lost connection to the host.');
